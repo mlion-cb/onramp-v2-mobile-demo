@@ -27,12 +27,6 @@ export async function createApplePayOrder(payload: any) {
         url: "https://api.developer.coinbase.com/onramp/v2/onramp/order",
         body: 
           payload
-          // addresses: [
-          //   {
-          //   address: "0x1234567890abcdef1234567890abcdef12345678",
-          //   blockchains: ["base", "ethereum"]
-          // }
-          // ]
       })
     });
     // Log response early (without consuming it)

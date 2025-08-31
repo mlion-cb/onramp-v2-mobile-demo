@@ -1,12 +1,16 @@
 import cors from 'cors';
-import 'dotenv/config';
+import { config } from 'dotenv';
 import express from 'express';
 import { z } from 'zod';
 
 import { generateJwt } from '@coinbase/cdp-sdk/auth';
 
+config({ path: '.env.local' });
+config({ path: '.env' });
+
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
+console.log(PORT);
 
 app.use(cors({
     origin: true,
@@ -108,88 +112,3 @@ app.post("/server/api", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`API listening on http://localhost:${PORT}`);
 });
-
-
-// app.get("/server/session", async (req, res) => {
-//   try {
-//     const { address, network } = req.query; // Both from query params now
-//     // Validate the address parameter
-//     const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
-//     const addressParsed = addressSchema.safeParse(address);
-
-//     // Validate network(s) - handle single or multiple values  
-//     const networkSchema = z.union([
-//       z.string(), 
-//       z.array(z.string())
-//     ]);
-//     const networkParsed = networkSchema.safeParse(network);
-
-//     if (!addressParsed.success || !networkParsed.success) {
-//       return res.status(400).json({ error: "Invalid parameters" });
-//     }
-
-//     // Use the validated address
-//     const validAddress = addressParsed.data;
-//     const networks = Array.isArray(networkParsed.data) 
-//       ? networkParsed.data 
-//       : [networkParsed.data];
-
-//     const requestHost = "api.developer.coinbase.com";
-//     const requestPath = "/onramp/v1/token";
-
-//     const token = await generateJwt({
-//       apiKeyId: process.env.CDP_API_KEY_ID!,
-//       apiKeySecret: process.env.CDP_API_KEY_SECRET!,
-//       requestMethod: "POST",
-//       requestHost: requestHost,
-//       requestPath: requestPath,
-//       expiresIn: 120 // optional (defaults to 120 seconds)
-//     });
-
-
-//     const response = await fetch(`https://${requestHost}${requestPath}`, {
-//       method: "POST",
-//       headers: {
-//         "Authorization": `Bearer ${token}`,
-//         "Content-Type": "application/json"
-//       },
-//       body: JSON.stringify({
-//         addresses: [{address: validAddress,
-//           blockchains: networks}
-//         ]
-//       })
-//     });
-
-//     // Capture upstream response body safely
-//     const data = await response.json().catch(async () => {
-//       const raw = await response.text();
-//       console.log(raw);
-//       return { raw };
-//       });    
-      
-//     console.log('Upstream response from Coinbase', {
-//       status: response.status,
-//       ok: response.ok,
-//       dataPreview: JSON.stringify(data).slice(0, 1000)
-//       });
-
-//     res.json({ data });
-  
-//   } catch (error) {
-//     console.error('Backend handler error:', error);
-//     res.status(500).json({ error: "Something went wrong!", details: error instanceof Error ? error.message : 'Unknown error' });
-//   }
-// });
-
-// // Single network
-// fetch(`${BASE_URL}/server/session?address=${address}&network=base`)
-
-// // Multiple networks
-// fetch(`${BASE_URL}/server/session?address=${address}&network=base&network=ethereum`)
-
-// // With URLSearchParams (cleaner)
-// const params = new URLSearchParams();
-// params.set('address', address);
-// params.append('network', 'base');
-// params.append('network', 'ethereum');
-// fetch(`${BASE_URL}/server/session?${params}`)

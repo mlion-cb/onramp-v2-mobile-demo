@@ -1,12 +1,9 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Animated, PanResponder, StyleSheet, Text, View } from "react-native";
+import { COLORS } from "../../constants/colors";
 
-const PRIMARY_BLUE = "#0052FF"; // Coinbase primary
-const NEUTRAL_BG = "#F6F8FB";
-const BORDER = "#E6E8EC";
-const TEXT_PRIMARY = "#0B1B2B";
-const TEXT_SECONDARY = "#3A4A5E";
+const { PRIMARY_BLUE, NEUTRAL_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY} = COLORS;
 
 type SwipeToConfirmProps = {
   label: string;
@@ -136,11 +133,6 @@ export function SwipeToConfirm({ label, disabled = false, onConfirm, isLoading =
     </View>
   );
 }
-
-
-
-
-
 
 
 const styles = StyleSheet.create({
