@@ -1,0 +1,7 @@
+export const COLORS = {
+  PRIMARY_BLUE: "#0052FF",
+  NEUTRAL_BG: "#F6F8FB",
+  BORDER: "#E6E8EC",
+  TEXT_PRIMARY: "#0B1B2B",
+  TEXT_SECONDARY: "#3A4A5E",
+} as const;

@@ -59,6 +59,7 @@ export function ApplePayWidget({
                   
                   // Click the hidden button
                   const btn = document.querySelector('apple-pay-button');
+                  console.log('🔄 Apple Pay button found', btn);
                   if (btn) btn.click();
                   console.log('🔄 Apple Pay button hidden & clicked');
                 `);
@@ -74,8 +75,8 @@ export function ApplePayWidget({
               
             case "onramp_api.commit_error":
             case "onramp_api.load_error":
-              console.log('❌ Payment cancelled or error');
-              Alert.alert("Payment cancelled or error", "The payment was cancelled or failed. Error: " + data.data);
+              console.log('❌ Payment cancelled or error,', data.data);
+              Alert.alert("Payment cancelled or error", "The payment was cancelled or failed. Error: " + data.data.errorMessage);
               // Stop loading and close
               setIsProcessingPayment?.(false);
               onClose?.();
@@ -102,14 +103,14 @@ export function ApplePayWidget({
               break;
             
             case "onramp_api.polling_error":
-              console.log('❌ Transaction failed on blockchain');
+              console.log('❌ Transaction failed on blockchain', data.data);
               setTransactionStatus?.('error');
-              Alert.alert("Transaction Failed", "There was an issue processing your transaction. Please contact support.");
+              Alert.alert("Transaction Failed", "There was an issue processing your transaction. Please contact support. Error: " + data.data.errorMessage);
               setTimeout(() => onClose?.(), 2000);
               break;
               
             default:
-              console.log("Other event: " + eventName);
+              console.log("Other event: " + eventName, data.data);
               break;
           }
         } catch (error) {
