@@ -14,7 +14,9 @@ export function ApplePayWidget({
   setTransactionStatus?: (status: 'pending' | 'success' | 'error' | null) => void; 
 }) {
   const webViewRef = useRef<WebView>(null);
+  // const finalUrl = `${paymentUrl}`;
   const finalUrl = `${paymentUrl}&forceFeature=true`;
+
 
   // Don't render anything if not visible or no URL
   if (!paymentUrl) {

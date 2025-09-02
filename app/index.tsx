@@ -1,6 +1,5 @@
 
-import { Stack } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { ApplePayWidget, OnrampForm, useOnramp } from "../components";
 import { COLORS } from "../constants/colors";
@@ -39,43 +38,52 @@ export default function Index() {
   const { 
     createOrder, 
     closeApplePay, 
+    options,
+    isLoadingOptions,
+    getAvailableNetworks,
+    getAvailableAssets,
+    fetchOptions,
     applePayVisible, 
     hostedUrl, 
     isProcessingPayment,
     setTransactionStatus,
     setIsProcessingPayment 
   } = useOnramp();
+
+  // Fetch options on component mount
+  useEffect(() => {
+    fetchOptions();
+  }, [fetchOptions]);
     
   
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: "Onramp Demo",
-          headerTitleStyle: { fontWeight: "600" },
-          headerRight: () => (
-            <Pressable
-              onPress={onConnectPress}
-              disabled={connecting || isConnected}
-              style={({ pressed }) => [
-                styles.headerButton,
-                (connecting || isConnected) && { opacity: 0.6 },
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <Text style={[styles.headerButtonText, { textAlign: "center" }]}>
-                {isConnected ? "Connected" : connecting ? "Connecting…" : "Connect Wallet\n(Dummy)"}
-              </Text>
-            </Pressable>
-          ),
-        }}
-      />
+      <View style={styles.header}>
+      <Text style={styles.title}>Onramp V2 Demo</Text>
+      <Pressable
+        onPress={onConnectPress}
+        disabled={connecting || isConnected}
+        style={({ pressed }) => [
+          styles.headerButton,
+          (connecting || isConnected) && { opacity: 0.6 },
+          pressed && { opacity: 0.85 },
+        ]}
+      >
+        <Text style={[styles.headerButtonText, { textAlign: "center" }]}>
+          {isConnected ? "Connected" : connecting ? "Connecting…" : "Connect Wallet\n(Dummy)"}
+        </Text>
+      </Pressable>
+    </View>
 
       <OnrampForm
         address={address}
         onAddressChange={setAddress}
         onSubmit={createOrder}
         isLoading={isProcessingPayment}
+        options={options}
+        isLoadingOptions={isLoadingOptions}
+        getAvailableNetworks={getAvailableNetworks}
+        getAvailableAssets={getAvailableAssets}
       />
 
       {applePayVisible && (
@@ -97,6 +105,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: TEXT_PRIMARY,
   },
   headerButton: {
     backgroundColor: PRIMARY_BLUE,
