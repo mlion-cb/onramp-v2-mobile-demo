@@ -1,20 +1,22 @@
 const BASE_URL = "http://192.168.18.121:3000";
 // const BASE_URL = "http://localhost:3000";
 
-export async function getOnrampBuyOptions(payload: any) {
-  try {
+export async function fetchBuyOptions(payload: any ) {
 
+  try {
+  // Build query parameters using spread
+    const params = new URLSearchParams(payload);
+    const fullUrl = `https://api.developer.coinbase.com/onramp/v1/buy/options?${params.toString()}`;
+    
     console.log(`${BASE_URL}/server/api`);
-    // Enhanced request logging
     console.log('API request →', {
-      method: "GET",
+      method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        url: "https://api.developer.coinbase.com/onramp/v2/onramp/order",
-        body: 
-          payload
+        url: fullUrl,
+        method: "GET",
       })
         });
 
@@ -24,15 +26,8 @@ export async function getOnrampBuyOptions(payload: any) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        url: "https://api.developer.coinbase.com/onramp/v2/onramp/order",
-        body: 
-          payload
-          // addresses: [
-          //   {
-          //   address: "0x1234567890abcdef1234567890abcdef12345678",
-          //   blockchains: ["base", "ethereum"]
-          // }
-          // ]
+        url: fullUrl,
+        method: "GET",
       })
     });
     // Log response early (without consuming it)
@@ -52,11 +47,7 @@ export async function getOnrampBuyOptions(payload: any) {
     const responseJson = await response.json();
 
     // Return the hosted URL from Coinbase response
-    return {
-      ...responseJson,
-      hostedUrl: responseJson.paymentLink?.url, 
-      orderId: responseJson.order?.orderId
-    };
+    return responseJson;
   } catch (error) {
     console.error("API request failed:", error);
     // Enhanced error logging

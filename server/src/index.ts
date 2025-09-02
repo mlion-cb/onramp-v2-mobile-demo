@@ -40,6 +40,7 @@ app.post("/server/api", async (req, res) => {
     // Validate the request structure
     const requestSchema = z.object({
       url: z.string(), // Must be a valid URL
+      method: z.enum(['GET', 'POST']).optional(),
       body: z.any().optional(), // Any JSON body
       headers: z.record(z.string(), z.string()).optional() // Optional additional headers
     });
@@ -49,7 +50,7 @@ app.post("/server/api", async (req, res) => {
       return res.status(400).json({ error: z.treeifyError(parsed.error) });
     }
 
-    const { url: targetUrl, body: targetBody, headers: additionalHeaders } = parsed.data;
+    const { url: targetUrl, method: method, body: targetBody, headers: additionalHeaders } = parsed.data;
 
 
     // Generate JWT for Coinbase API calls (if needed)
@@ -61,7 +62,7 @@ app.post("/server/api", async (req, res) => {
       authToken = await generateJwt({
         apiKeyId: process.env.CDP_API_KEY_ID!,
         apiKeySecret: process.env.CDP_API_KEY_SECRET!,
-        requestMethod: "POST",
+        requestMethod: method || 'POST',
         requestHost: urlObj.hostname,
         requestPath: urlObj.pathname,
         expiresIn: 120
@@ -70,25 +71,19 @@ app.post("/server/api", async (req, res) => {
 
     // Build headers
     const headers = {
-      "Content-Type": "application/json",
+      ...(method === 'POST' && { "Content-Type": "application/json" }),
       ...(authToken && { "Authorization": `Bearer ${authToken}` }),
       ...(additionalHeaders || {}) // Merge client-provided headers
     };
 
     // Make the proxied request
     const response = await fetch(targetUrl, {
-      method: "POST",
+      method: method || 'POST',
       headers: headers,
-      ...(targetBody && { body: JSON.stringify(targetBody) })
+      ...(method === 'POST' && targetBody && { body: JSON.stringify(targetBody) })
     });
 
-
-    // Capture response safely
-    const data = await response.json().catch(async () => {
-      const raw = await response.text();
-      console.log('Non-JSON response:', raw);
-      return { raw };
-    }); 
+    const data = await response.json();
       
     console.log('Proxied request:', {
       url: targetUrl,

@@ -25,11 +25,12 @@ export async function createApplePayOrder(payload: any) {
       },
       body: JSON.stringify({
         url: "https://api.developer.coinbase.com/onramp/v2/onramp/order",
+        method: "POST",
         body: 
           payload
       })
     });
-    // Log response early (without consuming it)
+    // Log response
     const responseClone = response.clone();
     const responseText = await responseClone.text().catch(() => '<non-text body>');
     console.log('API response ←', {

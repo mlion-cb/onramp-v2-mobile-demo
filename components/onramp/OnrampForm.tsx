@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import { SwipeToConfirm } from '../ui/SwipeToConfirm';
@@ -20,17 +20,25 @@ type OnrampFormProps = {
   onAddressChange: (address: string) => void;
   onSubmit: (data: OnrampFormData) => void;
   isLoading: boolean;
+  options: any;
+  isLoadingOptions: boolean;
+  getAvailableNetworks: (selectedAsset?: string) => string[];
+  getAvailableAssets: (selectedNetwork?: string) => string[];
 };
 
 export function OnrampForm({
   address,
   onAddressChange,
   onSubmit,
-  isLoading
+  isLoading,
+  options,
+  isLoadingOptions,
+  getAvailableNetworks,
+  getAvailableAssets
 }: OnrampFormProps) {
   const [amount, setAmount] = useState("");
   const [asset, setAsset] = useState("USDC");
-  const [network, setNetwork] = useState("base");
+  const [network, setNetwork] = useState("Base");
   const [paymentMethod, setPaymentMethod] = useState("Apple Pay");
   const [sandbox, setSandbox] = useState(true);
   const [assetPickerVisible, setAssetPickerVisible] = useState(false);
@@ -46,6 +54,34 @@ export function OnrampForm({
   const isAmountValid = Number.isFinite(amountNumber) && amountNumber > 0;
   const isAddressValid = /^0x[0-9a-fA-F]{40}$/.test(address);
   const isFormValid = isAmountValid && isAddressValid && !!network && !!asset && !!paymentMethod;
+
+  const availableNetworks = useMemo(() => {
+    if (!getAvailableNetworks) return ["ethereum", "base"]; // Fallback
+    return getAvailableNetworks(asset);
+  }, [asset, getAvailableNetworks]);
+
+  const availableAssets = useMemo(() => {
+    if (!getAvailableAssets) return ["USDC", "ETH"]; // Fallback
+    return getAvailableAssets(network);
+  }, [network, getAvailableAssets]);
+
+  // Auto-clear invalid selections
+  useEffect(() => {
+    // If current network isn't available for selected asset, clear it
+    if (asset && !availableNetworks.includes(network)) {
+      setNetwork(availableNetworks[0] || "");
+    }
+  }, [asset, availableNetworks, network]);
+
+  useEffect(() => {
+    // If current asset isn't available for selected network, clear it
+    if (network && availableAssets.length > 0) {
+      if (!availableAssets.includes(asset)) {
+        setAsset(availableAssets[0] || "");
+      }
+    }
+  }, [network, availableAssets, asset]);
+
 
   const handleSwipeConfirm = useCallback((reset: () => void) => {
     if (!isFormValid) {
@@ -170,26 +206,38 @@ export function OnrampForm({
 
       {/* All your existing modals */}
       {/* Asset picker modal */}
-      <Modal
-        visible={assetPickerVisible}
-        animationType="slide"
-        transparent
+      <Modal 
+        visible={assetPickerVisible} 
+        animationType="slide" 
+        transparent 
         onRequestClose={() => setAssetPickerVisible(false)}
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalSheet}>
-            {(["USDC", "ETH"] as const).map((n) => (
-              <Pressable
-                key={n}
-                onPress={() => {
-                  setAsset(n);
-                  setAssetPickerVisible(false);
-                }}
-                style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: NEUTRAL_BG }]}
-              >
-                <Text style={styles.modalItemText}>{n}</Text>
-              </Pressable>
-            ))}
+            <ScrollView 
+              style={styles.modalScrollView}
+              showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
+            >
+              {isLoadingOptions ? (
+                <View style={styles.modalItem}>
+                  <Text style={styles.modalItemText}>Loading assets...</Text>
+                </View>
+              ) : (
+                availableAssets.map((assetOption: string, index: number) => (
+                  <Pressable
+                    key={`asset-${index}-${assetOption}`}
+                    onPress={() => {
+                      setAsset(assetOption);
+                      setAssetPickerVisible(false);
+                    }}
+                    style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: NEUTRAL_BG }]}
+                  >
+                    <Text style={styles.modalItemText}>{assetOption}</Text>
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
             <Pressable onPress={() => setAssetPickerVisible(false)} style={styles.modalCancel}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </Pressable>
@@ -198,26 +246,38 @@ export function OnrampForm({
       </Modal>
 
       {/* Network picker modal */}
-      <Modal
-        visible={networkPickerVisible}
-        animationType="slide"
-        transparent
+      <Modal 
+        visible={networkPickerVisible} 
+        animationType="slide" 
+        transparent 
         onRequestClose={() => setNetworkPickerVisible(false)}
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalSheet}>
-            {(["base"] as const).map((n) => (
-              <Pressable
-                key={n}
-                onPress={() => {
-                  setNetwork(n);
-                  setNetworkPickerVisible(false);
-                }}
-                style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: NEUTRAL_BG }]}
-              >
-                <Text style={styles.modalItemText}>{n}</Text>
-              </Pressable>
-            ))}
+            <ScrollView 
+              style={styles.modalScrollView}
+              showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
+            >
+              {isLoadingOptions ? (
+                <View style={styles.modalItem}>
+                  <Text style={styles.modalItemText}>Loading networks...</Text>
+                </View>
+              ) : (
+                availableNetworks.map((networkOption: string, index: number) => (
+                  <Pressable
+                    key={`network-${index}-${networkOption}`}
+                    onPress={() => {
+                      setNetwork(networkOption);
+                      setNetworkPickerVisible(false);
+                    }}
+                    style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: NEUTRAL_BG }]}
+                  >
+                    <Text style={styles.modalItemText}>{networkOption}</Text>
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
             <Pressable onPress={() => setNetworkPickerVisible(false)} style={styles.modalCancel}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </Pressable>
@@ -307,12 +367,16 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.3)",
     justifyContent: "flex-end",
   },
+  modalScrollView: {
+    maxHeight: 300, // Limit height so it doesn't take full screen
+  },
   modalSheet: {
     backgroundColor: "#FFFFFF",
     padding: 12,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     gap: 8,
+    maxHeight: '80%', // Prevent modal from taking full screen height
   },
   modalItem: {
     paddingVertical: 14,
