@@ -1,17 +1,37 @@
 import { useRef } from "react";
-import { Alert } from "react-native";
 import { WebView } from "react-native-webview";
 
+/**
+ * CRITICAL: Apple Pay Webview Event Flow
+ * 
+ * This component orchestrates the entire payment process:
+ * 
+ * - onramp_api.load_success: Page loaded → Auto-hide & click Apple Pay button
+ * - onramp_api.commit_success: Payment authorized by user → start blockchain tracking
+ * - onramp_api.polling_start: Begin tracking blockchain transaction
+ * - onramp_api.polling_success: Crypto delivered to wallet → show success
+ * - onramp_api.polling_error: Transaction failed on blockchain → show error
+ * - onramp_api.cancel: User cancels payment → show info 
+ * - onramp_api.load_error: Page load fails → show error 
+ * - onramp_api.commit_error: Payment authorization fails → show error 
+ * 
+ * These post events ensure smooth execution of the payment process from start to finish.
+ * 
+ * The WebView is hidden (1x1px, off-screen) but functional.
+ * All user interaction happens through native Apple Pay sheet.
+ */
 export function ApplePayWidget({ 
   paymentUrl, 
   onClose, 
   setIsProcessingPayment,
-  setTransactionStatus 
+  setTransactionStatus,
+  onAlert
 }: { 
   paymentUrl: string;
   onClose?: () => void;
   setIsProcessingPayment?: (loading: boolean) => void;
   setTransactionStatus?: (status: 'pending' | 'success' | 'error' | null) => void; 
+  onAlert?: (title: string, message: string, type: 'success' | 'error' | 'info') => void; // Add this line
 }) {
   const webViewRef = useRef<WebView>(null);
   // const finalUrl = `${paymentUrl}`;
@@ -26,6 +46,7 @@ export function ApplePayWidget({
 
   return (
     <WebView
+      // Hidden WebView (1x1 pixel, off-screen) - only for functionality
       ref={webViewRef}
       style={{
         width: 1,
@@ -45,11 +66,12 @@ export function ApplePayWidget({
           console.log(eventName);
           switch (eventName) {
             case "onramp_api.load_pending":
-              console.log('🔄 Coinbase v2 API loading...');
+              console.log('Coinbase v2 API loading...');
               break;
               
               case "onramp_api.load_success":
-                console.log('🔄 Coinbase v2 API loaded successfully, Apple Pay button ready');
+                // Inject CSS to hide button + JavaScript to click it automatically
+                console.log('Coinbase v2 API loaded successfully, Apple Pay button ready');
                 webViewRef.current?.injectJavaScript(`
                   const style = document.createElement('style');
                   style.textContent = \`
@@ -61,15 +83,15 @@ export function ApplePayWidget({
                   
                   // Click the hidden button
                   const btn = document.querySelector('apple-pay-button');
-                  console.log('🔄 Apple Pay button found', btn);
+                  console.log('Apple Pay button found', btn);
                   if (btn) btn.click();
-                  console.log('🔄 Apple Pay button hidden & clicked');
+                  console.log('Apple Pay button hidden & clicked');
                 `);
                 break;
               
             case "onramp_api.cancel":
               console.log('User cancels Apple pop-up');
-              Alert.alert("Payment cancelled");
+              onAlert?.("Payment Cancelled", "The payment was cancelled by the user", 'info');
               // Stop loading and close
               setIsProcessingPayment?.(false);
               onClose?.();
@@ -77,15 +99,15 @@ export function ApplePayWidget({
               
             case "onramp_api.commit_error":
             case "onramp_api.load_error":
-              console.log('❌ Payment cancelled or error,', data.data);
-              Alert.alert("Payment cancelled or error", "The payment was cancelled or failed. Error: " + data.data.errorMessage);
+              console.log('Payment cancelled or error,', data.data);
+              onAlert?.("Payment Error", `The payment failed: ${data.data.errorMessage}`, 'error');
               // Stop loading and close
               setIsProcessingPayment?.(false);
               onClose?.();
               break;
               
             case "onramp_api.commit_success":
-              console.log('🎉 Payment successful! Now tracking transaction...');
+              console.log('Payment successful! Now tracking transaction...');
               setTransactionStatus?.('pending');
               // Alert.alert("Success!", "Payment completed successfully.");
               // Stop loading and close
@@ -94,20 +116,20 @@ export function ApplePayWidget({
               break;
 
             case "onramp_api.polling_start":
-              console.log('🔍 Started tracking blockchain transaction...');
+              console.log('Started tracking blockchain transaction...');
               break;
             
             case "onramp_api.polling_success":
-              console.log('✅ Funds delivered to wallet!');
+              console.log('Funds delivered to wallet!');
               setTransactionStatus?.('success');
-              Alert.alert("Complete!", "Your crypto has been delivered to your wallet!");
+              onAlert?.("Complete!", "Your crypto has been delivered to your wallet!", 'success');
               setTimeout(() => onClose?.(), 2000);
               break;
             
             case "onramp_api.polling_error":
-              console.log('❌ Transaction failed on blockchain', data.data);
+              console.log('Transaction failed on blockchain', data.data);
               setTransactionStatus?.('error');
-              Alert.alert("Transaction Failed", "There was an issue processing your transaction. Please contact support. Error: " + data.data.errorMessage);
+              onAlert?.("Transaction Failed", `There was an issue processing your transaction: ${data.data.errorMessage}`, 'error');
               setTimeout(() => onClose?.(), 2000);
               break;
               

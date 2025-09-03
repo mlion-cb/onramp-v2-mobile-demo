@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { COLORS } from '../../constants/colors';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { COLORS } from '../../constants/Colors';
 import { SwipeToConfirm } from '../ui/SwipeToConfirm';
 
 
-const { PRIMARY_BLUE, NEUTRAL_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY } = COLORS;
+const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE, SILVER } = COLORS;
 
 export type OnrampFormData = {
   amount: string;
@@ -26,6 +26,10 @@ type OnrampFormProps = {
   getAvailableAssets: (selectedNetwork?: string) => string[];
 };
 
+/**
+ * Main form component with dynamic asset/network selection
+ * Assets and networks are filtered based on each other (many-to-many relationship)
+ */
 export function OnrampForm({
   address,
   onAddressChange,
@@ -55,6 +59,15 @@ export function OnrampForm({
   const isAddressValid = /^0x[0-9a-fA-F]{40}$/.test(address);
   const isFormValid = isAmountValid && isAddressValid && !!network && !!asset && !!paymentMethod;
 
+  /**
+   * Dynamic filtering: changing asset updates available networks, and vice versa
+   * 
+   * Data Flow:
+   * 1. fetchBuyOptions() → loads all combinations
+   * 2. getAvailableAssets(network) → filters by network
+   * 3. getAvailableNetworks(asset) → filters by asset
+   * 4. useEffect hooks → auto-clear invalid selections
+   */
   const availableNetworks = useMemo(() => {
     if (!getAvailableNetworks) return ["ethereum", "base"]; // Fallback
     return getAvailableNetworks(asset);
@@ -65,9 +78,9 @@ export function OnrampForm({
     return getAvailableAssets(network);
   }, [network, getAvailableAssets]);
 
-  // Auto-clear invalid selections
+  // Auto-clear invalid selections when options change
   useEffect(() => {
-    // If current network isn't available for selected asset, clear it
+    // If current network is no longer valid for selected asset, reset to first available
     if (asset && !availableNetworks.includes(network)) {
       setNetwork(availableNetworks[0] || "");
     }
@@ -82,47 +95,27 @@ export function OnrampForm({
     }
   }, [network, availableAssets, asset]);
 
-
+  /**
+   * Form submission: bypasses confirmation popup, directly calls API
+   * Validation: amount > 0, valid 0x address, asset/network selected
+   */
   const handleSwipeConfirm = useCallback((reset: () => void) => {
     if (!isFormValid) {
-      reset();
+      console.log('Form is invalid, resetting slider')
+      reset(); // Snap slider back if invalid
       return;
     }
-    Alert.alert(
-      "Confirm Transaction",
-      `Confirm wallet address for non-Sandbox payment.\nAmount: ${amount}\nAsset: ${asset}\nNetwork: ${network}\nAddress: ${address}`,
-      [
-        {
-          text: "Confirm",
-          style: "default",
-          onPress: async () => {
-            try {
-              await onSubmit({
-                amount,
-                asset,
-                network,
-                address,
-                sandbox,
-                paymentMethod
-              });
-            } catch (error) {
-              console.error('API Error:', error);
-              Alert.alert('Error', 'Failed to create onramp session. Please try again.');
-              reset(); 
-            }
-          },
-        },
-        {
-          text: "Cancel",
-          style: "cancel",
-          onPress: () => reset(),
-        },
-      ],
-      {
-        cancelable: true,
-        onDismiss: () => reset(),
-      }
-    );
+
+    // Direct submission with one-click (/ slide) experience
+    console.log('Form is valid, submitting')
+    onSubmit({
+      amount: amountNumber.toString(),
+      asset,
+      network,
+      address,
+      paymentMethod,
+      sandbox,
+    });
   }, [isFormValid, amount, network, asset, address, sandbox, paymentMethod, onSubmit]);
 
   return (
@@ -191,7 +184,7 @@ export function OnrampForm({
         <Switch
           value={sandbox}
           onValueChange={setSandbox}
-          trackColor={{ true: PRIMARY_BLUE, false: BORDER }}
+          trackColor={{ true: BLUE, false: BORDER }}
           thumbColor={Platform.OS === "android" ? (sandbox ? "#ffffff" : "#f4f3f4") : undefined}
         />
       </View>
@@ -231,7 +224,7 @@ export function OnrampForm({
                       setAsset(assetOption);
                       setAssetPickerVisible(false);
                     }}
-                    style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: NEUTRAL_BG }]}
+                    style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
                   >
                     <Text style={styles.modalItemText}>{assetOption}</Text>
                   </Pressable>
@@ -271,7 +264,7 @@ export function OnrampForm({
                       setNetwork(networkOption);
                       setNetworkPickerVisible(false);
                     }}
-                    style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: NEUTRAL_BG }]}
+                    style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
                   >
                     <Text style={styles.modalItemText}>{networkOption}</Text>
                   </Pressable>
@@ -301,7 +294,7 @@ export function OnrampForm({
                   setPaymentMethod(method);
                   setPaymentPickerVisible(false);
                 }}
-                style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: NEUTRAL_BG }]}
+                style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
               >
                 <Text style={styles.modalItemText}>{method}</Text>
               </Pressable>
@@ -320,6 +313,7 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     gap: 16,
+    backgroundColor: DARK_BG, 
   },
   fieldGroup: {
     gap: 8,
@@ -330,22 +324,34 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   input: {
-    backgroundColor: NEUTRAL_BG,
+    backgroundColor: CARD_BG,     
     borderColor: BORDER,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,               
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: Platform.select({ ios: 12, android: 10, default: 12 }),
+    paddingVertical: Platform.select({ ios: 14, android: 12, default: 14 }), // More padding
     color: TEXT_PRIMARY,
     fontSize: 16,
+    // Add subtle focus styling
+    shadowColor: BLUE,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   select: {
-    backgroundColor: NEUTRAL_BG,
+    backgroundColor: CARD_BG,     
     borderColor: BORDER,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,              
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: Platform.select({ ios: 12, android: 10, default: 12 }),
+    paddingVertical: Platform.select({ ios: 14, android: 12, default: 14 }), // More padding
+    // Add subtle styling
+    shadowColor: BLUE,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   selectText: {
     color: TEXT_PRIMARY,
@@ -353,43 +359,52 @@ const styles = StyleSheet.create({
   },
   switchRow: {
     marginTop: 8,
-    paddingVertical: 8,
+    paddingVertical: 12,         
+    paddingHorizontal: 4,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   errorText: {
-    color: "#D32F2F",
+    color: "#FF6B6B",           
     fontSize: 12,
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
+    backgroundColor: "rgba(10, 11, 13, 0.8)", 
     justifyContent: "flex-end",
   },
   modalScrollView: {
-    maxHeight: 300, // Limit height so it doesn't take full screen
+    maxHeight: 300,
   },
   modalSheet: {
-    backgroundColor: "#FFFFFF",
-    padding: 12,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: CARD_BG,    
+    padding: 16,                 
+    borderTopLeftRadius: 20,     
+    borderTopRightRadius: 20,
     gap: 8,
-    maxHeight: '80%', // Prevent modal from taking full screen height
+    maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: BORDER,
   },
   modalItem: {
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    paddingVertical: 16,         
+    paddingHorizontal: 16,
+    borderRadius: 12,            
+    borderWidth: 1,
+    borderColor: 'transparent',  
   },
   modalItemText: {
     color: TEXT_PRIMARY,
     fontSize: 16,
+    fontWeight: "500",
   },
   modalCancel: {
-    paddingVertical: 14,
+    paddingVertical: 16,        
     alignItems: "center",
+    marginTop: 8,
+    backgroundColor: BORDER,     
+    borderRadius: 12,
   },
   modalCancelText: {
     color: TEXT_SECONDARY,

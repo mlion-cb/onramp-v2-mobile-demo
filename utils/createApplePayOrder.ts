@@ -1,5 +1,13 @@
+// Update this to your local proxy server URL with command 'ipconfig getifaddr en0' on terminal
 const BASE_URL = "http://192.168.18.121:3000";
-// const BASE_URL = "http://localhost:3000";
+// const BASE_URL = "http://localhost:3000"; // For local simulator on same device - does not work for Apple Pay
+
+/**
+ * Pattern used across all API utilities:
+ * 1. Enhanced request logging (method, headers, body preview)
+ * 2. Response cloning for safe logging 
+ * 3. Proper error re-throwing for UI handling
+ */
 
 export async function createApplePayOrder(payload: any) {
   try {
