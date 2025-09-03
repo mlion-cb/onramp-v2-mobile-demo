@@ -1,7 +1,4 @@
-// Update this to your local proxy server URL with command 'ipconfig getifaddr en0' on terminal
-const BASE_URL = "http://192.168.18.121:3000";
-// const BASE_URL = "http://localhost:3000"; // For local simulator on same device - does not work for Apple Pay
-
+import { BASE_URL } from "../constants/BASE_URL";
 /**
  * Pattern used across all API utilities:
  * 1. Enhanced request logging (method, headers, body preview)
