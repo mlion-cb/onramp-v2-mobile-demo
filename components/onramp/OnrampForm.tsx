@@ -96,7 +96,7 @@ export function OnrampForm({
   }, [network, availableAssets, asset]);
 
   /**
-   * Form submission: bypasses confirmation popup, directly calls API
+   * Form submission: directly calls API
    * Validation: amount > 0, valid 0x address, asset/network selected
    */
   const handleSwipeConfirm = useCallback((reset: () => void) => {
@@ -197,7 +197,7 @@ export function OnrampForm({
         isLoading={isLoading}
       />
 
-      {/* All your existing modals */}
+      {/* All existing modals */}
       {/* Asset picker modal */}
       <Modal 
         visible={assetPickerVisible} 
