@@ -6,7 +6,7 @@ export async function fetchTransactionHistory(
   pageSize: number = 10
 ) {
   try {
-    let fullUrl = `https://api.developer.coinbase.com/onramp/v1/transactions/by-partner-user-ref/${encodeURIComponent(partnerUserRef)}?pageSize=${pageSize}`;
+    let fullUrl = `https://api.developer.coinbase.com/onramp/v1/buy/user/${encodeURIComponent(partnerUserRef)}/transactions?pageSize=${pageSize}`;
     if (pageKey) {
       fullUrl += `&pageKey=${encodeURIComponent(pageKey)}`;
     }
