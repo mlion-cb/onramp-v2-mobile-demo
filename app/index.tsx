@@ -1,10 +1,12 @@
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ApplePayWidget, OnrampForm, useOnramp } from "../components";
-import { COLORS } from "../constants/colors";
-const { PRIMARY_BLUE, NEUTRAL_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY } = COLORS;
+import { CoinbaseAlert } from "../components/ui/CoinbaseAlerts";
+import { COLORS } from "../constants/Colors";
 
+
+const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
 
 function generateMockAddress(): string {
   const hexChars = "0123456789abcdef";
@@ -20,6 +22,8 @@ export default function Index() {
   const [address, setAddress] = useState("");
   const [connecting, setConnecting] = useState(false);
   const isConnected = address.length > 0;
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertMessage, setAlertMessage] = useState("");
 
   const onConnectPress = useCallback(async () => {
     if (connecting || isConnected) return;
@@ -28,11 +32,24 @@ export default function Index() {
       await new Promise((resolve) => setTimeout(resolve, 900));
       const mock = generateMockAddress();
       setAddress(mock);
-      Alert.alert("Dummy Wallet connected: ", mock);
+      setAlertMessage(`Dummy Wallet connected: ${mock}`);
+      setShowAlert(true);
     } finally {
       setConnecting(false);
     }
   }, [connecting, isConnected]);
+
+  const [applePayAlert, setApplePayAlert] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
 
 
   const { 
@@ -69,9 +86,15 @@ export default function Index() {
           pressed && { opacity: 0.85 },
         ]}
       >
-        <Text style={[styles.headerButtonText, { textAlign: "center" }]}>
-          {isConnected ? "Connected" : connecting ? "Connecting…" : "Connect Wallet\n(Dummy)"}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        {isConnected && <View style={styles.connectedDot} />}
+        <Text style={[styles.headerButtonText,   { 
+          textAlign: "center",
+          color: isConnected ? "#4ADE80" : TEXT_PRIMARY // Move color here
+        }]}>
+          {isConnected ? "Connected" : connecting ? "Connecting…" : "Connect Dummy Wallet"}
         </Text>
+      </View>
       </Pressable>
     </View>
 
@@ -88,15 +111,33 @@ export default function Index() {
 
       {applePayVisible && (
         <ApplePayWidget
-
           paymentUrl={hostedUrl}
           onClose={() => {
             closeApplePay(); // Stop loading when closed
           }}
           setIsProcessingPayment={setIsProcessingPayment}
+          onAlert={(title, message, type) => {
+            setApplePayAlert({ visible: true, title, message, type });
+          }}
         />
       )}
+      {/* OnrampForm Alert - Wallet Connection (Always Success) */}
+      <CoinbaseAlert
+        visible={showAlert}
+        title="Success"
+        message={alertMessage}
+        onConfirm={() => setShowAlert(false)}
+      />
+      {/* ApplePayWidget Alert */}
+      <CoinbaseAlert
+        visible={applePayAlert.visible}
+        title={applePayAlert.title}
+        message={applePayAlert.message}
+        type={applePayAlert.type}
+        onConfirm={() => setApplePayAlert(prev => ({ ...prev, visible: false }))}
+      />
     </View>
+    
   );
 }
 
@@ -104,7 +145,7 @@ export default function Index() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: DARK_BG, 
   },
   header: {
     flexDirection: "row",
@@ -112,7 +153,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: CARD_BG, 
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
   },
@@ -122,16 +163,29 @@ const styles = StyleSheet.create({
     color: TEXT_PRIMARY,
   },
   headerButton: {
-    backgroundColor: PRIMARY_BLUE,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    backgroundColor: CARD_BG,
+    paddingHorizontal: 20,     
+    paddingVertical: 12,      
+    borderRadius: 20,         
     marginRight: 6,
+    borderWidth: 1,
+    borderColor: BORDER,
+
+    shadowColor: BLUE,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  connectedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#4ADE80", // Green dot
   },
   headerButtonText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 14,              
+    fontWeight: "500",              
   },
 });
 

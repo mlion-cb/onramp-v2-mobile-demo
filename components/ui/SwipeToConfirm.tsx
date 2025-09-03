@@ -1,9 +1,9 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Animated, PanResponder, StyleSheet, Text, View } from "react-native";
-import { COLORS } from "../../constants/colors";
+import { COLORS } from "../../constants/Colors";
 
-const { PRIMARY_BLUE, NEUTRAL_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY} = COLORS;
+const { BLUE, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, BLACK, WHITE, SILVER } = COLORS;
 
 type SwipeToConfirmProps = {
   label: string;
@@ -142,22 +142,27 @@ const styles = StyleSheet.create({
   swipeTrack: {
     height: 56,
     borderRadius: 28,
-    backgroundColor: NEUTRAL_BG,
-    borderColor: BORDER,
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: CARD_BG, 
+    borderColor: SILVER,        
+    borderWidth: 1,           
     overflow: "hidden",
     justifyContent: "center",
+    position: 'relative',    
   },
   swipeProgress: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: PRIMARY_BLUE,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: BLUE,
     opacity: 0.15,
+    borderRadius: 28,              
   },
   swipeLabel: {
     textAlign: "center",
     color: TEXT_PRIMARY,
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "500",      
   },
   swipeKnob: {
     position: "absolute",
@@ -165,7 +170,13 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: BLUE,  
     alignItems: "center",
     justifyContent: "center",
-  },});
+    shadowColor: BLUE,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+});

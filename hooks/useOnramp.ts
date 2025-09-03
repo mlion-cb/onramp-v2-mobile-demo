@@ -4,7 +4,10 @@ import { createApplePayOrder } from "../utils/createApplePayOrder";
 import { fetchBuyOptions } from "../utils/fetchBuyOptions";
 import { setCurrentPartnerUserRef } from "../utils/sharedState";
 
-
+/**
+ * Custom hook that manages all onramp-related state and API calls
+ * Handles: order creation, Apple Pay flow, dynamic options, transaction status
+ */
 export function useOnramp() {
   // These states from index.tsx:
   const [applePayVisible, setApplePayVisible] = useState(false);
@@ -14,29 +17,45 @@ export function useOnramp() {
   const [options, setOptions] = useState<any>(null);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
 
-  const getAssetSymbolFromName = useCallback((assetName: string) => {
-    if (!options?.purchase_currencies) return assetName;
-    const asset = options.purchase_currencies.find((a: any) => a.name === assetName);
-    return asset?.symbol || assetName;
-  }, [options]);
-  
-  const getNetworkNameFromDisplayName = useCallback((displayName: string) => {
-    if (!options?.purchase_currencies) return displayName;
-    
-    for (const asset of options.purchase_currencies) {
-      const network = asset.networks.find((n: any) => n.display_name === displayName);
-      if (network) return network.name;
-    }
-    return displayName;
-  }, [options]);
+/**
+   * API Data Format Mapping
+   * Coinbase API uses different formats for display vs. submission:
+   * - Display: asset.name ("USD Coin") + network.display_name ("Base") 
+   * - API Submission: asset.symbol ("USDC") + network.name ("base")
+   * 
+   * Helper functions handle this mapping:
+   * - getAssetSymbolFromName(): "USD Coin" → "USDC" 
+   * - getNetworkNameFromDisplayName(): "Base" → "base"
+   */
+const getAssetSymbolFromName = useCallback((assetName: string) => {
+  if (!options?.purchase_currencies) return assetName;
+  const asset = options.purchase_currencies.find((a: any) => a.name === assetName);
+  return asset?.symbol || assetName;
+}, [options]);
 
+const getNetworkNameFromDisplayName = useCallback((displayName: string) => {
+  if (!options?.purchase_currencies) return displayName;
+  
+  for (const asset of options.purchase_currencies) {
+    const network = asset.networks.find((n: any) => n.display_name === displayName);
+    if (network) return network.name;
+  }
+  return displayName;
+}, [options]);
+
+  /**
+   * Creates an onramp order and triggers Apple Pay flow
+   * Flow: Form validation → API call → WebView → Apple Pay → Transaction tracking
+   */
   const createOrder = useCallback(async (formData: OnrampFormData) => {
     try {
       setIsProcessingPayment(true); // Start loading
-
+      // Generate unique user reference for transaction tracking
       const partnerUserRef = `${formData.sandbox ? "sandbox-" : ""}user-${formData.address}`;      
       setCurrentPartnerUserRef(partnerUserRef);
 
+      // Map form values to API format (display names → API values)
+      // Order creation: API call to Coinbase
       const result = await createApplePayOrder({
         paymentAmount: formData.amount,
         paymentCurrency: "USD",
@@ -77,6 +96,10 @@ export function useOnramp() {
     setTransactionStatus(null);
   }, []);
 
+  /**
+   * Fetches available assets/networks from Coinbase API
+   * Used to populate form dropdowns dynamically
+   */
   const fetchOptions = useCallback(async () => {
     try {
       setIsLoadingOptions(true);
@@ -84,7 +107,7 @@ export function useOnramp() {
         country: 'US', 
         subdivision: 'CA' 
       });
-      setOptions(result);
+      setOptions(result); // Stores: { purchase_currencies: [...], payment_currencies: [...] }
     
     } catch (error) {
       console.error('Failed to fetch options:', error);
@@ -118,6 +141,7 @@ export function useOnramp() {
     ).map((asset: any) => asset.name);
   }, [options]);
 
+  
   return {
     // State
     applePayVisible,

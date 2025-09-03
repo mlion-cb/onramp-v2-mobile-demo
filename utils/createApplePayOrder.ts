@@ -1,5 +1,10 @@
-const BASE_URL = "http://192.168.18.121:3000";
-// const BASE_URL = "http://localhost:3000";
+import { BASE_URL } from "../constants/BASE_URL";
+/**
+ * Pattern used across all API utilities:
+ * 1. Enhanced request logging (method, headers, body preview)
+ * 2. Response cloning for safe logging 
+ * 3. Proper error re-throwing for UI handling
+ */
 
 export async function createApplePayOrder(payload: any) {
   try {

@@ -1,15 +1,22 @@
-const BASE_URL = "http://192.168.18.121:3000";
+import { BASE_URL } from "../constants/BASE_URL";
 
-export async function fetchTransactionHistory(partnerUserRef: string) {
+export async function fetchTransactionHistory(
+  partnerUserRef: string, 
+  pageKey?: string, 
+  pageSize: number = 10
+) {
   try {
-    const fullUrl = `https://api.developer.coinbase.com/onramp/v1/buy/user/${encodeURIComponent(partnerUserRef)}/transactions`;
+    let fullUrl = `https://api.developer.coinbase.com/onramp/v1/transactions/by-partner-user-ref/${encodeURIComponent(partnerUserRef)}?pageSize=${pageSize}`;
+    if (pageKey) {
+      fullUrl += `&pageKey=${encodeURIComponent(pageKey)}`;
+    }
     
     console.log('Transaction history request →', {
       method: "POST", // Calling local proxy with POST
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: fullUrl,
-        method: "GET" // Instructing proxy to make GET to Coinbase
+        method: "GET" 
       })
     });
 
@@ -18,7 +25,7 @@ export async function fetchTransactionHistory(partnerUserRef: string) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: fullUrl,
-        method: "GET" // Instructing proxy to make GET to Coinbase
+        method: "GET" 
       })
     });
 
@@ -38,7 +45,8 @@ export async function fetchTransactionHistory(partnerUserRef: string) {
     const responseJson = await response.json();
     
     return {
-      transactions: responseJson.transactions || []
+      transactions: responseJson.transactions || [],
+      nextPageKey: responseJson.nextPageKey // For next page
     };
   } catch (error) {
     console.error("Transaction history API request failed:", error);

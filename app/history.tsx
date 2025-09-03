@@ -4,17 +4,18 @@ import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
-  View,
+  View
 } from "react-native";
-import { COLORS } from "../constants/colors";
+import { CoinbaseAlert } from "../components/ui/CoinbaseAlerts";
+import { COLORS } from "../constants/Colors";
 import { fetchTransactionHistory } from "../utils/fetchTransactionHistory";
 
-const { PRIMARY_BLUE, NEUTRAL_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY } = COLORS;
+
+const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
 
 type Transaction = {
   transaction_id: string;  
@@ -35,6 +36,20 @@ export default function History() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUserRef, setCurrentUserRef] = useState<string | null>(null);
+  const [nextPageKey, setNextPageKey] = useState<string | null>(null); // Add this
+  const [currentPage, setCurrentPage] = useState(1); // Add this
+
+  const [alertState, setAlertState] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -49,24 +64,58 @@ export default function History() {
     setCurrentUserRef(userRef);
   }, []);
 
-  const loadTransactions = useCallback(async () => {
-    const userRef = getCurrentPartnerUserRef(); // Get fresh value
+  const loadTransactions = useCallback(async (pageKey?: string, isNewPage: boolean = false) => {
+    const userRef = getCurrentPartnerUserRef();
     if (!userRef) {
-      Alert.alert("No User Reference", "Complete an onramp transaction first to see history");
+      setAlertState({
+        visible: true,
+        title: "No User Reference",
+        message: "Complete an onramp transaction first to see history",
+        type: 'info'
+      });
       return;
     }
 
     try {
       setLoading(true);
-      const result = await fetchTransactionHistory(userRef);
-      setTransactions(result.transactions || []);
+      const result = await fetchTransactionHistory(userRef, pageKey, 10);
+      setTransactions(result.transactions || []); // Replace for new page
+      setNextPageKey(result.nextPageKey || null);
+
     } catch (error) {
       console.error("Failed to load transaction history:", error);
-      Alert.alert("Error", "Failed to load transaction history");
+      setAlertState({
+        visible: true,
+        title: "Error",
+        message: "Failed to load transaction history",
+        type: 'error'
+      });
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const handleRefresh = useCallback(() => {
+    loadTransactions(); // Call without parameters for refresh
+  }, [loadTransactions]);
+
+  // Load next page
+  const loadNextPage = useCallback(() => {
+    if (nextPageKey && !loading) {
+      setCurrentPage(prev => prev + 1);
+      loadTransactions(nextPageKey, true);
+    }
+  }, [nextPageKey, loading, loadTransactions]);
+
+  // Load previous page (you'd need to track page keys for this)
+  const loadPreviousPage = useCallback(() => {
+    if (currentPage > 1) {
+      setCurrentPage(prev => prev - 1);
+      // For previous page, you'd need to store previous pageKeys
+      // For simplicity, let's just reload from start
+      loadTransactions(undefined, true);
+    }
+  }, [currentPage, loadTransactions]);
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -119,7 +168,7 @@ export default function History() {
       <View style={styles.header}>
         <Text style={styles.title}>Transaction History</Text>
         <Pressable
-          onPress={loadTransactions}
+          onPress={handleRefresh}
           disabled={loading}
           style={({ pressed }) => [
             styles.refreshButton,
@@ -128,9 +177,9 @@ export default function History() {
           ]}
         >
           {loading ? (
-            <ActivityIndicator size="small" color={PRIMARY_BLUE} />
+            <ActivityIndicator size="small" color={BLUE} />
           ) : (
-            <Ionicons name="refresh" size={20} color={PRIMARY_BLUE} />
+            <Ionicons name="refresh" size={20} color={BLUE} />
           )}
         </Pressable>
       </View>
@@ -153,14 +202,44 @@ export default function History() {
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={transactions}
-          renderItem={renderTransaction}
-          keyExtractor={(item) => item.transaction_id} 
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+          <FlatList
+            data={transactions}
+            renderItem={renderTransaction}
+            keyExtractor={(item) => item.transaction_id} 
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+          <CoinbaseAlert
+            visible={alertState.visible}
+            title={alertState.title}
+            message={alertState.message}
+            type={alertState.type}
+            onConfirm={() => setAlertState(prev => ({ ...prev, visible: false }))}
+          />
+          <View style={styles.paginationContainer}>
+            <Pressable
+              style={[styles.paginationButton, currentPage === 1 && styles.paginationButtonDisabled]}
+              onPress={loadPreviousPage}
+              disabled={currentPage === 1 || loading}
+            >
+              <Text style={[styles.paginationText, currentPage === 1 && styles.paginationTextDisabled]}>
+                Previous
+              </Text>
+            </Pressable>
+            
+            <Text style={styles.pageNumber}>Page {currentPage}</Text>
+            
+            <Pressable
+              style={[styles.paginationButton, !nextPageKey && styles.paginationButtonDisabled]}
+              onPress={loadNextPage}
+              disabled={!nextPageKey || loading}
+            >
+              <Text style={[styles.paginationText, !nextPageKey && styles.paginationTextDisabled]}>
+                Next
+              </Text>
+            </Pressable>
+          </View>
     </View>
   );
 }
@@ -168,7 +247,7 @@ export default function History() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: NEUTRAL_BG,
+    backgroundColor: DARK_BG,    
   },
   header: {
     flexDirection: "row",
@@ -176,7 +255,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: CARD_BG,    
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
   },
@@ -189,7 +268,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   userRefSection: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: CARD_BG,
     marginHorizontal: 20,
     marginTop: 16,
     padding: 16,
@@ -207,7 +286,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "monospace",
     color: TEXT_PRIMARY,
-    backgroundColor: NEUTRAL_BG,
+    backgroundColor: DARK_BG,
     padding: 8,
     borderRadius: 6,
   },
@@ -215,7 +294,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   transactionCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: CARD_BG, 
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
@@ -283,5 +362,40 @@ const styles = StyleSheet.create({
     color: TEXT_SECONDARY,
     textAlign: "center",
     lineHeight: 20,
+  },
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: CARD_BG,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  paginationButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: BLUE,
+    borderRadius: 8,
+    minWidth: 80,
+  },
+  paginationButtonDisabled: {
+    backgroundColor: BORDER,
+    opacity: 0.5,
+  },
+  paginationText: {
+    color: WHITE,
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  paginationTextDisabled: {
+    color: TEXT_SECONDARY,
+  },
+  pageNumber: {
+    color: TEXT_PRIMARY,
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

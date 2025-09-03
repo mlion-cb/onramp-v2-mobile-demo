@@ -1,5 +1,4 @@
-const BASE_URL = "http://192.168.18.121:3000";
-// const BASE_URL = "http://localhost:3000";
+import { BASE_URL } from "../constants/BASE_URL";
 
 export async function fetchBuyOptions(payload: any ) {
 

@@ -35,6 +35,20 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, message: 'Server is running' });
 });
 
+/**
+ * Generic proxy server for Coinbase API calls:
+ * - Handles JWT authentication and forwards requests to avoid CORS issues
+ * - JWT generation requires server-side CDP secrets
+ * - Centralizes authentication logic
+ * 
+ * Usage: POST /server/api with { url, method, body }
+ * Usage Pattern: Frontend → POST /server/api → Coinbase API → Response
+ *  
+ * Automatically handles:
+ * - JWT generation for api.developer.coinbase.com
+ * - Method switching (GET for options, POST for orders)
+ * - Error forwarding with proper status codes
+ */
 app.post("/server/api", async (req, res) => {
   try {
     // Validate the request structure
@@ -57,7 +71,7 @@ app.post("/server/api", async (req, res) => {
     const urlObj = new URL(targetUrl);
     let authToken = null;
     
-    // Only generate JWT for Coinbase API calls
+    // Auto-generate JWT for Coinbase API calls only
     if (urlObj.hostname === "api.developer.coinbase.com") {
       authToken = await generateJwt({
         apiKeyId: process.env.CDP_API_KEY_ID!,
@@ -76,7 +90,7 @@ app.post("/server/api", async (req, res) => {
       ...(additionalHeaders || {}) // Merge client-provided headers
     };
 
-    // Make the proxied request
+    // Forward request with authentication
     const response = await fetch(targetUrl, {
       method: method || 'POST',
       headers: headers,

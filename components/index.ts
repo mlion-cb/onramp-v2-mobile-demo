@@ -1,3 +1,9 @@
+/**
+ * BARREL EXPORTS
+ * 
+ * Simplifies imports across the app
+ */
+
 // UI Components
 export { SwipeToConfirm } from './ui/SwipeToConfirm';
 
