@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { WebView } from "react-native-webview";
 
 /**
@@ -34,8 +34,20 @@ export function ApplePayWidget({
   onAlert?: (title: string, message: string, type: 'success' | 'error' | 'info') => void; // Add this line
 }) {
   const webViewRef = useRef<WebView>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Add timeout ref
+
   // const finalUrl = `${paymentUrl}`;
-  const finalUrl = `${paymentUrl}&forceFeature=true`;
+  // CRITICAL: forceFeature used for demo purposes; Use original paymentLink like above for production code
+  const finalUrl = `${paymentUrl}&forceFeature=true`; 
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   // Don't render anything if not visible or no URL
   if (!paymentUrl) {
@@ -54,14 +66,25 @@ export function ApplePayWidget({
         top: -1000,
         opacity: 0,
       }}
+      onLoadStart={() => {
+        // Start timeout when WebView begins loading
+        console.log('WebView started loading, starting 30s timeout...');
+        timeoutRef.current = setTimeout(() => {
+          console.log('Payment timeout - resetting state');
+          onAlert?.("Payment Timeout", "The payment process took too long. Please try again.", 'error');
+          setIsProcessingPayment?.(false);
+          onClose?.();
+        }, 30000); // 30 second timeout
+      }}
+
       onMessage={({ nativeEvent }) => {
         try {
           const data = JSON.parse(nativeEvent.data);
 
-          
           // Handle Coinbase events
           const { eventName } = data;
           console.log(eventName);
+
           switch (eventName) {
             case "onramp_api.load_pending":
               console.log('Coinbase v2 API loading...');
@@ -80,7 +103,7 @@ export function ApplePayWidget({
                   document.head.appendChild(style);
                   
                   // Click the hidden button
-                  const btn = document.querySelector('apple-pay-button');
+                  const btn = document.getElementById('api-onramp-apple-pay-button');
                   console.log('Apple Pay button found', btn);
                   if (btn) btn.click();
                   console.log('Apple Pay button hidden & clicked');
@@ -105,16 +128,30 @@ export function ApplePayWidget({
               break;
               
             case "onramp_api.commit_success":
+              if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+              }
               console.log('Payment successful! Now tracking transaction...');
               setTransactionStatus?.('pending');
-              // Alert.alert("Success!", "Payment completed successfully.");
-              // Stop loading and close
-              // setIsProcessingPayment?.(false);
-              // onClose?.();
+              // Show immediate success for payment
+              onAlert?.("Payment Successful!", "Your payment has been processed. We're now delivering your crypto to your wallet. You may stay to track the transaction or close this window and track history later", 'success');
               break;
 
+            // Optional tracking or polling events (transaction on chain)
             case "onramp_api.polling_start":
               console.log('Started tracking blockchain transaction...');
+
+              // Start a longer timeout for crypto delivery (5 minutes)
+              timeoutRef.current = setTimeout(() => {
+                console.log('Crypto delivery timeout - but payment was successful');
+                onAlert?.(
+                  "Delivery Taking Longer", 
+                  "Your payment was successful, but crypto delivery is taking longer than expected. You can check your wallet or transaction history for updates.", 
+                  'info'
+                );
+                // Don't close the widget - let polling continue in background
+              }, 300000); // 5 minutes for blockchain delivery
               break;
             
             case "onramp_api.polling_success":
@@ -130,12 +167,28 @@ export function ApplePayWidget({
               onAlert?.("Transaction Failed", `There was an issue processing your transaction: ${data.data.errorMessage}`, 'error');
               setTimeout(() => onClose?.(), 2000);
               break;
+
+            case "onramp_api.polling_success":
+            case "onramp_api.polling_error":
+            case "onramp_api.cancel":
+            case "onramp_api.commit_error":
+            case "onramp_api.load_error":
+              // Clear timeout on final states
+              if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+              }
+              break;
               
             default:
               console.log("Other event: " + eventName, data.data);
               break;
           }
         } catch (error) {
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
           console.error('Error parsing WebView message:', error);
         }
       }}
