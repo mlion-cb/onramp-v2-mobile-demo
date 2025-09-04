@@ -76,27 +76,27 @@ export default function Index() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-      <Text style={styles.title}>Onramp V2 Demo</Text>
-      <Pressable
-        onPress={onConnectPress}
-        disabled={connecting || isConnected}
-        style={({ pressed }) => [
-          styles.headerButton,
-          (connecting || isConnected) && { opacity: 0.6 },
-          pressed && { opacity: 0.85 },
-        ]}
-      >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        {isConnected && <View style={styles.connectedDot} />}
-        <Text style={[styles.headerButtonText,   { 
-          textAlign: "center",
-          color: isConnected ? "#4ADE80" : TEXT_PRIMARY // Move color here
-        }]}>
-          {isConnected ? "Connected" : connecting ? "Connecting…" : "Connect Dummy Wallet"}
-        </Text>
+        <Text style={styles.title}>Onramp V2 Demo</Text>
+        <Pressable
+          onPress={onConnectPress}
+          disabled={connecting || isConnected}
+          style={({ pressed }) => [
+            styles.headerButton,
+            (connecting || isConnected) && { opacity: 0.6 },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {isConnected && <View style={styles.connectedDot} />}
+            <Text style={[styles.headerButtonText, { 
+              textAlign: "center",
+              color: isConnected ? "#4ADE80" : TEXT_PRIMARY
+            }]}>
+              {isConnected ? "Connected" : connecting ? "Connecting…" : "Connect Dummy Wallet"}
+            </Text>
+          </View>
+        </Pressable>
       </View>
-      </Pressable>
-    </View>
 
       <OnrampForm
         address={address}
@@ -163,29 +163,55 @@ const styles = StyleSheet.create({
     color: TEXT_PRIMARY,
   },
   headerButton: {
-    backgroundColor: CARD_BG,
-    paddingHorizontal: 20,     
-    paddingVertical: 12,      
-    borderRadius: 20,         
-    marginRight: 6,
-    borderWidth: 1,
-    borderColor: BORDER,
-
+    // Button styling
+    backgroundColor: BLUE,             
+    paddingHorizontal: 16,            
+    paddingVertical: 12,               
+    borderRadius: 20,                 
+    minWidth: 100,                   
+    alignItems: 'center',
+    justifyContent: 'center',
+    
+    // shadow
     shadowColor: BLUE,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 4,
+    
+    // Border (optional)
+    borderWidth: 0,
+    borderColor: BLUE,
   },
   connectedDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: "#4ADE80", // Green dot
+    marginRight: 6,             // Space from text
   },
   headerButtonText: {
     fontSize: 14,              
-    fontWeight: "500",              
+    fontWeight: '600',         
+    color: WHITE,             
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logoContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: BLUE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: {
+    color: WHITE,
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
 

@@ -7,7 +7,7 @@ export const COLORS = {
   BLACK: '#0A0B0D', // Brand black color
   WHITE: '#FFFFFF', // Text primary color
   SILVER: '#B8C9C8', // Text secondary color
-  BLUE: '#0052FF',  // Primary brand color, Primary actions, highlights
+  BLUE: '#1652F0',  // Primary brand color, Primary actions, highlights
   
   // Secondary
   VIOLET: '#6991FF', // Additional secondary color
@@ -19,4 +19,12 @@ export const COLORS = {
   BORDER: '#2A2B2D', // Borders, dividers, outlines
   TEXT_PRIMARY: '#FFFFFF', // Main text
   TEXT_SECONDARY: '#B8C9C8', // Secondary text
+
+  // Button color tokens (mapped to semantic names)
+  primaryButton: '#1652F0',      // BLUE
+  textOnColor: '#FFFFFF',        // WHITE  
+  textPrimary: '#FFFFFF',        // TEXT_PRIMARY
+  border: '#2A2B2D',            // BORDER
+  error: '#FF6B6B',             // Red for destructive
+  transparent: 'transparent',
 };

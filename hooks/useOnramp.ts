@@ -118,27 +118,33 @@ const getNetworkNameFromDisplayName = useCallback((displayName: string) => {
 
   // Helper functions that use the stored options
   const getAvailableNetworks = useCallback((selectedAsset?: string) => {
-    if (!options?.purchase_currencies) return ['ethereum', 'base'];
+    if (!options?.purchase_currencies) return [
+      { name: "ethereum", display_name: "Ethereum", icon_url: null },
+      { name: "base", display_name: "Base", icon_url: null }
+    ];
     
     if (!selectedAsset) {
       const allNetworks = options.purchase_currencies.flatMap((asset: any) => asset.networks);
-      return [...new Set(allNetworks.map((net: any) => net.display_name))];
+      return [...new Map(allNetworks.map((net: any) => [net.name, net])).values()]; // Dedupe by name
     }
     
     const asset = options.purchase_currencies.find((a: any) => a.name === selectedAsset);
-    return asset?.networks.map((net: any) => net.display_name) || [];
+    return asset?.networks || [];
   }, [options]);
 
   const getAvailableAssets = useCallback((selectedNetwork?: string) => {
-    if (!options?.purchase_currencies) return ['USDC', 'ETH'];
+    if (!options?.purchase_currencies) return [
+      { name: "USDC", symbol: "USDC", icon_url: null },
+      { name: "ETH", symbol: "ETH", icon_url: null }
+    ];
     
     if (!selectedNetwork) {
-      return options.purchase_currencies.map((asset: any) => asset.name);
+      return options.purchase_currencies; // Return full objects with icon_url
     }
     
     return options.purchase_currencies.filter((asset: any) => 
       asset.networks.some((network: any) => network.display_name === selectedNetwork)
-    ).map((asset: any) => asset.name);
+    );
   }, [options]);
 
   

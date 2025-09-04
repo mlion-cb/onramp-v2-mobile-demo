@@ -36,8 +36,8 @@ export default function History() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUserRef, setCurrentUserRef] = useState<string | null>(null);
-  const [nextPageKey, setNextPageKey] = useState<string | null>(null); // Add this
-  const [currentPage, setCurrentPage] = useState(1); // Add this
+  // const [nextPageKey, setNextPageKey] = useState<string | null>(null); // Add this
+  // const [currentPage, setCurrentPage] = useState(1); // Add this
 
   const [alertState, setAlertState] = useState<{
     visible: boolean;
@@ -78,9 +78,9 @@ export default function History() {
 
     try {
       setLoading(true);
-      const result = await fetchTransactionHistory(userRef, pageKey, 10);
+      const result = await fetchTransactionHistory(userRef, pageKey, 50);
       setTransactions(result.transactions || []); // Replace for new page
-      setNextPageKey(result.nextPageKey || null);
+      // setNextPageKey(result.nextPageKey || null);
 
     } catch (error) {
       console.error("Failed to load transaction history:", error);
@@ -99,38 +99,36 @@ export default function History() {
     loadTransactions(); // Call without parameters for refresh
   }, [loadTransactions]);
 
-  // Load next page
-  const loadNextPage = useCallback(() => {
-    if (nextPageKey && !loading) {
-      setCurrentPage(prev => prev + 1);
-      loadTransactions(nextPageKey, true);
-    }
-  }, [nextPageKey, loading, loadTransactions]);
+  // // Load next page
+  // const loadNextPage = useCallback(() => {
+  //   if (nextPageKey && !loading) {
+  //     setCurrentPage(prev => prev + 1);
+  //     loadTransactions(nextPageKey, true);
+  //   }
+  // }, [nextPageKey, loading, loadTransactions]);
 
-  // Load previous page (you'd need to track page keys for this)
-  const loadPreviousPage = useCallback(() => {
-    if (currentPage > 1) {
-      setCurrentPage(prev => prev - 1);
-      // For previous page, you'd need to store previous pageKeys
-      // For simplicity, let's just reload from start
-      loadTransactions(undefined, true);
-    }
-  }, [currentPage, loadTransactions]);
+  // // Load previous page (you'd need to track page keys for this)
+  // const loadPreviousPage = useCallback(() => {
+  //   if (currentPage > 1) {
+  //     setCurrentPage(prev => prev - 1);
+  //     // For previous page, you'd need to store previous pageKeys
+  //     // For simplicity, let's just reload from start
+  //     loadTransactions(undefined, true);
+  //   }
+  // }, [currentPage, loadTransactions]);
 
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "completed":
-      case "success":
-        return "#00D632";
-      case "pending":
-      case "processing":
-        return "#FF8500";
-      case "failed":
-      case "error":
-        return "#D32F2F";
-      default:
-        return TEXT_SECONDARY;
+    const normalizedStatus = status.toLowerCase();
+    if (normalizedStatus.includes("completed") || normalizedStatus.includes("success")) {
+      return "#00D632"; // Green
     }
+    if (normalizedStatus.includes("pending") || normalizedStatus.includes("processing")) {
+      return "#FF8500"; // Orange
+    }
+    if (normalizedStatus.includes("failed") || normalizedStatus.includes("error")) {
+      return "#FF6B6B"; // Red
+    }
+    return TEXT_SECONDARY; // Default gray
   };
 
   const formatDate = (dateString: string) => {
@@ -143,23 +141,35 @@ export default function History() {
   };
 
   const renderTransaction = ({ item }: { item: Transaction }) => (
-    <View style={styles.transactionCard}>
-      <View style={styles.transactionHeader}>
-        <Text style={styles.transactionAmount}>
-          {item.payment_total.value} {item.payment_total.currency}
-        </Text>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <Text style={styles.statusText}>{item.status.replace('ONRAMP_TRANSACTION_STATUS_', '')}</Text>
+    <View style={styles.transactionItem}>
+      <View style={styles.transactionIcon}>
+        <Ionicons 
+          name="swap-horizontal"
+          size={16} 
+          color={WHITE}
+        />
+      </View>
+      <View style={styles.transactionContent}>
+        {/* First row: Title and Amount */}
+        <View style={styles.transactionRow}>
+          <Text style={styles.transactionTitle}>
+            {item.purchase_currency} Purchase
+          </Text>
+          <Text style={styles.transactionAmount}>
+            ${item.payment_total.value}
+          </Text>
+        </View>
+        
+        {/* Second row: Network/Date and Status */}
+        <View style={styles.transactionRow}>
+          <Text style={styles.transactionSubtitle}>
+            {item.purchase_network} • {formatDate(item.created_at)}
+          </Text>
+          <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+            {item.status.replace(/ONRAMP_TRANSACTION_STATUS_/g, '').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+          </Text>
         </View>
       </View>
-      <Text style={styles.transactionDetails}>
-        {item.purchase_currency} on {item.purchase_network}
-      </Text>
-      <Text style={styles.transactionDate}>{formatDate(item.created_at)}</Text>
-      <Text style={styles.transactionId}>ID: {item.transaction_id}</Text>
-      {item.tx_hash && (
-        <Text style={styles.transactionHash}>Hash: {item.tx_hash}</Text>
-      )}
     </View>
   );
 
@@ -205,9 +215,10 @@ export default function History() {
           <FlatList
             data={transactions}
             renderItem={renderTransaction}
-            keyExtractor={(item) => item.transaction_id} 
+            keyExtractor={(item) => item.transaction_id}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
           />
         )}
           <CoinbaseAlert
@@ -217,29 +228,6 @@ export default function History() {
             type={alertState.type}
             onConfirm={() => setAlertState(prev => ({ ...prev, visible: false }))}
           />
-          <View style={styles.paginationContainer}>
-            <Pressable
-              style={[styles.paginationButton, currentPage === 1 && styles.paginationButtonDisabled]}
-              onPress={loadPreviousPage}
-              disabled={currentPage === 1 || loading}
-            >
-              <Text style={[styles.paginationText, currentPage === 1 && styles.paginationTextDisabled]}>
-                Previous
-              </Text>
-            </Pressable>
-            
-            <Text style={styles.pageNumber}>Page {currentPage}</Text>
-            
-            <Pressable
-              style={[styles.paginationButton, !nextPageKey && styles.paginationButtonDisabled]}
-              onPress={loadNextPage}
-              disabled={!nextPageKey || loading}
-            >
-              <Text style={[styles.paginationText, !nextPageKey && styles.paginationTextDisabled]}>
-                Next
-              </Text>
-            </Pressable>
-          </View>
     </View>
   );
 }
@@ -265,7 +253,21 @@ const styles = StyleSheet.create({
     color: TEXT_PRIMARY,
   },
   refreshButton: {
-    padding: 8,
+    // secondary button style
+    backgroundColor: CARD_BG,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 16,                 
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    
+    // Subtle shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   userRefSection: {
     backgroundColor: CARD_BG,
@@ -293,13 +295,61 @@ const styles = StyleSheet.create({
   listContainer: {
     padding: 20,
   },
-  transactionCard: {
-    backgroundColor: CARD_BG, 
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+  transactionItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: 'transparent',
+  },
+  transactionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: CARD_BG, // Neutral background
     borderWidth: 1,
     borderColor: BORDER,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    marginTop: 2,
+  },
+  transactionAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: TEXT_PRIMARY, // Neutral white text
+    textAlign: 'right',
+  },
+  transactionContent: {
+    flex: 1,
+    gap: 6, // Space between the two rows
+  },
+  transactionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  transactionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: TEXT_PRIMARY,
+    flex: 1, // Take up available space
+  },
+  transactionSubtitle: {
+    fontSize: 14,
+    color: TEXT_SECONDARY,
+    flex: 1, // Take up available space
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'right',
+    paddingLeft: 8, // Small padding to separate from subtitle
+  },
+  separator: {
+    height: 1,
+    backgroundColor: BORDER,
+    marginLeft: 68,
   },
   transactionHeader: {
     flexDirection: "row",
@@ -307,26 +357,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  transactionAmount: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: TEXT_PRIMARY,
-  },
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "#FFFFFF",
-    textTransform: "capitalize",
-  },
-  transactionDetails: {
-    fontSize: 14,
-    color: TEXT_PRIMARY,
-    marginBottom: 4,
   },
   transactionDate: {
     fontSize: 12,
@@ -363,31 +397,30 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
-  paginationContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: CARD_BG,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
   paginationButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: BLUE,
-    borderRadius: 8,
+    backgroundColor: BLUE,            
+    paddingHorizontal: 20,            
+    paddingVertical: 12,
+    borderRadius: 20,               
     minWidth: 80,
+    alignItems: 'center',
+    
+    // Coinbase shadow
+    shadowColor: BLUE,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   paginationButtonDisabled: {
-    backgroundColor: BORDER,
-    opacity: 0.5,
+    backgroundColor: BORDER,           // Gray when disabled
+    shadowOpacity: 0,                 // No shadow when disabled
+    elevation: 0,
   },
   paginationText: {
     color: WHITE,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',                // Semibold
     textAlign: 'center',
   },
   paginationTextDisabled: {
@@ -397,5 +430,59 @@ const styles = StyleSheet.create({
     color: TEXT_PRIMARY,
     fontSize: 14,
     fontWeight: '500',
+  },
+  pageIndicator: {
+    color: TEXT_PRIMARY,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  transactionInfo: {
+    flex: 1,
+  },
+  transactionMeta: {
+    alignItems: "flex-end",
+  },
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+    backgroundColor: DARK_BG,
+    gap: 16,
+  },
+  paginationArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: CARD_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  paginationArrowDisabled: {
+    opacity: 0.3,
+  },
+  pageNumbers: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  currentPageNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: BLUE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currentPageText: {
+    color: WHITE,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  pageNumbersText: {
+    color: TEXT_SECONDARY,
+    fontSize: 14,
   },
 });

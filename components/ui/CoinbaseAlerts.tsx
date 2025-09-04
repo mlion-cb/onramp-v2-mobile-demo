@@ -3,7 +3,7 @@ import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS } from '../../constants/Colors';
 
-const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
+const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE, BLACK } = COLORS;
 
 type AlertType = 'success' | 'error' | 'info';
 
@@ -71,19 +71,18 @@ export function showCoinbaseAlert(
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(10, 11, 13, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
   alertCard: {
     backgroundColor: CARD_BG,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
+    borderTopLeftRadius: 20,    
+    borderTopRightRadius: 20,
+    marginHorizontal: 0,        
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    paddingBottom: 34,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: BORDER,
-    borderBottomWidth: 0,
   },
   handle: {
     width: 36,
@@ -91,9 +90,11 @@ const styles = StyleSheet.create({
     backgroundColor: BORDER,
     borderRadius: 2,
     marginBottom: 20,
+    alignSelf: 'center',
   },
   iconContainer: {
     marginBottom: 16,
+    alignItems: 'center',
   },
   title: {
     fontSize: 24,
@@ -116,6 +117,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 25,
     minWidth: 200,
+    alignSelf: 'center',
   },
   buttonPressed: {
     opacity: 0.8,
