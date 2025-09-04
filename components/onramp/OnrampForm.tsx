@@ -1,5 +1,6 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { COLORS } from '../../constants/Colors';
 import { SwipeToConfirm } from '../ui/SwipeToConfirm';
 
@@ -22,8 +23,8 @@ type OnrampFormProps = {
   isLoading: boolean;
   options: any;
   isLoadingOptions: boolean;
-  getAvailableNetworks: (selectedAsset?: string) => string[];
-  getAvailableAssets: (selectedNetwork?: string) => string[];
+  getAvailableNetworks: (selectedAsset?: string) => any[];
+  getAvailableAssets: (selectedNetwork?: string) => any[];
 };
 
 /**
@@ -81,16 +82,26 @@ export function OnrampForm({
   // Auto-clear invalid selections when options change
   useEffect(() => {
     // If current network is no longer valid for selected asset, reset to first available
-    if (asset && !availableNetworks.includes(network)) {
-      setNetwork(availableNetworks[0] || "");
+    if (asset && availableNetworks.length > 0) {
+      const networkExists = availableNetworks.some((net: any) => 
+        net.display_name === network || net.name === network
+      );
+      if (!networkExists) {
+        const firstNetwork: any = availableNetworks[0];
+        setNetwork(firstNetwork?.display_name || firstNetwork?.name || "");
+      }
     }
   }, [asset, availableNetworks, network]);
 
   useEffect(() => {
     // If current asset isn't available for selected network, clear it
     if (network && availableAssets.length > 0) {
-      if (!availableAssets.includes(asset)) {
-        setAsset(availableAssets[0] || "");
+      const assetExists = availableAssets.some((assetObj: any) => 
+        assetObj.name === asset || assetObj.symbol === asset
+      );
+      if (!assetExists) {
+        const firstAsset: any = availableAssets[0];
+        setAsset(firstAsset?.name || firstAsset?.symbol || "");
       }
     }
   }, [network, availableAssets, asset]);
@@ -137,11 +148,27 @@ export function OnrampForm({
         ) : null}
       </View>
 
+
       {/* Network Field */}
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>Network</Text>
         <Pressable style={styles.select} onPress={() => setNetworkPickerVisible(true)}>
-          <Text style={styles.selectText}>{network}</Text>
+          <View style={styles.selectContent}>
+            {/* Find and show selected network icon */}
+            {(() => {
+              const selectedNetworkObj = availableNetworks.find((net: any) => 
+                net.display_name === network || net.name === network
+              );
+              return selectedNetworkObj?.icon_url && (
+                <Image 
+                  source={{ uri: selectedNetworkObj.icon_url }} 
+                  style={styles.selectIcon}
+                />
+              );
+            })()}
+            <Text style={styles.selectText}>{network}</Text>
+          </View>
+          <Ionicons name="chevron-down" size={20} color={TEXT_SECONDARY} />
         </Pressable>
       </View>
 
@@ -149,9 +176,25 @@ export function OnrampForm({
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>Asset</Text>
         <Pressable style={styles.select} onPress={() => setAssetPickerVisible(true)}>
-          <Text style={styles.selectText}>{asset}</Text>
+          <View style={styles.selectContent}>
+            {/* Find and show selected asset icon */}
+            {(() => {
+              const selectedAssetObj = availableAssets.find((assetObj: any) => 
+                assetObj.name === asset || assetObj.symbol === asset
+              );
+              return selectedAssetObj?.icon_url && (
+                <Image 
+                  source={{ uri: selectedAssetObj.icon_url }} 
+                  style={styles.selectIcon}
+                />
+              );
+            })()}
+            <Text style={styles.selectText}>{asset}</Text>
+          </View>
+          <Ionicons name="chevron-down" size={20} color={TEXT_SECONDARY} />
         </Pressable>
       </View>
+
 
       {/* Wallet Address Field */}
       <View style={styles.fieldGroup}>
@@ -217,18 +260,37 @@ export function OnrampForm({
                   <Text style={styles.modalItemText}>Loading assets...</Text>
                 </View>
               ) : (
-                availableAssets.map((assetOption: string, index: number) => (
-                  <Pressable
-                    key={`asset-${index}-${assetOption}`}
-                    onPress={() => {
-                      setAsset(assetOption);
-                      setAssetPickerVisible(false);
-                    }}
-                    style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
-                  >
-                    <Text style={styles.modalItemText}>{assetOption}</Text>
-                  </Pressable>
-                ))
+                availableAssets.map((assetOption: any, index: number) => {
+                  const displayName = assetOption.name || assetOption.symbol || 'Unknown Asset'; // Add fallback
+                  const iconUrl = assetOption.icon_url;
+                  
+                  return (
+                    <Pressable
+                      key={`asset-${index}-${displayName}`}
+                      onPress={() => {
+                        setAsset(displayName);
+                        setAssetPickerVisible(false);
+                      }}
+                      style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
+                    >
+                      <View style={styles.modalItemContent}>
+                        <View style={styles.modalItemLeft}>
+                          {iconUrl && (
+                            <Image 
+                              source={{ uri: iconUrl }} 
+                              style={styles.modalItemIcon}
+                            />
+                          )}
+                          <Text style={styles.modalItemText}>{displayName}</Text>
+                        </View>
+                        {/* Add asset symbol/meta info if available */}
+                        <Text style={styles.modalItemMeta}>
+                          {assetOption.symbol && assetOption.symbol !== displayName ? assetOption.symbol.toUpperCase() : ''}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })
               )}
             </ScrollView>
             <Pressable onPress={() => setAssetPickerVisible(false)} style={styles.modalCancel}>
@@ -257,18 +319,37 @@ export function OnrampForm({
                   <Text style={styles.modalItemText}>Loading networks...</Text>
                 </View>
               ) : (
-                availableNetworks.map((networkOption: string, index: number) => (
-                  <Pressable
-                    key={`network-${index}-${networkOption}`}
-                    onPress={() => {
-                      setNetwork(networkOption);
-                      setNetworkPickerVisible(false);
-                    }}
-                    style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
-                  >
-                    <Text style={styles.modalItemText}>{networkOption}</Text>
-                  </Pressable>
-                ))
+                availableNetworks.map((networkOption: any, index: number) => {
+                  const displayName = networkOption.display_name || networkOption.name || 'Unknown Network';
+                  const iconUrl = networkOption.icon_url;
+                  
+                  return (
+                    <Pressable
+                      key={`network-${index}-${displayName}`}
+                      onPress={() => {
+                        setNetwork(displayName);
+                        setNetworkPickerVisible(false);
+                      }}
+                      style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
+                    >
+                      <View style={styles.modalItemContent}>
+                        <View style={styles.modalItemLeft}>
+                          {iconUrl && (
+                            <Image 
+                              source={{ uri: iconUrl }} 
+                              style={styles.modalItemIcon}
+                            />
+                          )}
+                          <Text style={styles.modalItemText}>{displayName}</Text>
+                        </View>
+                        {/* Add network/chain info if available */}
+                        <Text style={styles.modalItemMeta}>
+                          {networkOption.name ? networkOption.name.toUpperCase() : ''}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })
               )}
             </ScrollView>
             <Pressable onPress={() => setNetworkPickerVisible(false)} style={styles.modalCancel}>
@@ -327,35 +408,42 @@ const styles = StyleSheet.create({
     backgroundColor: CARD_BG,     
     borderColor: BORDER,
     borderWidth: 1,               
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.select({ ios: 14, android: 12, default: 14 }), // More padding
+    borderRadius: 12,             
+    paddingHorizontal: 16,       
+    paddingVertical: Platform.select({ ios: 16, android: 14, default: 16 }),
     color: TEXT_PRIMARY,
     fontSize: 16,
-    // Add subtle focus styling
+    fontWeight: '400',           
+    
+    // Coinbase focus styling
     shadowColor: BLUE,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 4,
     elevation: 2,
   },
   select: {
     backgroundColor: CARD_BG,     
     borderColor: BORDER,
     borderWidth: 1,              
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.select({ ios: 14, android: 12, default: 14 }), // More padding
-    // Add subtle styling
+    borderRadius: 12,            
+    paddingHorizontal: 16,
+    paddingVertical: Platform.select({ ios: 16, android: 14, default: 16 }),
+    
+    // Same focus styling as input
     shadowColor: BLUE,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 4,
     elevation: 2,
+    flexDirection: 'row',      
+    alignItems: 'center',       
+    justifyContent: 'space-between', 
   },
   selectText: {
     color: TEXT_PRIMARY,
     fontSize: 16,
+    fontWeight: '400',         
   },
   switchRow: {
     marginTop: 8,
@@ -378,37 +466,72 @@ const styles = StyleSheet.create({
     maxHeight: 300,
   },
   modalSheet: {
-    backgroundColor: CARD_BG,    
-    padding: 16,                 
-    borderTopLeftRadius: 20,     
+    backgroundColor: CARD_BG,
+    borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    gap: 8,
-    maxHeight: '80%',
-    borderWidth: 1,
-    borderColor: BORDER,
+    maxHeight: '70%',
+    width: '100%',
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   modalItem: {
-    paddingVertical: 16,         
-    paddingHorizontal: 16,
-    borderRadius: 12,            
-    borderWidth: 1,
-    borderColor: 'transparent',  
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  modalItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between', // Add this
+  },
+  modalItemIcon: {
+    width: 32,
+    height: 32,
+    marginRight: 12,
+    borderRadius: 16,
   },
   modalItemText: {
-    color: TEXT_PRIMARY,
     fontSize: 16,
-    fontWeight: "500",
+    fontWeight: '500',
+    color: TEXT_PRIMARY,
+    flex: 1,
+  },
+  modalItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  modalItemMeta: {
+    fontSize: 14,
+    color: TEXT_SECONDARY,
+    marginLeft: 8,
   },
   modalCancel: {
-    paddingVertical: 16,        
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 20, // Add horizontal padding
     alignItems: "center",
-    marginTop: 8,
-    backgroundColor: BORDER,     
+    justifyContent: "center",
+    marginTop: 12,
+    marginHorizontal: 16, // Add side margins
+    backgroundColor: BORDER,
     borderRadius: 12,
   },
   modalCancelText: {
     color: TEXT_SECONDARY,
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  selectContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  selectIcon: {
+    width: 24,
+    height: 24,
+    marginRight: 12,
+    borderRadius: 12,
   },
 });
