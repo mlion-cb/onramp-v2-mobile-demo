@@ -57,6 +57,7 @@ export function OnrampForm({
   const [paymentPickerVisible, setPaymentPickerVisible] = useState(false);
   const [paymentCurrency, setPaymentCurrency] = useState("USD");
   const [paymentCurrencyPickerVisible, setPaymentCurrencyPickerVisible] = useState(false);
+  const [isSwipeActive, setIsSwipeActive] = useState(false);
 
 
   const amountNumber = useMemo(() => {
@@ -155,7 +156,11 @@ export function OnrampForm({
     });
   }, [isFormValid, currentQuote, asset, network, address, sandbox, paymentMethod, onSubmit]);
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView 
+      contentContainerStyle={styles.content} 
+      keyboardShouldPersistTaps="handled"
+      scrollEnabled={!isSwipeActive} // Disable scrolling during swipe
+    >
       
       {/* Buy Card */}
       <View style={styles.card}>
@@ -307,6 +312,8 @@ export function OnrampForm({
         disabled={!isFormValid}
         onConfirm={handleSwipeConfirm}
         isLoading={isLoading}
+        onSwipeStart={() => setIsSwipeActive(true)}
+        onSwipeEnd={() => setIsSwipeActive(false)}
       />
   
       {/* All existing modals */}
@@ -476,18 +483,24 @@ export function OnrampForm({
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalSheet}>
-            {(["Apple Pay"] as const).map((method) => (
-              <Pressable
-                key={method}
-                onPress={() => {
-                  setPaymentMethod(method);
-                  setPaymentPickerVisible(false);
-                }}
-                style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
-              >
-                <Text style={styles.modalItemText}>{method}</Text>
-              </Pressable>
-            ))}
+          <ScrollView 
+              style={styles.modalScrollView}
+              showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
+            >
+              {(["Apple Pay"] as const).map((method) => (
+                <Pressable
+                  key={method}
+                  onPress={() => {
+                    setPaymentMethod(method);
+                    setPaymentPickerVisible(false);
+                  }}
+                  style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
+                >
+                  <Text style={styles.modalItemText}>{method}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
             <Pressable onPress={() => setPaymentPickerVisible(false)} style={styles.modalCancel}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </Pressable>
