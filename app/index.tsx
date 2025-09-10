@@ -60,6 +60,9 @@ export default function Index() {
     getAvailableNetworks,
     getAvailableAssets,
     fetchOptions,
+    currentQuote,       
+    isLoadingQuote,     
+    fetchQuote,         
     applePayVisible, 
     hostedUrl, 
     isProcessingPayment,
@@ -107,6 +110,9 @@ export default function Index() {
         isLoadingOptions={isLoadingOptions}
         getAvailableNetworks={getAvailableNetworks}
         getAvailableAssets={getAvailableAssets}
+        currentQuote={currentQuote}      // Add this
+        isLoadingQuote={isLoadingQuote}  // Add this
+        fetchQuote={fetchQuote}          // Add this
       />
 
       {applePayVisible && (

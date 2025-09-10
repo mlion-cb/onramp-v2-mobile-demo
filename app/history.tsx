@@ -51,19 +51,6 @@ export default function History() {
     type: 'info'
   });
 
-  useFocusEffect(
-    useCallback(() => {
-      const userRef = getCurrentPartnerUserRef();
-      console.log('History tab focused, updating userRef to:', userRef);
-      setCurrentUserRef(userRef);
-    }, [])
-  );
-
-  useEffect(() => {
-    const userRef = getCurrentPartnerUserRef();
-    setCurrentUserRef(userRef);
-  }, []);
-
   const loadTransactions = useCallback(async (pageKey?: string, isNewPage: boolean = false) => {
     const userRef = getCurrentPartnerUserRef();
     if (!userRef) {
@@ -95,6 +82,30 @@ export default function History() {
     }
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      const userRef = getCurrentPartnerUserRef();
+      console.log('History tab focused, updating userRef to:', userRef);
+      setCurrentUserRef(userRef);
+
+      // Auto-load transactions when tab becomes active
+      if (userRef) {
+        loadTransactions();
+      }
+    }, [loadTransactions])
+  );
+
+  useEffect(() => {
+    const userRef = getCurrentPartnerUserRef();
+    setCurrentUserRef(userRef);
+
+    // Load transactions when userRef is available
+    if (userRef) {
+      loadTransactions();
+    }
+  }, [loadTransactions]);
+
+  
   const handleRefresh = useCallback(() => {
     loadTransactions(); // Call without parameters for refresh
   }, [loadTransactions]);

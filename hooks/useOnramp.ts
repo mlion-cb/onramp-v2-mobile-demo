@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { OnrampFormData } from "../components/onramp/OnrampForm";
 import { createApplePayOrder } from "../utils/createApplePayOrder";
 import { fetchBuyOptions } from "../utils/fetchBuyOptions";
+import { fetchBuyQuote } from "../utils/fetchBuyQuote";
 import { setCurrentPartnerUserRef } from "../utils/sharedState";
 
 /**
@@ -16,6 +17,9 @@ export function useOnramp() {
   const [transactionStatus, setTransactionStatus] = useState<'pending' | 'success' | 'error' | null>(null);
   const [options, setOptions] = useState<any>(null);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  const [currentQuote, setCurrentQuote] = useState<any>(null);
+  const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+
 
 /**
    * API Data Format Mapping
@@ -63,11 +67,12 @@ const getNetworkNameFromDisplayName = useCallback((displayName: string) => {
         paymentMethod: "GUEST_CHECKOUT_APPLE_PAY",
         destinationNetwork: getNetworkNameFromDisplayName(formData.network),
         destinationAddress: formData.address,
-        email: 'test@test.com',
+        email: 'michellefirstania.lion@coinbase.com',
         phoneNumber: '+13412133368',
         phoneNumberVerifiedAt: new Date().toISOString(),
         partnerUserRef: partnerUserRef,
-        agreementAcceptedAt: new Date().toISOString()
+        agreementAcceptedAt: new Date().toISOString(),
+        isQuote: false
       });
 
       // Handle successful response (maybe navigate to next screen, show success, etc.)
@@ -116,6 +121,41 @@ const getNetworkNameFromDisplayName = useCallback((displayName: string) => {
     }
   }, []);
 
+  const fetchQuote = useCallback(async (formData: {
+    amount: string;
+    asset: string;
+    network: string;
+    paymentCurrency: string;
+  }) => {
+    if (!formData.amount || !formData.asset || !formData.network) {
+      setCurrentQuote(null);
+      return;
+    }
+  
+    try {
+      setIsLoadingQuote(true);
+      const assetSymbol = getAssetSymbolFromName(formData.asset);
+      const networkName = getNetworkNameFromDisplayName(formData.network);
+      
+      const quote = await fetchBuyQuote({
+        country: 'US',
+        subdivision: 'CA',
+        paymentCurrency: formData.paymentCurrency,
+        paymentMethod: 'APPLE_PAY',
+        purchaseCurrency: assetSymbol,
+        purchaseNetwork: networkName,
+        paymentAmount: formData.amount,
+      });
+      
+      setCurrentQuote(quote);
+    } catch (error) {
+      console.error('Failed to fetch quote:', error);
+      setCurrentQuote(null);
+    } finally {
+      setIsLoadingQuote(false);
+    }
+  }, [getAssetSymbolFromName, getNetworkNameFromDisplayName]);
+
   // Helper functions that use the stored options
   const getAvailableNetworks = useCallback((selectedAsset?: string) => {
     if (!options?.purchase_currencies) return [
@@ -156,6 +196,8 @@ const getNetworkNameFromDisplayName = useCallback((displayName: string) => {
     transactionStatus,
     options,
     isLoadingOptions,
+    isLoadingQuote,
+    currentQuote,
     
     // Actions
     createOrder,
@@ -165,5 +207,6 @@ const getNetworkNameFromDisplayName = useCallback((displayName: string) => {
     getAvailableAssets,
     setTransactionStatus,
     setIsProcessingPayment,
+    fetchQuote,
   };
 }
