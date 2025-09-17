@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../../constants/Colors';
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE, BLACK } = COLORS;
@@ -33,25 +34,61 @@ export function CoinbaseAlert({
   };
 
   const icon = getIcon();
+  const H = Dimensions.get('window').height;
+  const insets = useSafeAreaInsets();
+  
+  const progress = useRef(new Animated.Value(0)).current; // 0 hidden → 1 shown
+  
+  useEffect(() => {
+    Animated.timing(progress, {
+      toValue: visible ? 1 : 0,
+      duration: visible ? 240 : 180,
+      useNativeDriver: true,
+    }).start();
+  }, [visible]);
+  
+  const backdropOpacity = progress; // fade with same progress
+  const translateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [H, 0],           // <-- from off-screen to fully visible
+  });
+
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <Pressable style={styles.backdrop} onPress={onConfirm}>
-        <Pressable style={styles.alertCard} onPress={() => {}}>
-          <View style={styles.handle} />
-          <View style={styles.iconContainer}>
-            <Ionicons name={icon.name} size={48} color={icon.color} />
-          </View>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
-          <Pressable 
-            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-            onPress={onConfirm}
-          >
-            <Text style={styles.buttonText}>{confirmText}</Text>
-          </Pressable>
-        </Pressable>
-      </Pressable>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      onRequestClose={onConfirm}
+    >
+      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' }}>
+        <Animated.View
+              style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)', opacity: backdropOpacity }]}
+              pointerEvents="auto"
+            >
+              <Pressable style={StyleSheet.absoluteFillObject} onPress={onConfirm} />
+            </Animated.View>
+
+            <Animated.View
+              style={[styles.alertCard, { width: '100%', transform: [{ translateY }] }]}
+              pointerEvents="auto"
+            >
+              <View style={styles.handle} />
+              <View style={styles.iconContainer}>
+                <Ionicons name={icon.name} size={48} color={icon.color} />
+              </View>
+              <Text style={styles.title}>{title}</Text>
+              <Text style={styles.message}>{message}</Text>
+              <Pressable 
+                style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                onPress={onConfirm}
+              >
+                <Text style={styles.buttonText}>{confirmText}</Text>
+              </Pressable>
+            </Animated.View>
+      </View>
     </Modal>
   );
 }
@@ -76,13 +113,13 @@ const styles = StyleSheet.create({
   },
   alertCard: {
     backgroundColor: CARD_BG,
-    borderTopLeftRadius: 20,    
+    borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    marginHorizontal: 0,        
     paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingTop: 16,
     paddingBottom: 34,
-    alignItems: 'center',
+    minHeight: 220,        // ensure room for content
+    maxHeight: '85%',      // avoid full-screen takeover
   },
   handle: {
     width: 36,

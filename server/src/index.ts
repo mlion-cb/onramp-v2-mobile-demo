@@ -1,6 +1,7 @@
 import cors from 'cors';
 import { config } from 'dotenv';
 import express from 'express';
+import twilio from 'twilio';
 import { z } from 'zod';
 
 import { generateJwt } from '@coinbase/cdp-sdk/auth';
@@ -11,6 +12,9 @@ config({ path: '.env' });
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
 console.log(PORT);
+
+const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
+
 
 app.use(cors({
     origin: true,
@@ -120,4 +124,33 @@ app.post("/server/api", async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`API listening on http://localhost:${PORT}`);
+});
+
+
+app.post('/auth/sms/start', async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ error: 'phone required' });
+
+    const r = await twilioClient.verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
+      .verifications.create({ to: phone, channel: 'sms' });
+
+    return res.json({ status: r.status }); // pending
+  } catch (e:any) {
+    return res.status(500).json({ error: e.message || 'twilio start error' });
+  }
+});
+
+app.post('/auth/sms/verify', async (req, res) => {
+  try {
+    const { phone, code } = req.body;
+    if (!phone || !code) return res.status(400).json({ error: 'phone and code required' });
+
+    const r = await twilioClient.verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
+      .verificationChecks.create({ to: phone, code });
+
+    return res.json({ status: r.status, valid: r.valid }); // approved / pending
+  } catch (e:any) {
+    return res.status(500).json({ error: e.message || 'twilio verify error' });
+  }
 });

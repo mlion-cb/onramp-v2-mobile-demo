@@ -1,9 +1,12 @@
 
+import PhoneVerifyModal from "@/components/onramp/PhoneVerifyModal";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ApplePayWidget, OnrampForm, useOnramp } from "../components";
 import { CoinbaseAlert } from "../components/ui/CoinbaseAlerts";
 import { COLORS } from "../constants/Colors";
+import { getCurrentWalletAddress, getVerifiedPhone, isPhoneFresh60d, setVerifiedPhone } from "../utils/sharedState";
 
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
@@ -24,20 +27,18 @@ export default function Index() {
   const isConnected = address.length > 0;
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
+  const router = useRouter();
+  const [phoneModalVisible, setPhoneModalVisible] = useState(false);
+  const [pendingForm, setPendingForm] = useState<any | null>(null);
 
-  const onConnectPress = useCallback(async () => {
-    if (connecting || isConnected) return;
-    try {
-      setConnecting(true);
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      const mock = generateMockAddress();
-      setAddress(mock);
-      setAlertMessage(`Dummy Wallet connected: ${mock}`);
-      setShowAlert(true);
-    } finally {
-      setConnecting(false);
-    }
-  }, [connecting, isConnected]);
+  useFocusEffect(
+    useCallback(() => {
+      setAddress(getCurrentWalletAddress() ?? "");
+    }, [])
+  );
+
+  const onConnectPress = useCallback(() => router.push("/profile"), [router]);
+
 
   const [applePayAlert, setApplePayAlert] = useState<{
     visible: boolean;
@@ -74,6 +75,19 @@ export default function Index() {
   useEffect(() => {
     fetchOptions();
   }, [fetchOptions]);
+
+  const handleSubmit = useCallback((formData: any) => {
+    const fresh = isPhoneFresh60d();
+    const phone = getVerifiedPhone();
+  
+    if (!fresh || !phone) {
+      setPendingForm(formData);
+      setPhoneModalVisible(true);
+      return;
+    }
+    // attach verified phone to payload (adjust key to your API)
+    createOrder({ ...formData });
+  }, [createOrder]);
     
   
   return (
@@ -95,7 +109,7 @@ export default function Index() {
               textAlign: "center",
               color: isConnected ? "#4ADE80" : TEXT_PRIMARY
             }]}>
-              {isConnected ? "Connected" : connecting ? "Connecting…" : "Connect Dummy Wallet"}
+              {isConnected ? "Connected" : connecting ? "Connecting…" : "Connect Wallet"}
             </Text>
           </View>
         </Pressable>
@@ -103,8 +117,8 @@ export default function Index() {
 
       <OnrampForm
         address={address}
-        onAddressChange={setAddress}
-        onSubmit={createOrder}
+        onAddressChange={() => {}}
+        onSubmit={handleSubmit}
         isLoading={isProcessingPayment}
         options={options}
         isLoadingOptions={isLoadingOptions}
@@ -142,6 +156,18 @@ export default function Index() {
         type={applePayAlert.type}
         onConfirm={() => setApplePayAlert(prev => ({ ...prev, visible: false }))}
       />
+    
+    <PhoneVerifyModal
+      visible={phoneModalVisible}
+      onClose={() => setPhoneModalVisible(false)}
+      onVerified={async (phoneE164) => {
+        await setVerifiedPhone(phoneE164);
+        if (pendingForm) {
+          createOrder({ ...pendingForm, phoneNumber: phoneE164 });
+          setPendingForm(null);
+        }
+      }}
+    />
     </View>
     
   );

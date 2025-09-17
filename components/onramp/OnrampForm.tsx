@@ -13,7 +13,8 @@ export type OnrampFormData = {
   address: string;
   sandbox: boolean;
   paymentMethod: string;
-  quoteId?: string;  
+  quoteId?: string;
+  phoneNumber?: string;
 };
 
 type OnrampFormProps = {
@@ -256,6 +257,8 @@ export function OnrampForm({
         <Text style={styles.label}>Wallet address</Text>
         <TextInput
           value={address}
+          editable={false}
+          selectTextOnFocus={false}
           onChangeText={onAddressChange}
           placeholder="0x..."
           placeholderTextColor={TEXT_SECONDARY + "99"}
