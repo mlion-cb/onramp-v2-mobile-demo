@@ -10,9 +10,9 @@ import {
   Text,
   View
 } from "react-native";
-import { CoinbaseAlert } from "../components/ui/CoinbaseAlerts";
-import { COLORS } from "../constants/Colors";
-import { fetchTransactionHistory } from "../utils/fetchTransactionHistory";
+import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
+import { COLORS } from "../../constants/Colors";
+import { fetchTransactionHistory } from "../../utils/fetchTransactionHistory";
 
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;

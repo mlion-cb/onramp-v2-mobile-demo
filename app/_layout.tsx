@@ -1,6 +1,5 @@
 import { CDPHooksProvider, Config } from "@coinbase/cdp-hooks";
-import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { Stack } from "expo-router";
 import { COLORS } from "../constants/Colors";
 
 import { hydrateVerifiedPhone } from "@/utils/sharedState";
@@ -23,52 +22,29 @@ export default function RootLayout() {
   useEffect(() => {
     hydrateVerifiedPhone().catch(() => {});
   }, []);
+
   return (
     <CDPHooksProvider config={cdpConfig}>
-      <Tabs
-        screenOptions={{
-          tabBarActiveTintColor: BLUE,
-          tabBarInactiveTintColor: TEXT_SECONDARY,
-          headerStyle: {
-            backgroundColor: CARD_BG, // Changed from white
-          },
-          headerTitleStyle: {
-            fontWeight: "600",
-            color: TEXT_PRIMARY, // Add text color
-          },
-          tabBarStyle: {
-            backgroundColor: CARD_BG, // Changed from white
-            borderTopColor: BORDER,
-            borderTopWidth: 1,
-          },
-        }}
-      >
-        <Tabs.Screen
-          name="index"
+      <Stack screenOptions={{ headerShown: false }}>
+        {/* Phone verification pages - no tabs */}
+        <Stack.Screen 
+          name="phone-verify" 
           options={{
-            title: "Buy Crypto",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="card" size={size} color={color} />
-            ),
+            presentation: 'card',
+            animation: 'none', 
           }}
         />
-        <Tabs.Screen
-          name="history"
-          options={{
-            title: "History",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="time" size={size} color={color} />
-            ),
-          }}
-        />
-          <Tabs.Screen
-            name="profile"
+        <Stack.Screen 
+            name="phone-code" 
             options={{
-              title: "Profile",
-              tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
+              presentation: 'card',
+              animation: 'none',
             }}
-          />
-      </Tabs>
+        />
+        
+        {/* Main app with tabs */}
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      </Stack>
     </CDPHooksProvider>
   );
 }

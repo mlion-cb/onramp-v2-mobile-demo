@@ -76,7 +76,7 @@ app.post("/server/api", async (req, res) => {
     let authToken = null;
     
     // Auto-generate JWT for Coinbase API calls only
-    if (urlObj.hostname === "api.developer.coinbase.com") {
+    if (urlObj.hostname === "api.developer.coinbase.com" || urlObj.hostname === "api.cdp.coinbase.com") {
       authToken = await generateJwt({
         apiKeyId: process.env.CDP_API_KEY_ID!,
         apiKeySecret: process.env.CDP_API_KEY_SECRET!,

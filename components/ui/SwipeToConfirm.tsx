@@ -52,19 +52,17 @@ export function SwipeToConfirm({ label, disabled = false, onConfirm, isLoading =
         currentXRef.current = maxX;
       });
     } else {
-      // Auto-reset when loading ends
-      if (currentXRef.current === maxX) {
-        setTimeout(() => {
-          Animated.spring(translateX, { 
-            toValue: 0, 
-            useNativeDriver: false, 
-            bounciness: 6, 
-            speed: 12 
-          }).start(() => {
-            currentXRef.current = 0;
-          });
-        }, 300);
-      }
+      // Always reset when loading ends (remove the position check)
+      setTimeout(() => {
+        Animated.spring(translateX, { 
+          toValue: 0, 
+          useNativeDriver: false, 
+          bounciness: 6, 
+          speed: 12 
+        }).start(() => {
+          currentXRef.current = 0;
+        });
+      }, 300);
     }
   }, [isLoading, maxX, translateX]);
 

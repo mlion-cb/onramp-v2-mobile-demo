@@ -24,6 +24,15 @@ let currentWalletAddress: string | null = null;
 let verifiedPhone: string | null = null;
 let verifiedPhoneAt: number | null = null;
 
+let currentCountry: string = 'US';
+let currentSubdivision: string = 'CA';
+
+export const getCountry = () => currentCountry;
+export const setCountry = (c: string) => { currentCountry = c; };
+
+export const getSubdivision = () => currentSubdivision;
+export const setSubdivision = (s: string) => { currentSubdivision = s; };
+
 
 export const setCurrentPartnerUserRef = (ref: string | null) => {
   currentPartnerUserRef = ref;

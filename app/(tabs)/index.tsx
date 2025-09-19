@@ -1,12 +1,12 @@
 
-import PhoneVerifyModal from "@/components/onramp/PhoneVerifyModal";
+import { useCurrentUser, useIsSignedIn } from "@coinbase/cdp-hooks";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { ApplePayWidget, OnrampForm, useOnramp } from "../components";
-import { CoinbaseAlert } from "../components/ui/CoinbaseAlerts";
-import { COLORS } from "../constants/Colors";
-import { getCurrentWalletAddress, getVerifiedPhone, isPhoneFresh60d, setVerifiedPhone } from "../utils/sharedState";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { ApplePayWidget, OnrampForm, useOnramp } from "../../components";
+import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
+import { COLORS } from "../../constants/Colors";
+import { getCountry, getCurrentWalletAddress, getSubdivision, getVerifiedPhone, isPhoneFresh60d } from "../../utils/sharedState";
 
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
@@ -24,12 +24,43 @@ function generateMockAddress(): string {
 export default function Index() {
   const [address, setAddress] = useState("");
   const [connecting, setConnecting] = useState(false);
-  const isConnected = address.length > 0;
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
   const router = useRouter();
-  const [phoneModalVisible, setPhoneModalVisible] = useState(false);
   const [pendingForm, setPendingForm] = useState<any | null>(null);
+
+
+  const { isSignedIn } = useIsSignedIn();
+  const { currentUser } = useCurrentUser();
+  const [connectedAddress, setConnectedAddress] = useState('');
+  const isConnected = connectedAddress.length > 0;
+
+  useFocusEffect(
+    useCallback(() => {
+      setConnectedAddress(getCurrentWalletAddress() ?? '');
+    }, [])
+  );
+
+  // Update when CDP session changes
+  useEffect(() => {
+    if (!isSignedIn) return;
+  
+    let tries = 0;
+    const t = setInterval(() => {
+      // prefer CDP user → fallback to shared state
+      const sa = (currentUser?.evmSmartAccounts?.[0] as string) || (getCurrentWalletAddress() || '');
+      if (sa) {
+        setConnectedAddress(sa);
+        if (!address) setAddress(sa);
+        clearInterval(t);
+      }
+      if (++tries > 20) clearInterval(t); // ~10s max
+    }, 500);
+  
+    return () => clearInterval(t);
+  }, [isSignedIn, currentUser]);
+
+  
 
   useFocusEffect(
     useCallback(() => {
@@ -37,7 +68,7 @@ export default function Index() {
     }, [])
   );
 
-  const onConnectPress = useCallback(() => router.push("/profile"), [router]);
+  const onConnectPress = useCallback(() => router.push("../email-verify"), [router]);
 
 
   const [applePayAlert, setApplePayAlert] = useState<{
@@ -55,6 +86,7 @@ export default function Index() {
 
   const { 
     createOrder, 
+    createWidgetSession,
     closeApplePay, 
     options,
     isLoadingOptions,
@@ -68,26 +100,62 @@ export default function Index() {
     hostedUrl, 
     isProcessingPayment,
     setTransactionStatus,
-    setIsProcessingPayment 
+    setIsProcessingPayment ,
+    paymentCurrencies
   } = useOnramp();
 
   // Fetch options on component mount
-  useEffect(() => {
-    fetchOptions();
-  }, [fetchOptions]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchOptions();
+    }, [fetchOptions])
+  );
 
-  const handleSubmit = useCallback((formData: any) => {
+  // 1) Resume after returning to this tab
+  useFocusEffect(
+    useCallback(() => {
+      if (!pendingForm) return;
+
+      // If pending was for Coinbase Widget, do it immediately (no phone gate)
+      if ((pendingForm.paymentMethod || '').toUpperCase() === 'COINBASE_WIDGET') {
+        (async () => {
+          const url = await createWidgetSession(pendingForm);
+          if (url) {
+            Linking.openURL(url);
+            setPendingForm(null);
+          }
+        })();
+        return;
+      }
+
+      // Apple Pay path still requires fresh phone
+      if (isPhoneFresh60d() && getVerifiedPhone()) {
+        const phone = getVerifiedPhone();
+        createOrder({ ...pendingForm, phoneNumber: phone });
+        setPendingForm(null);
+      }
+    }, [pendingForm, createOrder, createWidgetSession])
+  );
+
+  const handleSubmit = useCallback(async (formData: any) => {
+    // Coinbase Widget: skip phone verification
+    if ((formData.paymentMethod || '').toUpperCase() === 'COINBASE_WIDGET') {
+      const url = await createWidgetSession(formData);
+      if (url) Linking.openURL(url);
+      return; // do not call createOrder()
+    }
+  
+    // Apple Pay: require phone verification
     const fresh = isPhoneFresh60d();
     const phone = getVerifiedPhone();
-  
     if (!fresh || !phone) {
       setPendingForm(formData);
-      setPhoneModalVisible(true);
+      router.push({ pathname: '/phone-verify', params: { initialPhone: phone || '' } });
       return;
     }
-    // attach verified phone to payload (adjust key to your API)
+  
     createOrder({ ...formData });
-  }, [createOrder]);
+  }, [createOrder, createWidgetSession, router]);
     
   
   return (
@@ -116,6 +184,7 @@ export default function Index() {
       </View>
 
       <OnrampForm
+        key={`${getCountry()}-${getSubdivision()}`}   // remount on region change
         address={address}
         onAddressChange={() => {}}
         onSubmit={handleSubmit}
@@ -124,9 +193,10 @@ export default function Index() {
         isLoadingOptions={isLoadingOptions}
         getAvailableNetworks={getAvailableNetworks}
         getAvailableAssets={getAvailableAssets}
-        currentQuote={currentQuote}      // Add this
-        isLoadingQuote={isLoadingQuote}  // Add this
-        fetchQuote={fetchQuote}          // Add this
+        currentQuote={currentQuote}     
+        isLoadingQuote={isLoadingQuote} 
+        fetchQuote={fetchQuote}         
+        paymentCurrencies={paymentCurrencies}
       />
 
       {applePayVisible && (
@@ -156,20 +226,7 @@ export default function Index() {
         type={applePayAlert.type}
         onConfirm={() => setApplePayAlert(prev => ({ ...prev, visible: false }))}
       />
-    
-    <PhoneVerifyModal
-      visible={phoneModalVisible}
-      onClose={() => setPhoneModalVisible(false)}
-      onVerified={async (phoneE164) => {
-        await setVerifiedPhone(phoneE164);
-        if (pendingForm) {
-          createOrder({ ...pendingForm, phoneNumber: phoneE164 });
-          setPendingForm(null);
-        }
-      }}
-    />
     </View>
-    
   );
 }
 

@@ -1,9 +1,14 @@
-import { useCallback, useState } from "react";
+import { createOnrampSession } from "@/utils/createOnrampSession";
+import { useCurrentUser } from "@coinbase/cdp-hooks";
+import { useCallback, useMemo, useState } from "react";
 import { OnrampFormData } from "../components/onramp/OnrampForm";
 import { createApplePayOrder } from "../utils/createApplePayOrder";
 import { fetchBuyOptions } from "../utils/fetchBuyOptions";
 import { fetchBuyQuote } from "../utils/fetchBuyQuote";
-import { getVerifiedPhone, getVerifiedPhoneAt, isPhoneFresh60d, setCurrentPartnerUserRef } from "../utils/sharedState";
+import { getCountry, getSubdivision, getVerifiedPhone, getVerifiedPhoneAt, isPhoneFresh60d, setCurrentPartnerUserRef, setSubdivision } from "../utils/sharedState";
+
+
+export type PaymentMethodOption = { display: string; value: string };
 
 /**
  * Custom hook that manages all onramp-related state and API calls
@@ -19,6 +24,7 @@ export function useOnramp() {
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
   const [currentQuote, setCurrentQuote] = useState<any>(null);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+  const { currentUser } = useCurrentUser(); 
 
 
   /**
@@ -54,6 +60,10 @@ export function useOnramp() {
   const createOrder = useCallback(async (formData: OnrampFormData) => {
     try {
       setIsProcessingPayment(true); // Start loading
+
+      // Get email from CDP user, fallback to placeholder
+      const userEmail = currentUser?.authenticationMethods.email?.email || 'noemail@example.com';
+
       // Generate unique user reference for transaction tracking
       const partnerUserRef = `${formData.sandbox ? "sandbox-" : ""}user-${formData.address}`;      
       setCurrentPartnerUserRef(partnerUserRef);
@@ -68,12 +78,12 @@ export function useOnramp() {
       // Order creation: API call to Coinbase
       const result = await createApplePayOrder({
         paymentAmount: formData.amount,
-        paymentCurrency: "USD",
+        paymentCurrency: formData.paymentCurrency,
         purchaseCurrency: getAssetSymbolFromName(formData.asset),
         paymentMethod: "GUEST_CHECKOUT_APPLE_PAY",
         destinationNetwork: getNetworkNameFromDisplayName(formData.network),
         destinationAddress: formData.address,
-        email: 'michellefirstania.lion@coinbase.com',
+        email: userEmail,
         phoneNumber: phone,
         phoneNumberVerifiedAt: new Date(phoneAt!).toISOString(),
         partnerUserRef: partnerUserRef,
@@ -98,7 +108,37 @@ export function useOnramp() {
       setIsProcessingPayment(false);
       throw error;
     }
-  }, [getAssetSymbolFromName, getNetworkNameFromDisplayName]);
+  }, [getAssetSymbolFromName, getNetworkNameFromDisplayName, currentUser]);
+
+  const createWidgetSession = useCallback(async (formData: OnrampFormData) => {
+    setIsProcessingPayment(true);
+    try {
+      const assetSymbol = getAssetSymbolFromName(formData.asset);
+      const networkName = getNetworkNameFromDisplayName(formData.network);
+      const country = getCountry();
+      let subdivision = getSubdivision();
+      if (country === 'US' && !subdivision) {
+        subdivision = 'CA';
+        setSubdivision('CA');
+      } 
+  
+      const res = await createOnrampSession({
+        purchaseCurrency: assetSymbol,
+        destinationNetwork: networkName,
+        destinationAddress: formData.address,
+        paymentAmount: formData.amount,
+        paymentCurrency: formData.paymentCurrency,
+        country,
+        subdivision,
+      });
+  
+      const url = res?.session?.onrampUrl;
+      if (!url) throw new Error('No onrampUrl returned');
+      return url;
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  }, [getAssetSymbolFromName, getNetworkNameFromDisplayName, setIsProcessingPayment]);
 
   const closeApplePay = useCallback(() => {
     setApplePayVisible(false);
@@ -112,14 +152,13 @@ export function useOnramp() {
    * Used to populate form dropdowns dynamically
    */
   const fetchOptions = useCallback(async () => {
+    setIsLoadingOptions(true);
     try {
-      setIsLoadingOptions(true);
-      const result = await fetchBuyOptions({ 
-        country: 'US', 
-        subdivision: 'CA' 
-      });
-      setOptions(result); // Stores: { purchase_currencies: [...], payment_currencies: [...] }
-    
+      const country = getCountry();
+      let subdivision = getSubdivision();
+      if (country === 'US' && !subdivision) subdivision = 'CA';
+      const opts = await fetchBuyOptions({ country, subdivision });
+      setOptions(opts);
     } catch (error) {
       console.error('Failed to fetch options:', error);
     } finally {
@@ -144,13 +183,10 @@ export function useOnramp() {
       const networkName = getNetworkNameFromDisplayName(formData.network);
       
       const quote = await fetchBuyQuote({
-        country: 'US',
-        subdivision: 'CA',
-        paymentCurrency: formData.paymentCurrency,
-        paymentMethod: 'APPLE_PAY',
-        purchaseCurrency: assetSymbol,
-        purchaseNetwork: networkName,
         paymentAmount: formData.amount,
+        paymentCurrency: formData.paymentCurrency,
+        purchaseCurrency: assetSymbol,
+        destinationNetwork: networkName
       });
       
       setCurrentQuote(quote);
@@ -193,6 +229,11 @@ export function useOnramp() {
     );
   }, [options]);
 
+  const paymentCurrencies = useMemo(() => {
+    const list = options?.payment_currencies.map((currency: any) => currency.id) || ['USD'];
+    return Array.isArray(list) ? list : ['USD'];
+  }, [options]);
+
   
   return {
     // State
@@ -204,9 +245,10 @@ export function useOnramp() {
     isLoadingOptions,
     isLoadingQuote,
     currentQuote,
-    
+    paymentCurrencies,
     // Actions
     createOrder,
+    createWidgetSession,
     closeApplePay,
     fetchOptions,
     getAvailableNetworks,

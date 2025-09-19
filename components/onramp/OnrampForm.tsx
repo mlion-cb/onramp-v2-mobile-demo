@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { COLORS } from '../../constants/Colors';
+import { getCountry } from '../../utils/sharedState';
 import { SwipeToConfirm } from '../ui/SwipeToConfirm';
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE, SILVER } = COLORS;
@@ -13,8 +14,10 @@ export type OnrampFormData = {
   address: string;
   sandbox: boolean;
   paymentMethod: string;
+  paymentCurrency: string;
   quoteId?: string;
   phoneNumber?: string;
+  agreementAcceptedAt?: string;
 };
 
 type OnrampFormProps = {
@@ -29,6 +32,7 @@ type OnrampFormProps = {
   currentQuote: any;          
   isLoadingQuote: boolean;    
   fetchQuote: (formData: any) => void; 
+  paymentCurrencies: string[];
 };
 
 /**
@@ -46,19 +50,30 @@ export function OnrampForm({
   getAvailableAssets,
   currentQuote,       
   isLoadingQuote,     
-  fetchQuote         
+  fetchQuote,
+  paymentCurrencies         
 }: OnrampFormProps) {
   const [amount, setAmount] = useState("");
   const [asset, setAsset] = useState("USDC");
   const [network, setNetwork] = useState("Base");
-  const [paymentMethod, setPaymentMethod] = useState("Apple Pay");
-  const [sandbox, setSandbox] = useState(true);
+  const [paymentMethod, setPaymentMethod] = useState("GUEST_CHECKOUT_APPLE_PAY");
+  const [sandbox, setSandbox] = useState(false);
   const [assetPickerVisible, setAssetPickerVisible] = useState(false);
   const [networkPickerVisible, setNetworkPickerVisible] = useState(false);
   const [paymentPickerVisible, setPaymentPickerVisible] = useState(false);
   const [paymentCurrency, setPaymentCurrency] = useState("USD");
   const [paymentCurrencyPickerVisible, setPaymentCurrencyPickerVisible] = useState(false);
   const [isSwipeActive, setIsSwipeActive] = useState(false);
+  const [agreementTimestamp, setAgreementTimestamp] = useState<number | null>(null);
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const sheetTranslate = useRef(new Animated.Value(300)).current;
+  const isApplePay = paymentMethod === 'GUEST_CHECKOUT_APPLE_PAY';
+
+  const displayCurrencies = React.useMemo(() => {
+    const list = Array.isArray(paymentCurrencies) && paymentCurrencies.length ? paymentCurrencies : ['USD'];
+    return isApplePay ? ['USD'] : list;
+  }, [isApplePay, paymentCurrencies]);
+
 
 
   const amountNumber = useMemo(() => {
@@ -67,10 +82,19 @@ export function OnrampForm({
     return Number.isFinite(parsed) ? parsed : NaN;
   }, [amount]);
 
+  const isEvmNetwork = (() => {
+    const n = (network || '').toLowerCase();
+    const evmList = [
+      'ethereum','base','polygon','arbitrum','optimism','avalanche','avax','bsc',
+      'fantom','linea','zksync','scroll'
+    ];
+    return evmList.some((k) => n.includes(k));
+  })();
+
   const isAmountValid = Number.isFinite(amountNumber) && amountNumber > 0;
   const isAddressValid = /^0x[0-9a-fA-F]{40}$/.test(address);
-  const isFormValid = isAmountValid && isAddressValid && !!network && !!asset;
-
+  // Only allow submit when on an EVM network and address is valid
+  const isFormValid = isAmountValid && !!network && !!asset && (isEvmNetwork ? isAddressValid : false);
   /**
    * Dynamic filtering: changing asset updates available networks, and vice versa
    * 
@@ -80,6 +104,9 @@ export function OnrampForm({
    * 3. getAvailableNetworks(asset) → filters by asset
    * 4. useEffect hooks → auto-clear invalid selections
    */
+
+  const country = getCountry(); 
+
   const availableNetworks = useMemo(() => {
     if (!getAvailableNetworks) return ["ethereum", "base"]; // Fallback
     return getAvailableNetworks(asset);
@@ -89,6 +116,44 @@ export function OnrampForm({
     if (!getAvailableAssets) return ["USDC", "ETH"]; // Fallback
     return getAvailableAssets(network);
   }, [network, getAvailableAssets]);
+
+  const methods = useMemo(() => {
+    const arr = [{ display: 'Coinbase Widget', value: 'COINBASE_WIDGET' }];
+    if (country === 'US' && paymentCurrency === 'USD') {
+      arr.push({ display: 'Apple Pay API', value: 'GUEST_CHECKOUT_APPLE_PAY' });
+    }
+    return arr;
+  }, [country, paymentCurrency]);
+
+  useEffect(() => {
+    if (isApplePay && paymentCurrency !== 'USD') {
+      setPaymentCurrency('USD');
+    }
+  }, [isApplePay, paymentCurrency]);
+  
+  useEffect(() => {
+    if (!displayCurrencies.includes(paymentCurrency)) {
+      setPaymentCurrency(displayCurrencies[0] || 'USD');
+    }
+  }, [displayCurrencies, paymentCurrency]);
+
+  useEffect(() => {
+    if (!paymentCurrencies?.length) return;
+    if (!paymentCurrencies.includes(paymentCurrency)) {
+      setPaymentCurrency(paymentCurrencies[0] || 'USD');
+    }
+  }, [paymentCurrencies, paymentCurrency]);
+
+  useEffect(() => {
+    if (!methods.some(m => m.value === paymentMethod)) {
+      setPaymentMethod(methods[0]?.value || 'COINBASE_WIDGET');
+    }
+  }, [methods, paymentMethod]);
+
+  const getPaymentMethodDisplay = (value: string) => {
+    const method = methods.find(m => m.value === value);
+    return method?.display || value;
+  };
 
   // Auto-clear invalid selections when options change
   useEffect(() => {
@@ -116,6 +181,69 @@ export function OnrampForm({
       }
     }
   }, [network, availableAssets, asset]);
+
+  useEffect(() => {
+    if (assetPickerVisible) {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.spring(sheetTranslate, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 90 }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(sheetTranslate, { toValue: 300, duration: 150, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [assetPickerVisible]);
+
+  useEffect(() => {
+    if (networkPickerVisible) {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.spring(sheetTranslate, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 90 }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(sheetTranslate, { toValue: 300, duration: 150, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [networkPickerVisible]);
+
+  useEffect(() => {
+    if (paymentPickerVisible) {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.spring(sheetTranslate, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 90 }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(sheetTranslate, { toValue: 300, duration: 150, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [paymentPickerVisible]);
+
+  useEffect(() => {
+    if (paymentCurrencyPickerVisible) {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.spring(sheetTranslate, { toValue: 0, useNativeDriver: true, damping: 20, stiffness: 90 }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(sheetTranslate, { toValue: 300, duration: 150, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [paymentCurrencyPickerVisible]);
+
+  // If user switches to a non‑EVM network, clear the address (no manual entry)
+  useEffect(() => {
+    if (!isEvmNetwork && address) {
+      onAddressChange('');
+    }
+  }, [isEvmNetwork, address, onAddressChange]);
 
   // Debounced quote fetching
   useEffect(() => {
@@ -152,10 +280,12 @@ export function OnrampForm({
       network,
       address,
       paymentMethod,
+      paymentCurrency,
       sandbox,
       quoteId: currentQuote.quote_id, // Include quote ID
+      agreementAcceptedAt: agreementTimestamp ? new Date(agreementTimestamp).toISOString() : new Date().toISOString(),
     });
-  }, [isFormValid, currentQuote, asset, network, address, sandbox, paymentMethod, onSubmit]);
+  }, [isFormValid, currentQuote, asset, network, address, sandbox, paymentMethod, paymentCurrency, onSubmit, agreementTimestamp]);
   return (
     <ScrollView 
       contentContainerStyle={styles.content} 
@@ -180,7 +310,7 @@ export function OnrampForm({
             style={styles.currencyTag}
             onPress={() => setPaymentCurrencyPickerVisible(true)} // Make it clickable
           >
-            <Text style={styles.currencyText}>🇺🇸 {paymentCurrency}</Text>
+            <Text style={styles.currencyText}>{paymentCurrency}</Text>
             <Ionicons name="chevron-down" size={16} color={TEXT_SECONDARY} />
           </Pressable>
         </View>
@@ -243,33 +373,19 @@ export function OnrampForm({
   
       {/* Payment Method Card */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Pay with</Text>
-        <Pressable style={styles.paymentSelect} onPress={() => setPaymentPickerVisible(true)}>
-          <View style={styles.selectContent}>
-            <Text style={styles.paymentText}>Apple Pay</Text>
-          </View>
-          <Ionicons name="chevron-down" size={16} color={TEXT_SECONDARY} />
-        </Pressable>
+        <View style={styles.paymentRow}>
+          <Text style={styles.paymentLabel}>Pay with</Text>
+          <Pressable style={styles.paymentSelect} onPress={() => setPaymentPickerVisible(true)}>
+            <View style={styles.selectContent}>
+              <Text style={styles.paymentText}>{getPaymentMethodDisplay(paymentMethod)}</Text>
+            </View>
+            <Ionicons name="chevron-down" size={16} color={TEXT_SECONDARY} />
+          </Pressable>
+        </View>
       </View>
   
-      {/* Wallet Address */}
-      <View style={styles.fieldGroup}>
-        <Text style={styles.label}>Wallet address</Text>
-        <TextInput
-          value={address}
-          editable={false}
-          selectTextOnFocus={false}
-          onChangeText={onAddressChange}
-          placeholder="0x..."
-          placeholderTextColor={TEXT_SECONDARY + "99"}
-          style={styles.input}
-        />
-        {!isAddressValid && address.length > 0 && (
-          <Text style={styles.errorText}>Enter a valid Ethereum address</Text>
-        )}
-      </View>
   
-      {/* Sandbox Toggle */}
+      {/* Sandbox Toggle
       <View style={styles.switchRow}>
         <Text style={styles.label}>Sandbox Environment</Text>
         <Switch
@@ -278,7 +394,7 @@ export function OnrampForm({
           trackColor={{ true: BLUE, false: BORDER }}
           thumbColor={Platform.OS === "android" ? (sandbox ? "#ffffff" : "#f4f3f4") : undefined}
         />
-      </View>
+      </View> */}
   
       {/* Quote Summary */}
       {currentQuote && (
@@ -309,6 +425,15 @@ export function OnrampForm({
           </View>
         </View>
       )}
+
+      {/* Wallet Notification */}
+      {!isEvmNetwork ? (
+      <Text style={styles.helper}>
+        This network is available for Onramp, but Embedded Wallet is not supported at the moment. Select an EVM network to proceed.
+      </Text>
+    ) : !isAddressValid ? (
+      <Text style={styles.errorText}>Connect a valid EVM address to continue</Text>
+    ) : null}
   
       <SwipeToConfirm
         label="Swipe to Deposit"
@@ -318,115 +443,156 @@ export function OnrampForm({
         onSwipeStart={() => setIsSwipeActive(true)}
         onSwipeEnd={() => setIsSwipeActive(false)}
       />
+
+      {/* Terms Agreement */}
+      <View style={styles.termsContainer}>
+        <Text style={styles.termsText}>
+          By proceeding, I agree to Coinbase's{' '}
+          <Text style={styles.termsLink} onPress={() => Linking.openURL('https://www.coinbase.com/legal/guest-checkout/us')}>Guest Checkout Terms</Text>,{' '}
+          <Text style={styles.termsLink} onPress={() => Linking.openURL('https://www.coinbase.com/legal/user_agreement/united_states')}>User Agreement</Text>, and{' '}
+          <Text style={styles.termsLink} onPress={() => Linking.openURL('https://www.coinbase.com/legal/privacy')}>Privacy Policy</Text>
+        </Text>
+      </View>
   
       {/* All existing modals */}
       {/* Payment Currency picker modal */}
       <Modal 
         visible={paymentCurrencyPickerVisible} 
-        animationType="slide" 
         transparent 
+        animationType="none"
+        presentationStyle="overFullScreen"
         onRequestClose={() => setPaymentCurrencyPickerVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          {/* Backdrop - click to dismiss */}
+          <Animated.View
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)', opacity: backdropOpacity }]}
+          >
+            <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setPaymentCurrencyPickerVisible(false)} />
+          </Animated.View>
+
+          {/* Sheet with handle */}
+          <Animated.View style={[styles.modalSheet, { transform: [{ translateY: sheetTranslate }] }]}>
+            {/* Handle bar */}
+            <View style={styles.modalHandle} />
+            
             <ScrollView 
               style={styles.modalScrollView}
               showsVerticalScrollIndicator={true}
               keyboardShouldPersistTaps="handled"
             >
-              {["USD"].map((currency, index) => (
+            {displayCurrencies.map((currency, index) => {
+              const isSelected = currency === paymentCurrency;
+              return (
                 <Pressable
                   key={`currency-${index}-${currency}`}
                   onPress={() => {
                     setPaymentCurrency(currency);
                     setPaymentCurrencyPickerVisible(false);
                   }}
-                  style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
+                  style={[styles.modalItem, isSelected && styles.modalItemSelected]}
                 >
-                  <View style={styles.modalItemContent}>
-                    <View style={styles.modalItemLeft}>
-                      <Text style={styles.modalItemIcon}>🇺🇸</Text>
-                      <Text style={styles.modalItemText}>{currency}</Text>
+                    <View style={styles.modalItemContent}>
+                      <View style={styles.modalItemLeft}>
+                        <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected]}>
+                          {currency}
+                        </Text>
+                      </View>
+                      <View style={styles.modalItemRight}>
+                        {isSelected && (
+                          <Ionicons name="checkmark" size={20} color={BLUE} />
+                        )}
+                      </View>
                     </View>
-                    <Text style={styles.modalItemMeta}>United States Dollar</Text>
-                  </View>
-                </Pressable>
-              ))}
+                  </Pressable>
+                );
+              })}
             </ScrollView>
-            <Pressable onPress={() => setPaymentCurrencyPickerVisible(false)} style={styles.modalCancel}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </Pressable>
-          </View>
+          </Animated.View>
         </View>
       </Modal>
       {/* Asset picker modal */}
       <Modal 
         visible={assetPickerVisible} 
-        animationType="slide" 
         transparent 
+        animationType="none"
+        presentationStyle="overFullScreen"
         onRequestClose={() => setAssetPickerVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          {/* Backdrop - click to dismiss */}
+          <Animated.View
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)', opacity: backdropOpacity }]}
+          >
+            <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setAssetPickerVisible(false)} />
+          </Animated.View>
+
+          {/* Sheet with handle */}
+          <Animated.View style={[styles.modalSheet, { transform: [{ translateY: sheetTranslate }] }]}>
+            {/* Handle bar */}
+            <View style={styles.modalHandle} />
+            
             <ScrollView 
               style={styles.modalScrollView}
               showsVerticalScrollIndicator={true}
               keyboardShouldPersistTaps="handled"
             >
-              {isLoadingOptions ? (
-                <View style={styles.modalItem}>
-                  <Text style={styles.modalItemText}>Loading assets...</Text>
-                </View>
-              ) : (
-                availableAssets.map((assetOption: any, index: number) => {
-                  const displayName = assetOption.name || assetOption.symbol || 'Unknown Asset'; // Add fallback
-                  const iconUrl = assetOption.icon_url;
-                  
-                  return (
-                    <Pressable
-                      key={`asset-${index}-${displayName}`}
-                      onPress={() => {
-                        setAsset(displayName);
-                        setAssetPickerVisible(false);
-                      }}
-                      style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
-                    >
-                      <View style={styles.modalItemContent}>
-                        <View style={styles.modalItemLeft}>
-                          {iconUrl && (
-                            <Image 
-                              source={{ uri: iconUrl }} 
-                              style={styles.modalItemIcon}
-                            />
-                          )}
-                          <Text style={styles.modalItemText}>{displayName}</Text>
-                        </View>
-                        {/* Add asset symbol/meta info if available */}
-                        <Text style={styles.modalItemMeta}>
-                          {assetOption.symbol && assetOption.symbol !== displayName ? assetOption.symbol.toUpperCase() : ''}
+              {availableAssets.map((assetOption: any, index: number) => {
+                const displayName = assetOption.name || assetOption.symbol || 'Unknown Asset';
+                const iconUrl = assetOption.icon_url;
+                const isSelected = displayName === asset;
+                
+                return (
+                  <Pressable
+                    key={`asset-${index}-${displayName}`}
+                    onPress={() => {
+                      setAsset(displayName);
+                      setAssetPickerVisible(false);
+                    }}
+                    style={[styles.modalItem, isSelected && styles.modalItemSelected]}
+                  >
+                    <View style={styles.modalItemContent}>
+                      <View style={styles.modalItemLeft}>
+                        {iconUrl && (
+                          <Image 
+                            source={{ uri: iconUrl }} 
+                            style={styles.modalItemIcon}
+                          />
+                        )}
+                        <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected]}>
+                          {displayName}
                         </Text>
                       </View>
-                    </Pressable>
-                  );
-                })
-              )}
+                      {isSelected && (
+                        <Ionicons name="checkmark" size={20} color={BLUE} />
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
-            <Pressable onPress={() => setAssetPickerVisible(false)} style={styles.modalCancel}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </Pressable>
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 
       {/* Network picker modal */}
       <Modal 
         visible={networkPickerVisible} 
-        animationType="slide" 
         transparent 
+        animationType="none"
+        presentationStyle="overFullScreen"
         onRequestClose={() => setNetworkPickerVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <Animated.View
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)', opacity: backdropOpacity }]}
+          >
+            <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setNetworkPickerVisible(false)} />
+          </Animated.View>
+
+          <Animated.View style={[styles.modalSheet, { transform: [{ translateY: sheetTranslate }] }]}>
+            <View style={styles.modalHandle} />
+            
             <ScrollView 
               style={styles.modalScrollView}
               showsVerticalScrollIndicator={true}
@@ -440,6 +606,7 @@ export function OnrampForm({
                 availableNetworks.map((networkOption: any, index: number) => {
                   const displayName = networkOption.display_name || networkOption.name || 'Unknown Network';
                   const iconUrl = networkOption.icon_url;
+                  const isSelected = displayName === network;
                   
                   return (
                     <Pressable
@@ -448,7 +615,7 @@ export function OnrampForm({
                         setNetwork(displayName);
                         setNetworkPickerVisible(false);
                       }}
-                      style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
+                      style={[styles.modalItem, isSelected && styles.modalItemSelected]}
                     >
                       <View style={styles.modalItemContent}>
                         <View style={styles.modalItemLeft}>
@@ -458,56 +625,73 @@ export function OnrampForm({
                               style={styles.modalItemIcon}
                             />
                           )}
-                          <Text style={styles.modalItemText}>{displayName}</Text>
+                          <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected]}>
+                            {displayName}
+                          </Text>
                         </View>
-                        {/* Add network/chain info if available */}
-                        <Text style={styles.modalItemMeta}>
-                          {networkOption.name ? networkOption.name.toUpperCase() : ''}
-                        </Text>
+                        {isSelected && (
+                          <Ionicons name="checkmark" size={20} color={BLUE} />
+                        )}
                       </View>
                     </Pressable>
                   );
                 })
               )}
             </ScrollView>
-            <Pressable onPress={() => setNetworkPickerVisible(false)} style={styles.modalCancel}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </Pressable>
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 
       {/* Payment method picker modal */}
       <Modal
         visible={paymentPickerVisible}
-        animationType="slide"
         transparent
+        animationType="none"
+        presentationStyle="overFullScreen"
         onRequestClose={() => setPaymentPickerVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
-          <ScrollView 
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <Animated.View
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)', opacity: backdropOpacity }]}
+          >
+            <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setPaymentPickerVisible(false)} />
+          </Animated.View>
+
+          <Animated.View style={[styles.modalSheet, { transform: [{ translateY: sheetTranslate }] }]}>
+            <View style={styles.modalHandle} />
+            
+            <ScrollView 
               style={styles.modalScrollView}
               showsVerticalScrollIndicator={true}
               keyboardShouldPersistTaps="handled"
             >
-              {(["Apple Pay"] as const).map((method) => (
-                <Pressable
-                  key={method}
-                  onPress={() => {
-                    setPaymentMethod(method);
-                    setPaymentPickerVisible(false);
-                  }}
-                  style={({ pressed }) => [styles.modalItem, pressed && { backgroundColor: CARD_BG }]}
-                >
-                  <Text style={styles.modalItemText}>{method}</Text>
-                </Pressable>
-              ))}
+              {methods.map((method, index) => {
+                const isSelected = method.value === paymentMethod;
+                
+                return (
+                  <Pressable
+                    key={`payment-${index}-${method.value}`}
+                    onPress={() => {
+                      setPaymentMethod(method.value);
+                      setPaymentPickerVisible(false);
+                    }}
+                    style={[styles.modalItem, isSelected && styles.modalItemSelected]}
+                  >
+                    <View style={styles.modalItemContent}>
+                      <View style={styles.modalItemLeft}>
+                        <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected]}>
+                          {method.display}
+                        </Text>
+                      </View>
+                      {isSelected && (
+                        <Ionicons name="checkmark" size={20} color={BLUE} />
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
-            <Pressable onPress={() => setPaymentPickerVisible(false)} style={styles.modalCancel}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </Pressable>
-          </View>
+          </Animated.View>
         </View>
       </Modal>
     </ScrollView>
@@ -598,48 +782,68 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: TEXT_PRIMARY,
   },
-    // Network row
-    networkRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: 16,
-      paddingTop: 16,
-      borderTopWidth: 1,
-      borderTopColor: BORDER,
-    },
-    networkLabel: {
-      fontSize: 16,
-      fontWeight: '500',
-      color: TEXT_PRIMARY,
-    },
-    networkSelect: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: BORDER,
-      paddingHorizontal: 12,     
-      paddingVertical: 8,        
-      borderRadius: 16,
-      gap: 8,                    
-      maxWidth: 120,             
-    },
-    networkIcon: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
-      marginRight: 4,           
-    },
-    networkText: {
-      fontSize: 14,             
-      fontWeight: '500',
-      color: TEXT_PRIMARY,
-    },
-      // Payment styles
+  // Network row
+  networkRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  networkLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: TEXT_PRIMARY,
+  },
+  networkSelect: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: BORDER,
+    paddingHorizontal: 12,     
+    paddingVertical: 8,        
+    borderRadius: 16,
+    gap: 8,                    
+    maxWidth: 120,             
+  },
+  networkIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: 4,           
+  },
+  networkText: {
+    fontSize: 14,             
+    fontWeight: '500',
+    color: TEXT_PRIMARY,
+  },
+  // Payment styles
+  paymentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  paymentLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: TEXT_PRIMARY,
+  },
   paymentSelect: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
+    backgroundColor: BORDER,
+    paddingHorizontal: 12,     
+    paddingVertical: 8,        
+    borderRadius: 16,
+    gap: 8,                    
+    maxWidth: 180,           
+  },
+  paymentText: {
+    fontSize: 14,            
+    fontWeight: '500',
+    color: TEXT_PRIMARY,
   },
   applePayIcon: {
     width: 20,
@@ -652,12 +856,6 @@ const styles = StyleSheet.create({
   },
   applePayText: {
     fontSize: 14,
-  },
-  paymentText: {
-    fontSize: 14,            
-    fontWeight: '500',
-    color: TEXT_PRIMARY,
-    flex: 1,
   },
   // Quote summary
   quoteCard: {
@@ -711,6 +909,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '400',
   },
+  inputDisabled: {
+    opacity: 0.8,
+  },
+  helper: {
+    marginTop: 6,
+    fontSize: 12,
+    color: TEXT_SECONDARY,
+  },
   select: {
     backgroundColor: CARD_BG,     
     borderColor: BORDER,
@@ -745,29 +951,53 @@ const styles = StyleSheet.create({
   errorText: {
     color: "#FF6B6B",           
     fontSize: 12,
+    marginTop: 6,
   },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(10, 11, 13, 0.8)", 
     justifyContent: "flex-end",
   },
-  modalScrollView: {
-    maxHeight: 400,
+  modalHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: BORDER,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 16,
   },
   modalSheet: {
     backgroundColor: CARD_BG,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '75%',        
+    maxHeight: '75%',
     width: '100%',
-    paddingTop: 8,
+    minHeight: 280,
     paddingBottom: 20,
+    paddingTop: 8,
   },
   modalItem: {
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
+  },
+  modalItemSelected: {
+    backgroundColor: BLUE + '15', // Light blue background for selected
+  },
+  modalItemText: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: TEXT_PRIMARY,
+    flex: 1,
+  },
+  modalItemTextSelected: {
+    color: BLUE,
+    fontWeight: '600',
+  },
+  modalScrollView: {
+    maxHeight: 400,
   },
   modalItemContent: {
     flexDirection: 'row',
@@ -780,12 +1010,6 @@ const styles = StyleSheet.create({
     marginRight: 16,
     borderRadius: 16,
   },
-  modalItemText: {
-    fontSize: 18,
-    fontWeight: '500',
-    color: TEXT_PRIMARY,
-    flex: 1,
-  },
   modalItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -796,21 +1020,10 @@ const styles = StyleSheet.create({
     color: TEXT_SECONDARY,
     marginLeft: 8,
   },
-  modalCancel: {
-    minHeight: 48,
-    paddingVertical: 12,
-    paddingHorizontal: 20, // Add horizontal padding
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 12,
-    marginHorizontal: 16, // Add side margins
-    backgroundColor: BORDER,
-    borderRadius: 12,
-  },
-  modalCancelText: {
-    color: TEXT_SECONDARY,
-    fontSize: 16,
-    fontWeight: '500',
+  flagEmoji: {
+    fontSize: 20,
+    lineHeight: 20,
+    marginRight: 12,
   },
   selectContent: {
     flexDirection: 'row',
@@ -841,5 +1054,44 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: TEXT_SECONDARY,
     marginBottom: 12,          
+  },
+  termsContainer: {
+    marginTop: 0,
+    marginBottom: 8,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: BORDER,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2, // Align with first line of text
+  },
+  checkboxChecked: {
+    backgroundColor: BLUE,
+    borderColor: BLUE,
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 14,
+    color: TEXT_SECONDARY,
+    lineHeight: 20,
+  },
+  termsLink: {
+    color: BLUE,
+    textDecorationLine: 'underline',
+  },
+  modalItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
 });
