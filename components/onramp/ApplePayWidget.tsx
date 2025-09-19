@@ -50,6 +50,7 @@ export function ApplePayWidget({
   }, []);
 
   // Don't render anything if not visible or no URL
+  // onClose, this will close WebView and stop listening to post-event messages
   if (!paymentUrl) {
     return null;
   }

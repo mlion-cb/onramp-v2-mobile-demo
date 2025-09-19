@@ -17,7 +17,7 @@ export async function createApplePayOrder(payload: any) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        url: "https://api.developer.coinbase.com/onramp/v2/onramp/order",
+        url: "https://api.cdp.coinbase.com/platform/v2/onramp/orders",
         body: 
           payload
       })
@@ -29,7 +29,7 @@ export async function createApplePayOrder(payload: any) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        url: "https://api.developer.coinbase.com/onramp/v2/onramp/order",
+        url: "https://api.cdp.coinbase.com/platform/v2/onramp/orders",
         method: "POST",
         body: 
           payload

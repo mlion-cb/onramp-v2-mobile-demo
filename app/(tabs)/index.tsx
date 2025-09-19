@@ -1,9 +1,12 @@
 
+import { useCurrentUser, useIsSignedIn } from "@coinbase/cdp-hooks";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { ApplePayWidget, OnrampForm, useOnramp } from "../components";
-import { CoinbaseAlert } from "../components/ui/CoinbaseAlerts";
-import { COLORS } from "../constants/Colors";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { ApplePayWidget, OnrampForm, useOnramp } from "../../components";
+import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
+import { COLORS } from "../../constants/Colors";
+import { getCountry, getCurrentWalletAddress, getSubdivision, getVerifiedPhone, isPhoneFresh60d } from "../../utils/sharedState";
 
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
@@ -21,23 +24,52 @@ function generateMockAddress(): string {
 export default function Index() {
   const [address, setAddress] = useState("");
   const [connecting, setConnecting] = useState(false);
-  const isConnected = address.length > 0;
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
+  const router = useRouter();
+  const [pendingForm, setPendingForm] = useState<any | null>(null);
 
-  const onConnectPress = useCallback(async () => {
-    if (connecting || isConnected) return;
-    try {
-      setConnecting(true);
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      const mock = generateMockAddress();
-      setAddress(mock);
-      setAlertMessage(`Dummy Wallet connected: ${mock}`);
-      setShowAlert(true);
-    } finally {
-      setConnecting(false);
-    }
-  }, [connecting, isConnected]);
+
+  const { isSignedIn } = useIsSignedIn();
+  const { currentUser } = useCurrentUser();
+  const [connectedAddress, setConnectedAddress] = useState('');
+  const isConnected = connectedAddress.length > 0;
+
+  useFocusEffect(
+    useCallback(() => {
+      setConnectedAddress(getCurrentWalletAddress() ?? '');
+    }, [])
+  );
+
+  // Update when CDP session changes
+  useEffect(() => {
+    if (!isSignedIn) return;
+  
+    let tries = 0;
+    const t = setInterval(() => {
+      // prefer CDP user → fallback to shared state
+      const sa = (currentUser?.evmSmartAccounts?.[0] as string) || (getCurrentWalletAddress() || '');
+      if (sa) {
+        setConnectedAddress(sa);
+        if (!address) setAddress(sa);
+        clearInterval(t);
+      }
+      if (++tries > 20) clearInterval(t); // ~10s max
+    }, 500);
+  
+    return () => clearInterval(t);
+  }, [isSignedIn, currentUser]);
+
+  
+
+  useFocusEffect(
+    useCallback(() => {
+      setAddress(getCurrentWalletAddress() ?? "");
+    }, [])
+  );
+
+  const onConnectPress = useCallback(() => router.push("../email-verify"), [router]);
+
 
   const [applePayAlert, setApplePayAlert] = useState<{
     visible: boolean;
@@ -54,23 +86,76 @@ export default function Index() {
 
   const { 
     createOrder, 
+    createWidgetSession,
     closeApplePay, 
     options,
     isLoadingOptions,
     getAvailableNetworks,
     getAvailableAssets,
     fetchOptions,
+    currentQuote,       
+    isLoadingQuote,     
+    fetchQuote,         
     applePayVisible, 
     hostedUrl, 
     isProcessingPayment,
     setTransactionStatus,
-    setIsProcessingPayment 
+    setIsProcessingPayment ,
+    paymentCurrencies
   } = useOnramp();
 
   // Fetch options on component mount
-  useEffect(() => {
-    fetchOptions();
-  }, [fetchOptions]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchOptions();
+    }, [fetchOptions])
+  );
+
+  // 1) Resume after returning to this tab
+  useFocusEffect(
+    useCallback(() => {
+      if (!pendingForm) return;
+
+      // If pending was for Coinbase Widget, do it immediately (no phone gate)
+      if ((pendingForm.paymentMethod || '').toUpperCase() === 'COINBASE_WIDGET') {
+        (async () => {
+          const url = await createWidgetSession(pendingForm);
+          if (url) {
+            Linking.openURL(url);
+            setPendingForm(null);
+          }
+        })();
+        return;
+      }
+
+      // Apple Pay path still requires fresh phone
+      if (isPhoneFresh60d() && getVerifiedPhone()) {
+        const phone = getVerifiedPhone();
+        createOrder({ ...pendingForm, phoneNumber: phone });
+        setPendingForm(null);
+      }
+    }, [pendingForm, createOrder, createWidgetSession])
+  );
+
+  const handleSubmit = useCallback(async (formData: any) => {
+    // Coinbase Widget: skip phone verification
+    if ((formData.paymentMethod || '').toUpperCase() === 'COINBASE_WIDGET') {
+      const url = await createWidgetSession(formData);
+      if (url) Linking.openURL(url);
+      return; // do not call createOrder()
+    }
+  
+    // Apple Pay: require phone verification
+    const fresh = isPhoneFresh60d();
+    const phone = getVerifiedPhone();
+    if (!fresh || !phone) {
+      setPendingForm(formData);
+      router.push({ pathname: '/phone-verify', params: { initialPhone: phone || '' } });
+      return;
+    }
+  
+    createOrder({ ...formData });
+  }, [createOrder, createWidgetSession, router]);
     
   
   return (
@@ -92,21 +177,26 @@ export default function Index() {
               textAlign: "center",
               color: isConnected ? "#4ADE80" : TEXT_PRIMARY
             }]}>
-              {isConnected ? "Connected" : connecting ? "Connecting…" : "Connect Dummy Wallet"}
+              {isConnected ? "Connected" : connecting ? "Connecting…" : "Connect Wallet"}
             </Text>
           </View>
         </Pressable>
       </View>
 
       <OnrampForm
+        key={`${getCountry()}-${getSubdivision()}`}   // remount on region change
         address={address}
-        onAddressChange={setAddress}
-        onSubmit={createOrder}
+        onAddressChange={() => {}}
+        onSubmit={handleSubmit}
         isLoading={isProcessingPayment}
         options={options}
         isLoadingOptions={isLoadingOptions}
         getAvailableNetworks={getAvailableNetworks}
         getAvailableAssets={getAvailableAssets}
+        currentQuote={currentQuote}     
+        isLoadingQuote={isLoadingQuote} 
+        fetchQuote={fetchQuote}         
+        paymentCurrencies={paymentCurrencies}
       />
 
       {applePayVisible && (
@@ -137,7 +227,6 @@ export default function Index() {
         onConfirm={() => setApplePayAlert(prev => ({ ...prev, visible: false }))}
       />
     </View>
-    
   );
 }
 

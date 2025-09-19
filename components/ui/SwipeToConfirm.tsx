@@ -9,11 +9,13 @@ type SwipeToConfirmProps = {
   label: string;
   disabled?: boolean;
   onConfirm: (reset: () => void) => void;
-  isLoading?: boolean; // Add this
+  isLoading?: boolean;
+  onSwipeStart?: () => void;
+  onSwipeEnd?: () => void;
 };
 
 
-export function SwipeToConfirm({ label, disabled = false, onConfirm, isLoading = false }: SwipeToConfirmProps) {
+export function SwipeToConfirm({ label, disabled = false, onConfirm, isLoading = false, onSwipeStart, onSwipeEnd }: SwipeToConfirmProps) {
   const [trackWidth, setTrackWidth] = useState(0);
   const knobSize = 48;
   const horizontalPadding = 4;
@@ -50,19 +52,17 @@ export function SwipeToConfirm({ label, disabled = false, onConfirm, isLoading =
         currentXRef.current = maxX;
       });
     } else {
-      // Auto-reset when loading ends
-      if (currentXRef.current === maxX) {
-        setTimeout(() => {
-          Animated.spring(translateX, { 
-            toValue: 0, 
-            useNativeDriver: false, 
-            bounciness: 6, 
-            speed: 12 
-          }).start(() => {
-            currentXRef.current = 0;
-          });
-        }, 300);
-      }
+      // Always reset when loading ends (remove the position check)
+      setTimeout(() => {
+        Animated.spring(translateX, { 
+          toValue: 0, 
+          useNativeDriver: false, 
+          bounciness: 6, 
+          speed: 12 
+        }).start(() => {
+          currentXRef.current = 0;
+        });
+      }, 300);
     }
   }, [isLoading, maxX, translateX]);
 
@@ -75,6 +75,7 @@ export function SwipeToConfirm({ label, disabled = false, onConfirm, isLoading =
         onMoveShouldSetPanResponderCapture: () => !disabled && !isLoading,
         onPanResponderGrant: (e) => {
           if (isLoading) return; // Extra safety check
+          onSwipeStart?.();
           const localX = e.nativeEvent.locationX - knobSize / 2;
           const clamped = Math.max(0, Math.min(maxX, localX));
           startXRef.current = clamped;
@@ -89,6 +90,7 @@ export function SwipeToConfirm({ label, disabled = false, onConfirm, isLoading =
         },
         onPanResponderRelease: () => {
           if (isLoading) return; // Extra safety check
+          onSwipeEnd?.();
           const threshold = maxX * 0.8;
           if (currentXRef.current >= threshold) {
             complete();
@@ -98,10 +100,13 @@ export function SwipeToConfirm({ label, disabled = false, onConfirm, isLoading =
         },
         onPanResponderTerminationRequest: () => false,
         onPanResponderTerminate: () => {
-          if (!isLoading) snapBack(); // Only snap back if not loading
+          if (!isLoading) {
+            onSwipeEnd?.();
+            snapBack(); // Only snap back if not loading
+          }
         },
       }),
-    [disabled, knobSize, maxX, complete, snapBack, translateX, isLoading] // Add isLoading
+    [disabled, knobSize, maxX, complete, snapBack, translateX, isLoading, onSwipeStart, onSwipeEnd] 
   );
 
   const progressWidth = Animated.add(translateX, new Animated.Value(knobSize));
