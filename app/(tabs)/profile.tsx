@@ -1,4 +1,4 @@
-import { fetchBuyConfig } from "@/utils/fetchBuyConfig";
+import { useOnramp } from "@/hooks/useOnramp";
 import {
   useCurrentUser,
   useExportEvmAccount,
@@ -49,18 +49,28 @@ export default function WalletScreen() {
   const subdivision = getSubdivision();
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const sheetTranslate = useRef(new Animated.Value(300)).current;
+  const { buyConfig, fetchOptions } = useOnramp(); 
 
   useEffect(() => {
-    (async () => {
-      try {
-        const cfg = await fetchBuyConfig();
-        const list = (cfg?.countries || []).map((c: any) => c.id).filter(Boolean);
-        setCountries(list);
-        const us = (cfg?.countries || []).find((c: any) => c.id === 'US');
-        setUsSubs(us?.subdivisions || []);
-      } catch {}
-    })();
-  }, []);
+    // Ensure this hook instance has loaded the config
+    if (!buyConfig) {
+      fetchOptions();
+    }
+  }, [buyConfig, fetchOptions]);
+  
+  useEffect(() => {
+    console.log('buyConfig in profile:', buyConfig);
+    if (buyConfig?.countries) {
+      console.log('countries array:', buyConfig.countries);
+      const validCountries = buyConfig.countries.map((c: any) => c.id).filter(Boolean);
+      console.log('mapped country IDs:', validCountries);
+      setCountries(validCountries);
+      
+      const us = buyConfig.countries.find((c: any) => c.id === 'US');
+      console.log('US entry:', us);
+      setUsSubs(us?.subdivisions || []);
+    }
+  }, [buyConfig]);
 
   useEffect(() => {
     const anyVisible = countryPickerVisible || subPickerVisible;

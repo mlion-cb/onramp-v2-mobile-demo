@@ -33,6 +33,8 @@ type OnrampFormProps = {
   isLoadingQuote: boolean;    
   fetchQuote: (formData: any) => void; 
   paymentCurrencies: string[];
+  amount: string;
+  onAmountChange: (amount: string) => void;
 };
 
 /**
@@ -51,9 +53,10 @@ export function OnrampForm({
   currentQuote,       
   isLoadingQuote,     
   fetchQuote,
-  paymentCurrencies         
+  paymentCurrencies,
+  amount,
+  onAmountChange
 }: OnrampFormProps) {
-  const [amount, setAmount] = useState("");
   const [asset, setAsset] = useState("USDC");
   const [network, setNetwork] = useState("Base");
   const [paymentMethod, setPaymentMethod] = useState("GUEST_CHECKOUT_APPLE_PAY");
@@ -74,7 +77,12 @@ export function OnrampForm({
     return isApplePay ? ['USD'] : list;
   }, [isApplePay, paymentCurrencies]);
 
-
+  useEffect(() => {
+    // if Apple Pay selected, force USD
+    if (isApplePay && paymentCurrency !== 'USD') 
+      setPaymentCurrency('USD');
+  }, [isApplePay, paymentCurrency]);
+  
 
   const amountNumber = useMemo(() => {
     const cleaned = amount.replace(/,/g, "");
@@ -124,12 +132,6 @@ export function OnrampForm({
     }
     return arr;
   }, [country, paymentCurrency]);
-
-  useEffect(() => {
-    if (isApplePay && paymentCurrency !== 'USD') {
-      setPaymentCurrency('USD');
-    }
-  }, [isApplePay, paymentCurrency]);
   
   useEffect(() => {
     if (!displayCurrencies.includes(paymentCurrency)) {
@@ -246,20 +248,57 @@ export function OnrampForm({
   }, [isEvmNetwork, address, onAddressChange]);
 
   // Debounced quote fetching
-  useEffect(() => {
-    console.log('Quote useEffect triggered:', { amount, asset, network, address, paymentCurrency });
-    
+  useEffect(() => {    
     const timeoutId = setTimeout(() => {
       if (amount && asset && network) {
-        console.log('Calling fetchQuote with:', { amount, asset, network, address, paymentCurrency });
-        fetchQuote?.({ amount, asset, network, paymentCurrency });
+        fetchQuote?.({ amount, asset, network, paymentCurrency, paymentMethod });
       } else {
         console.log('Missing required fields for quote');
       }
     }, 500);
     
     return () => clearTimeout(timeoutId);
-  }, [amount, asset, network, paymentCurrency, fetchQuote]);
+  }, [amount, asset, network, paymentCurrency, fetchQuote, paymentMethod]);
+
+  const getCurrencyLimits = useCallback(() => {
+    if (!options?.payment_currencies) return null;
+    
+    const currency = options.payment_currencies.find((c: any) => c.id === paymentCurrency);
+    if (!currency?.limits) return null;
+    
+    // Map payment method to limit ID
+    const methodToLimitId = {
+      'GUEST_CHECKOUT_APPLE_PAY': 'APPLE_PAY',
+      'COINBASE_WIDGET': 'CARD', 
+    };
+    
+    const limitId = methodToLimitId[paymentMethod as keyof typeof methodToLimitId] || 'CARD';
+    const limit = currency.limits.find((l: any) => l.id === limitId);
+    
+    if (!limit) return null;
+    
+    return {
+      min: Number(limit.min),
+      max: Number(limit.max),
+      currency: paymentCurrency
+    };
+  }, [options, paymentCurrency, paymentMethod]);
+
+  const limits = getCurrencyLimits();
+
+  const amountError = useMemo(() => {
+    if (!limits || !amount || !Number.isFinite(amountNumber)) return null;
+    
+    if (amountNumber < limits.min) {
+      return `Minimum amount is ${limits.min.toLocaleString()} ${limits.currency}`;
+    }
+    
+    if (amountNumber > limits.max) {
+      return `Maximum amount is ${limits.max.toLocaleString()} ${limits.currency}`;
+    }
+    
+    return null;
+  }, [limits, amount, amountNumber]);
 
   /**
    * Form submission: directly calls API
@@ -297,10 +336,9 @@ export function OnrampForm({
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Buy</Text>
         <View style={styles.inputRow}>
-          <Text style={styles.currencySymbol}>$</Text>
           <TextInput
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={onAmountChange}
             placeholder="0"
             placeholderTextColor={TEXT_SECONDARY}
             keyboardType="decimal-pad"
@@ -314,6 +352,14 @@ export function OnrampForm({
             <Ionicons name="chevron-down" size={16} color={TEXT_SECONDARY} />
           </Pressable>
         </View>
+          {/* Show error or limits */}
+          {amountError ? (
+            <Text style={styles.errorText}>{amountError}</Text>
+          ) : limits ? (
+            <Text style={styles.limitsText}>
+              Limits: {limits.min.toLocaleString()} - {limits.max.toLocaleString()} {limits.currency}
+            </Text>
+          ) : null}
       </View>
   
       {/* Receive Card */}
@@ -747,6 +793,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: TEXT_PRIMARY,
   },
+  limitsText: {
+  fontSize: 12,
+  color: TEXT_SECONDARY,
+  marginTop: 8,
+},
   // Receive styles
   receiveAmountContainer: {
     flex: 1,
