@@ -26,6 +26,7 @@ export default function Index() {
   const [connecting, setConnecting] = useState(false);
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
+  const [amount, setAmount] = useState("");
   const router = useRouter();
   const [pendingForm, setPendingForm] = useState<any | null>(null);
 
@@ -107,7 +108,7 @@ export default function Index() {
   // Fetch options on component mount
   useFocusEffect(
     useCallback(() => {
-      fetchOptions();
+      fetchOptions(); // only refetch options on focus
     }, [fetchOptions])
   );
 
@@ -197,6 +198,8 @@ export default function Index() {
         isLoadingQuote={isLoadingQuote} 
         fetchQuote={fetchQuote}         
         paymentCurrencies={paymentCurrencies}
+        amount={amount}
+        onAmountChange={setAmount}
       />
 
       {applePayVisible && (

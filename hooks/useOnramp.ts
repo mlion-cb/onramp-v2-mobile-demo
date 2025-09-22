@@ -1,4 +1,5 @@
 import { createOnrampSession } from "@/utils/createOnrampSession";
+import { fetchBuyConfig } from "@/utils/fetchBuyConfig";
 import { useCurrentUser } from "@coinbase/cdp-hooks";
 import { useCallback, useMemo, useState } from "react";
 import { OnrampFormData } from "../components/onramp/OnrampForm";
@@ -25,6 +26,8 @@ export function useOnramp() {
   const [currentQuote, setCurrentQuote] = useState<any>(null);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
   const { currentUser } = useCurrentUser(); 
+  const [buyConfig, setBuyConfig] = useState<any>(null);
+
 
 
   /**
@@ -157,8 +160,19 @@ export function useOnramp() {
       const country = getCountry();
       let subdivision = getSubdivision();
       if (country === 'US' && !subdivision) subdivision = 'CA';
-      const opts = await fetchBuyOptions({ country, subdivision });
+      const [opts, cfg] = await Promise.all([
+        fetchBuyOptions({ country, subdivision }),
+        fetchBuyConfig(),
+      ]);
       setOptions(opts);
+        // Filter countries to only those with CARD payment method (Buy & Send)
+        const filteredConfig = {
+          ...cfg,
+          countries: (cfg?.countries || []).filter((country: any) => 
+            country.payment_methods?.some((pm: any) => pm.id === 'CARD')
+          )
+      };
+      setBuyConfig(filteredConfig);
     } catch (error) {
       console.error('Failed to fetch options:', error);
     } finally {
@@ -171,8 +185,10 @@ export function useOnramp() {
     asset: string;
     network: string;
     paymentCurrency: string;
+    paymentMethod?: string;
   }) => {
-    if (!formData.amount || !formData.asset || !formData.network) {
+    const amt = Number.parseFloat(formData?.amount as any);
+    if (!formData.amount || !formData.asset || !formData.network || !Number.isFinite(amt) || amt <= 0) {
       setCurrentQuote(null);
       return;
     }
@@ -186,12 +202,13 @@ export function useOnramp() {
         paymentAmount: formData.amount,
         paymentCurrency: formData.paymentCurrency,
         purchaseCurrency: assetSymbol,
-        destinationNetwork: networkName
+        destinationNetwork: networkName,
+        paymentMethod: formData.paymentMethod || 'COINBASE_WIDGET'
       });
       
       setCurrentQuote(quote);
     } catch (error) {
-      console.error('Failed to fetch quote:', error);
+      console.log('Failed to fetch quote (likely out of limits):', error);
       setCurrentQuote(null);
     } finally {
       setIsLoadingQuote(false);
@@ -230,9 +247,27 @@ export function useOnramp() {
   }, [options]);
 
   const paymentCurrencies = useMemo(() => {
-    const list = options?.payment_currencies.map((currency: any) => currency.id) || ['USD'];
-    return Array.isArray(list) ? list : ['USD'];
-  }, [options]);
+    const country = getCountry();
+  
+    // Try v1 options first (supports array of strings or objects with id)
+    const fromOptions = Array.isArray(options?.payment_currencies)
+      ? options.payment_currencies.map((c: any) => (typeof c === 'string' ? c : c?.id)).filter(Boolean)
+      : [];
+  
+    if (fromOptions.length) return fromOptions;
+  
+    // Else derive from buyConfig by country
+    const entry = Array.isArray(buyConfig?.countries)
+      ? buyConfig.countries.find((c: any) => c.id === country)
+      : null;
+  
+    const fromConfig =
+      (Array.isArray(entry?.payment_currencies) && entry.payment_currencies) ||
+      (Array.isArray(entry?.currencies) && entry.currencies) ||
+      [];
+  
+    return fromConfig.length ? fromConfig : ['USD'];
+  }, [options, buyConfig]);
 
   
   return {
@@ -246,6 +281,7 @@ export function useOnramp() {
     isLoadingQuote,
     currentQuote,
     paymentCurrencies,
+    buyConfig,
     // Actions
     createOrder,
     createWidgetSession,

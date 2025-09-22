@@ -11,7 +11,7 @@ config({ path: '.env' });
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
-console.log(PORT);
+console.log(`Port: ${PORT}; Env: ${process.env.NODE_ENV}`);
 
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
 
@@ -25,11 +25,11 @@ app.use(express.urlencoded({ extended: true }));
 
 // Inbound request logging
 app.use((req, _res, next) => {
-    console.log('Inbound request', {
+    console.log('📥 Inbound request', {
       method: req.method,
       path: req.path,
       origin: req.headers.origin,
-      body: req.body
+      body: req.body ? JSON.stringify(req.body).slice(0, 200) : 'No body'
     });
     next();
   });
@@ -103,11 +103,12 @@ app.post("/server/api", async (req, res) => {
 
     const data = await response.json();
       
-    console.log('Proxied request:', {
+    console.log('📤 Proxied request', {
       url: targetUrl,
+      method: method || 'POST',
       status: response.status,
       ok: response.ok,
-      dataPreview: JSON.stringify(data).slice(0, 1000)
+      dataPreview: data ? JSON.stringify(data).slice(0, 500) : 'No data'
     });
 
     // Return the upstream response (preserve status code)
