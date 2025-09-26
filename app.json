@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "onramp-v2-new",
-    "slug": "onramp-v2-new",
+    "name": "Onramp V2 Demo",
+    "slug": "onramp-v2-demo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "onrampv2new",
+    "scheme": "onrampdemo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {

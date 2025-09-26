@@ -6,7 +6,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { ApplePayWidget, OnrampForm, useOnramp } from "../../components";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
-import { getCountry, getCurrentWalletAddress, getSubdivision, getVerifiedPhone, isPhoneFresh60d } from "../../utils/sharedState";
+import { getCountry, getCurrentWalletAddress, getPendingForm, getSandboxMode, getSubdivision, getVerifiedPhone, isPhoneFresh60d, setPendingForm } from "../../utils/sharedState";
 
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
@@ -28,7 +28,7 @@ export default function Index() {
   const [alertMessage, setAlertMessage] = useState("");
   const [amount, setAmount] = useState("");
   const router = useRouter();
-  const [pendingForm, setPendingForm] = useState<any | null>(null);
+  const pendingForm = getPendingForm();
 
 
   const { isSignedIn } = useIsSignedIn();
@@ -46,20 +46,46 @@ export default function Index() {
   useEffect(() => {
     if (!isSignedIn) return;
   
+    // prefer CDP user → fallback to shared state
+    const sa = (currentUser?.evmSmartAccounts?.[0] as string) || (getCurrentWalletAddress() || '');
+    if (sa) {
+      setConnectedAddress(sa);
+      if (!address) setAddress(sa);
+      return;
+    }
+    // Poll if not found immediately
     let tries = 0;
     const t = setInterval(() => {
-      // prefer CDP user → fallback to shared state
-      const sa = (currentUser?.evmSmartAccounts?.[0] as string) || (getCurrentWalletAddress() || '');
-      if (sa) {
-        setConnectedAddress(sa);
-        if (!address) setAddress(sa);
+      const sa = currentUser?.evmSmartAccounts?.[0] as string;
+      const shared = getCurrentWalletAddress() || '';
+      if (sa || shared) {
+        setConnectedAddress(sa || shared);
+        if (!address) setAddress(sa || shared);
         clearInterval(t);
       }
-      if (++tries > 20) clearInterval(t); // ~10s max
+      if (++tries > 10) clearInterval(t); // Reduce to 5s max
     }, 500);
-  
+
     return () => clearInterval(t);
   }, [isSignedIn, currentUser]);
+
+  useFocusEffect(
+    useCallback(() => {
+      // Check wallet status when tab becomes active
+      if (isSignedIn) {
+        const sa = currentUser?.evmSmartAccounts?.[0] as string;
+        const shared = getCurrentWalletAddress() || '';
+        const bestAddress = sa || shared;
+        
+        if (bestAddress) {
+          setConnectedAddress(bestAddress);
+          if (!address) setAddress(bestAddress);
+        }
+      } else {
+        setConnectedAddress('');
+      }
+    }, [isSignedIn, currentUser, address])
+  );
 
   
 
@@ -109,7 +135,11 @@ export default function Index() {
   useFocusEffect(
     useCallback(() => {
       fetchOptions(); // only refetch options on focus
-    }, [fetchOptions])
+      // Reset if no pending form (user cancelled)
+      if (!getPendingForm() && isProcessingPayment) {
+        setIsProcessingPayment(false);
+      }
+    }, [fetchOptions, isProcessingPayment, setIsProcessingPayment])
   );
 
   // 1) Resume after returning to this tab
@@ -117,45 +147,72 @@ export default function Index() {
     useCallback(() => {
       if (!pendingForm) return;
 
-      // If pending was for Coinbase Widget, do it immediately (no phone gate)
-      if ((pendingForm.paymentMethod || '').toUpperCase() === 'COINBASE_WIDGET') {
-        (async () => {
-          const url = await createWidgetSession(pendingForm);
-          if (url) {
-            Linking.openURL(url);
+      const handlePendingForm = async () => {
+        try {
+          // If pending was for Coinbase Widget, do it immediately (no phone gate)
+          if ((pendingForm.paymentMethod || '').toUpperCase() === 'COINBASE_WIDGET') {
+            (async () => {
+              const url = await createWidgetSession(pendingForm);
+              if (url) {
+                Linking.openURL(url);
+                setPendingForm(null);
+              }
+            })();
+            return;
+          }
+
+          // Apple Pay path still requires fresh phone
+          const isSandbox = getSandboxMode();
+          if (isSandbox || (isPhoneFresh60d() && getVerifiedPhone())) {
+            const phone = getVerifiedPhone();
+            createOrder({ ...pendingForm, phoneNumber: phone });
             setPendingForm(null);
           }
-        })();
-        return;
-      }
-
-      // Apple Pay path still requires fresh phone
-      if (isPhoneFresh60d() && getVerifiedPhone()) {
-        const phone = getVerifiedPhone();
-        createOrder({ ...pendingForm, phoneNumber: phone });
-        setPendingForm(null);
-      }
+        } catch (error) {
+          setPendingForm(null); // Clear pending form on error
+          setApplePayAlert({
+            visible: true,
+            title: 'Transaction Failed',
+            message: error instanceof Error ? error.message : 'Unable to create transaction. Please try again.',
+            type: 'error'
+          });
+        }
+      };
+      handlePendingForm();
     }, [pendingForm, createOrder, createWidgetSession])
   );
 
   const handleSubmit = useCallback(async (formData: any) => {
-    // Coinbase Widget: skip phone verification
-    if ((formData.paymentMethod || '').toUpperCase() === 'COINBASE_WIDGET') {
-      const url = await createWidgetSession(formData);
-      if (url) Linking.openURL(url);
-      return; // do not call createOrder()
+    setIsProcessingPayment(true);
+    try {
+      // Coinbase Widget: skip phone verification
+      if ((formData.paymentMethod || '').toUpperCase() === 'COINBASE_WIDGET') {
+        const url = await createWidgetSession(formData);
+        if (url) Linking.openURL(url);
+        return; // do not call createOrder()
+      }
+    
+      // Apple Pay: require phone verification
+      const isSandbox = getSandboxMode();
+      const fresh = isPhoneFresh60d();
+      const phone = getVerifiedPhone();
+      if (!isSandbox && (!fresh || !phone)) {
+        setPendingForm(formData); 
+        router.push({ pathname: '/phone-verify', params: { initialPhone: phone || '' } });
+        return;
+      }
+    
+      await createOrder({ ...formData });
+    } catch (error) {
+      setApplePayAlert({
+        visible: true,
+        title: 'Transaction Failed',
+        message: error instanceof Error ? error.message : 'Unable to create transaction. Please try again.',
+        type: 'error'
+      });
+      console.error('Error submitting form:', error);
+      setIsProcessingPayment(false);
     }
-  
-    // Apple Pay: require phone verification
-    const fresh = isPhoneFresh60d();
-    const phone = getVerifiedPhone();
-    if (!fresh || !phone) {
-      setPendingForm(formData);
-      router.push({ pathname: '/phone-verify', params: { initialPhone: phone || '' } });
-      return;
-    }
-  
-    createOrder({ ...formData });
   }, [createOrder, createWidgetSession, router]);
     
   

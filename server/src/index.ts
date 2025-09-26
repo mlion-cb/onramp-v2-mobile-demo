@@ -15,10 +15,28 @@ console.log(`Port: ${PORT}; Env: ${process.env.NODE_ENV}`);
 
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
 
+const getPublicIp = async () => {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    const response = await fetch('https://api.ipify.org?format=json', { 
+      signal: controller.signal 
+    });
+    clearTimeout(timeoutId);
+    
+    const data = await response.json();
+    return data.ip;
+  } catch {
+    return null;
+  }
+};
+
+app.set('trust proxy', false); // Don't trust proxy headers
 
 app.use(cors({
-    origin: true,
-    credentials: true
+    origin: false, // Deny all browser requests - only works for mobile app 
+    credentials: false // Mobile apps don't need credentials
   }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -29,7 +47,7 @@ app.use((req, _res, next) => {
       method: req.method,
       path: req.path,
       origin: req.headers.origin,
-      body: req.body ? JSON.stringify(req.body).slice(0, 200) : 'No body'
+      body: req.body ? JSON.stringify(req.body).slice(0, 500) : 'No body'
     });
     next();
   });
@@ -54,7 +72,17 @@ app.get("/health", (_req, res) => {
  * - Error forwarding with proper status codes
  */
 app.post("/server/api", async (req, res) => {
+
   try {
+    let rawIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
+    let clientIp = rawIp.replace(/^::ffff:/, ''); // Remove IPv6 wrapper
+    
+    // If private IP detected, get public IP
+    const isPrivateIp = /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.)/.test(clientIp);
+    if (isPrivateIp) {
+      const publicIp = await getPublicIp();
+      if (publicIp) clientIp = publicIp;
+    }
     // Validate the request structure
     const requestSchema = z.object({
       url: z.string(), // Must be a valid URL
@@ -74,6 +102,11 @@ app.post("/server/api", async (req, res) => {
     // Generate JWT for Coinbase API calls (if needed)
     const urlObj = new URL(targetUrl);
     let authToken = null;
+
+    const isOnrampRequest = targetUrl.includes('/onramp/');
+    const finalBody = isOnrampRequest ? { ...targetBody, clientIp } : targetBody;
+    
+    console.log('finalBody', finalBody);
     
     // Auto-generate JWT for Coinbase API calls only
     if (urlObj.hostname === "api.developer.coinbase.com" || urlObj.hostname === "api.cdp.coinbase.com") {
@@ -98,7 +131,7 @@ app.post("/server/api", async (req, res) => {
     const response = await fetch(targetUrl, {
       method: method || 'POST',
       headers: headers,
-      ...(method === 'POST' && targetBody && { body: JSON.stringify(targetBody) })
+      ...(method === 'POST' && finalBody && { body: JSON.stringify(finalBody) })
     });
 
     const data = await response.json();
@@ -108,7 +141,7 @@ app.post("/server/api", async (req, res) => {
       method: method || 'POST',
       status: response.status,
       ok: response.ok,
-      dataPreview: data ? JSON.stringify(data).slice(0, 500) : 'No data'
+      dataPreview: data ? JSON.stringify(data).slice(0, 700) : 'No data'
     });
 
     // Return the upstream response (preserve status code)

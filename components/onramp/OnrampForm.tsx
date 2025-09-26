@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { COLORS } from '../../constants/Colors';
-import { getCountry } from '../../utils/sharedState';
+import { getCountry, getSandboxMode } from '../../utils/sharedState';
 import { SwipeToConfirm } from '../ui/SwipeToConfirm';
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE, SILVER } = COLORS;
@@ -102,7 +102,12 @@ export function OnrampForm({
   const isAmountValid = Number.isFinite(amountNumber) && amountNumber > 0;
   const isAddressValid = /^0x[0-9a-fA-F]{40}$/.test(address);
   // Only allow submit when on an EVM network and address is valid
-  const isFormValid = isAmountValid && !!network && !!asset && (isEvmNetwork ? isAddressValid : false);
+  const isSandbox = getSandboxMode();
+  const hasValidAddress = isSandbox 
+    ? !!address && address.trim().length > 0  // In sandbox, just need any non-empty address
+    : (isEvmNetwork ? isAddressValid : false); // In production, need valid EVM address
+
+  const isFormValid = isAmountValid && !!network && !!asset && hasValidAddress;
   /**
    * Dynamic filtering: changing asset updates available networks, and vice versa
    * 
@@ -247,44 +252,90 @@ export function OnrampForm({
     }
   }, [isEvmNetwork, address, onAddressChange]);
 
-  // Debounced quote fetching
-  useEffect(() => {    
-    const timeoutId = setTimeout(() => {
-      if (amount && asset && network) {
-        fetchQuote?.({ amount, asset, network, paymentCurrency, paymentMethod });
-      } else {
-        console.log('Missing required fields for quote');
-      }
-    }, 500);
-    
-    return () => clearTimeout(timeoutId);
-  }, [amount, asset, network, paymentCurrency, fetchQuote, paymentMethod]);
-
   const getCurrencyLimits = useCallback(() => {
     if (!options?.payment_currencies) return null;
     
     const currency = options.payment_currencies.find((c: any) => c.id === paymentCurrency);
     if (!currency?.limits) return null;
     
-    // Map payment method to limit ID
-    const methodToLimitId = {
-      'GUEST_CHECKOUT_APPLE_PAY': 'APPLE_PAY',
-      'COINBASE_WIDGET': 'CARD', 
-    };
+    if (paymentMethod === 'GUEST_CHECKOUT_APPLE_PAY') {
+      return {
+        min: 0,
+        max: 500,
+        currency: paymentCurrency,
+        display: `$0 - $500 ${paymentCurrency}`,
+        quotePaymentMethod: 'GUEST_CHECKOUT_APPLE_PAY'
+      };
+    } else if (paymentMethod === 'COINBASE_WIDGET') {
+      const allLimits = currency.limits || [];
+      if (!allLimits.length) return null;
+      
+      // Find the best payment method for current amount
+      let bestMethod = 'CARD'; // default fallback
+      if (Number.isFinite(amountNumber) && amountNumber > 0) {
+        // First check if CARD can handle this amount
+        const cardLimit = allLimits.find((l: any) => l.id === 'CARD');
+        if (cardLimit && amountNumber >= Number(cardLimit.min) && amountNumber <= Number(cardLimit.max)) {
+          bestMethod = 'CARD'; // Use CARD if it can handle the amount
+        } else {
+          // CARD can't handle it, find alternative with higher limit
+          const validMethods = allLimits.filter((l: any) => {
+            const min = Number(l.min);
+            const max = Number(l.max);
+            return amountNumber >= min && amountNumber <= max && Number(l.max) > Number(cardLimit?.max || 0);
+          });
+          
+          if (validMethods.length > 0) {
+            // Use the method with highest limit among valid alternatives
+            bestMethod = validMethods.reduce((best: any, current: any) => 
+              Number(current.max) > Number(best.max) ? current : best
+            ).id;
+          }
+        }
+      }
+      
+      const limitTexts = allLimits.map((l: any) => {
+        const method = l.id.replace('_', ' ').toLowerCase();
+        const min = Number(l.min).toLocaleString();
+        const max = Number(l.max).toLocaleString();
+        return `${method}: ${min}-${max} ${paymentCurrency}`;
+      });
+      
+      return {
+        min: Math.min(...allLimits.map((l: any) => Number(l.min))),
+        max: Math.max(...allLimits.map((l: any) => Number(l.max))),
+        currency: paymentCurrency,
+        display: limitTexts.join(' • '),
+        quotePaymentMethod: bestMethod
+      };
+    }
     
-    const limitId = methodToLimitId[paymentMethod as keyof typeof methodToLimitId] || 'CARD';
-    const limit = currency.limits.find((l: any) => l.id === limitId);
-    
-    if (!limit) return null;
-    
-    return {
-      min: Number(limit.min),
-      max: Number(limit.max),
-      currency: paymentCurrency
-    };
-  }, [options, paymentCurrency, paymentMethod]);
+    return null;
+  }, [options, paymentCurrency, paymentMethod, amountNumber]);
 
   const limits = getCurrencyLimits();
+
+  // Debounced quote fetching
+  useEffect(() => {    
+    const timeoutId = setTimeout(() => {
+      if (amount && asset && network) {
+        const limits = getCurrencyLimits();
+        const quoteMethod = limits?.quotePaymentMethod || 'CARD';
+        
+        fetchQuote?.({ 
+          amount, 
+          asset, 
+          network, 
+          paymentCurrency, 
+          paymentMethod: paymentMethod === 'COINBASE_WIDGET' ? quoteMethod : paymentMethod
+        });
+      } else {
+        console.log('Missing required fields for quote');
+      }
+    }, 500);
+    
+    return () => clearTimeout(timeoutId);
+  }, [amount, asset, network, paymentCurrency, fetchQuote, paymentMethod, getCurrencyLimits]);
 
   const amountError = useMemo(() => {
     if (!limits || !amount || !Number.isFinite(amountNumber)) return null;
@@ -356,9 +407,11 @@ export function OnrampForm({
           {amountError ? (
             <Text style={styles.errorText}>{amountError}</Text>
           ) : limits ? (
+            <View>
             <Text style={styles.limitsText}>
-              Limits: {limits.min.toLocaleString()} - {limits.max.toLocaleString()} {limits.currency}
+              {limits.display}
             </Text>
+          </View>
           ) : null}
       </View>
   
@@ -472,14 +525,61 @@ export function OnrampForm({
         </View>
       )}
 
+        {/* Quote Disclaimer */}
+        {currentQuote && paymentMethod === 'COINBASE_WIDGET' && limits?.quotePaymentMethod && (
+        <View style={styles.disclaimerCard}>
+          <Text style={styles.disclaimerText}>
+            💡 Quote based on {limits.quotePaymentMethod} payment method. 
+            Final pricing may vary if you select a different payment method during checkout.
+          </Text>
+        </View>
+      )}
+
       {/* Wallet Notification */}
-      {!isEvmNetwork ? (
-      <Text style={styles.helper}>
-        This network is available for Onramp, but Embedded Wallet is not supported at the moment. Select an EVM network to proceed.
-      </Text>
-    ) : !isAddressValid ? (
-      <Text style={styles.errorText}>Connect a valid EVM address to continue</Text>
-    ) : null}
+      {!getSandboxMode() && !isEvmNetwork ? (
+        <View style={styles.notificationCard}>
+          <View style={styles.notificationHeader}>
+            <Ionicons name="information-circle" size={20} color="#FF8C00" />
+            <Text style={styles.notificationTitle}>Network Not Supported</Text>
+          </View>
+          <Text style={styles.notificationText}>
+            This network is available for Onramp, but Embedded Wallet is not supported at the moment. Select an EVM network to proceed.
+          </Text>
+        </View>
+      ) : !getSandboxMode() && !isAddressValid ? (
+        <View style={[styles.notificationCard, styles.errorCard]}>
+          <View style={styles.notificationHeader}>
+            <Ionicons name="alert-circle" size={20} color="#FF6B6B" />
+            <Text style={[styles.notificationTitle, { color: '#FF6B6B' }]}>Wallet Required</Text>
+          </View>
+          <Text style={styles.notificationText}>
+            Connect a valid EVM address to continue
+          </Text>
+        </View>
+      ) : getSandboxMode() && !address ? (
+        <View style={[styles.notificationCard, styles.errorCard]}>
+          <View style={styles.notificationHeader}>
+            <Ionicons name="alert-circle" size={20} color="#FF6B6B" />
+            <Text style={[styles.notificationTitle, { color: '#FF6B6B' }]}>Address Required</Text>
+          </View>
+          <Text style={styles.notificationText}>
+            Enter a wallet address in Profile → Sandbox Wallet, or connect an Embedded Wallet to continue testing.
+          </Text>
+        </View>
+      ) : getSandboxMode() ? (
+        <View style={[styles.notificationCard, styles.sandboxCard]}>
+          <View style={styles.notificationHeader}>
+            <Ionicons name="flask" size={20} color={BLUE} />
+            <Text style={[styles.notificationTitle, { color: BLUE }]}>Sandbox Mode</Text>
+          </View>
+          <Text style={styles.notificationText}>
+            Testing with address: {address}
+          </Text>
+          <Text style={[styles.notificationText, { marginTop: 4, fontStyle: 'italic' }]}>
+            Head to Profile page to input a manual wallet address, or connect to an Embedded Wallet (EVM Network).
+          </Text>
+        </View>
+      ) : null}
   
       <SwipeToConfirm
         label="Swipe to Deposit"
@@ -949,6 +1049,18 @@ const styles = StyleSheet.create({
   quoteLoader: {
     marginRight: 8,
   },
+  disclaimerCard: {
+    backgroundColor: BLUE + '10', // Very light blue background
+    borderRadius: 8,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: BLUE,
+  },
+  disclaimerText: {
+    fontSize: 12,
+    color: TEXT_SECONDARY,
+    lineHeight: 16,
+  },
   input: {
     backgroundColor: CARD_BG,
     borderColor: BORDER,
@@ -1126,9 +1238,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 2, // Align with first line of text
   },
-  checkboxChecked: {
-    backgroundColor: BLUE,
-    borderColor: BLUE,
+  notificationCard: {
+    backgroundColor: CARD_BG,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    marginBottom: 12,
+  },
+  errorCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B6B',
+    backgroundColor: '#FF6B6B' + '08', // Very light red tint
+  },
+  sandboxCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: BLUE,
+    backgroundColor: BLUE + '08', // Very light blue tint
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  notificationTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: TEXT_PRIMARY,
+  },
+  notificationText: {
+    fontSize: 13,
+    color: TEXT_SECONDARY,
+    lineHeight: 18,
   },
   termsText: {
     flex: 1,

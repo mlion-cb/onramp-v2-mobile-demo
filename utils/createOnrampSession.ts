@@ -34,8 +34,13 @@ try {
     contentType: res.headers.get('content-type'),
     bodyPreview: responseText.slice(0, 1000)
   });
-  if (!res.ok) 
-    throw new Error(`HTTP error! status: ${res.status}`);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    const errorMessage = errorData?.errorMessage 
+      ? `${errorData.errorType}: ${errorData.errorMessage}` 
+      : `HTTP error! status: ${res.status}`;
+    throw new Error(errorMessage);
+  }
   return res.json(); // { session: { onrampUrl }, quote?: {...} }
 } catch (error) {
     console.error("API request failed:", error);

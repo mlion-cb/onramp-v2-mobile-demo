@@ -122,7 +122,7 @@ export function ApplePayWidget({
             case "onramp_api.commit_error":
             case "onramp_api.load_error":
               console.log('Payment cancelled or error,', data.data);
-              onAlert?.("Payment Error", `The payment failed: ${data.data.errorMessage}`, 'error');
+              onAlert?.("Payment Error", `The payment failed: ${data.data.errorCode} - ${data.data.errorMessage}`, 'error');
               // Stop loading and close
               setIsProcessingPayment?.(false);
               onClose?.();
@@ -165,7 +165,7 @@ export function ApplePayWidget({
             case "onramp_api.polling_error":
               console.log('Transaction failed on blockchain', data.data);
               setTransactionStatus?.('error');
-              onAlert?.("Transaction Failed", `There was an issue processing your transaction: ${data.data.errorMessage}`, 'error');
+              onAlert?.("Transaction Failed", `There was an issue processing your transaction: ${data.data.errorCode} - ${data.data.errorMessage}`, 'error');
               setTimeout(() => onClose?.(), 2000);
               break;
 

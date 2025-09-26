@@ -25,7 +25,11 @@ export async function createApplePayOrder(payload: any) {
     const responseText = await responseClone.text().catch(() => '<non-text body>');
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorData = await response.json().catch(() => null);
+      const errorMessage = errorData?.errorMessage 
+        ? `${errorData.errorType}: ${errorData.errorMessage}`
+        : `HTTP error! status: ${response.status}`;
+      throw new Error(errorMessage);
     }
 
     const responseJson = await response.json();
