@@ -32,6 +32,10 @@
   },
   "exclude": [
     "node_modules",
-    "../mobile"
+    "../mobile",
+    "api"
+  ],
+  "include": [
+    "src/**/*"
   ]
 }
