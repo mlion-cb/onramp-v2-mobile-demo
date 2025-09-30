@@ -1,4 +1,4 @@
-import app from '../src/app.js';
+import app from '../src/app';
 
 export default function handler(req, res) {
   if (req.url && req.url.startsWith('/api')) {
