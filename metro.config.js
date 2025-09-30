@@ -2,11 +2,13 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
+const useExpoCrypto = process.env.EXPO_PUBLIC_USE_EXPO_CRYPTO === 'true';
+
 config.resolver = {
   ...config.resolver,
   alias: {
     ...config.resolver.alias,
-    crypto: 'react-native-quick-crypto',
+    crypto: useExpoCrypto ? 'expo-crypto' : 'react-native-quick-crypto',
     stream: 'readable-stream',
     buffer: '@craftzdog/react-native-buffer',
     util: 'util',
