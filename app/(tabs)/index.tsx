@@ -6,7 +6,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { ApplePayWidget, OnrampForm, useOnramp } from "../../components";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
-import { getCountry, getCurrentWalletAddress, getPendingForm, getSandboxMode, getSubdivision, getVerifiedPhone, isPhoneFresh60d, setPendingForm } from "../../utils/sharedState";
+import { clearPhoneVerifyWasCanceled, getCountry, getCurrentWalletAddress, getPendingForm, getPhoneVerifyWasCanceled, getSandboxMode, getSubdivision, getVerifiedPhone, isPhoneFresh60d, setPendingForm } from "../../utils/sharedState";
 
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
@@ -135,11 +135,11 @@ export default function Index() {
   useFocusEffect(
     useCallback(() => {
       fetchOptions(); // only refetch options on focus
-      // Reset if no pending form (user cancelled)
-      if (!getPendingForm() && isProcessingPayment) {
-        setIsProcessingPayment(false);
+      if (getPhoneVerifyWasCanceled()) {
+        setIsProcessingPayment(false); // reset slider
+        clearPhoneVerifyWasCanceled();
       }
-    }, [fetchOptions, isProcessingPayment, setIsProcessingPayment])
+    }, [fetchOptions, setIsProcessingPayment])
   );
 
   // 1) Resume after returning to this tab

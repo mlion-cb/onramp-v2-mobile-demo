@@ -5,7 +5,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaV
 import { CoinbaseAlert } from '../components/ui/CoinbaseAlerts';
 import { BASE_URL } from '../constants/BASE_URL';
 import { COLORS } from '../constants/Colors';
-import { clearPendingForm } from '../utils/sharedState';
+import { clearPendingForm, markPhoneVerifyCanceled } from '../utils/sharedState';
 
 const { DARK_BG, CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BORDER, BLUE, WHITE } = COLORS;
 
@@ -104,6 +104,7 @@ export default function PhoneVerifyScreen() {
 
   const handleBack = () => {
     clearPendingForm();
+    markPhoneVerifyCanceled();
     router.back();
   };
 

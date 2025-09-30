@@ -41,6 +41,12 @@ export const setCountry = (c: string) => { currentCountry = c; };
 export const getSubdivision = () => currentSubdivision;
 export const setSubdivision = (s: string) => { currentSubdivision = s; };
 
+let phoneVerifyCanceled = false;
+
+export const markPhoneVerifyCanceled = () => { phoneVerifyCanceled = true; };
+export const getPhoneVerifyWasCanceled = () => phoneVerifyCanceled;
+export const clearPhoneVerifyWasCanceled = () => { phoneVerifyCanceled = false; };
+
 let sandboxMode: boolean = true;
 
 export const getSandboxMode = () => sandboxMode;
