@@ -1,13 +1,10 @@
 import cors from 'cors';
-import { config } from 'dotenv';
 import express from 'express';
 import twilio from 'twilio';
 import { z } from 'zod';
 
 import { generateJwt } from '@coinbase/cdp-sdk/auth';
-
-config({ path: '.env.local' });
-config({ path: '.env' });
+import { resolveClientIp } from './ip.js';
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -15,29 +12,15 @@ console.log(`Port: ${PORT}; Env: ${process.env.NODE_ENV}`);
 
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
 
-const getPublicIp = async () => {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    
-    const response = await fetch('https://api.ipify.org?format=json', { 
-      signal: controller.signal 
-    });
-    clearTimeout(timeoutId);
-    
-    const data = await response.json();
-    return data.ip;
-  } catch {
-    return null;
-  }
-};
+// On Vercel, trust proxy to read x-forwarded-for
+app.set('trust proxy', true); 
 
-app.set('trust proxy', false); // Don't trust proxy headers
-
+// Or not use CORS at all for mobile apps
 app.use(cors({
     origin: false, // Deny all browser requests - only works for mobile app 
     credentials: false // Mobile apps don't need credentials
   }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -75,14 +58,8 @@ app.post("/server/api", async (req, res) => {
 
   try {
     let rawIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
-    let clientIp = rawIp.replace(/^::ffff:/, ''); // Remove IPv6 wrapper
+    const clientIp = await resolveClientIp(req);
     
-    // If private IP detected, get public IP
-    const isPrivateIp = /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.)/.test(clientIp);
-    if (isPrivateIp) {
-      const publicIp = await getPublicIp();
-      if (publicIp) clientIp = publicIp;
-    }
     // Validate the request structure
     const requestSchema = z.object({
       url: z.string(), // Must be a valid URL
@@ -93,7 +70,7 @@ app.post("/server/api", async (req, res) => {
 
     const parsed = requestSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: z.treeifyError(parsed.error) });
+      return res.status(400).json({ error: parsed.error.flatten() });
     }
 
     const { url: targetUrl, method: method, body: targetBody, headers: additionalHeaders } = parsed.data;
@@ -156,10 +133,6 @@ app.post("/server/api", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`API listening on http://localhost:${PORT}`);
-});
-
 
 app.post('/auth/sms/start', async (req, res) => {
   try {
@@ -188,3 +161,5 @@ app.post('/auth/sms/verify', async (req, res) => {
     return res.status(500).json({ error: e.message || 'twilio verify error' });
   }
 });
+
+export default app;
