@@ -27,11 +27,33 @@ let verifiedPhoneAt: number | null = null;
 let currentCountry: string = 'US';
 let currentSubdivision: string = 'CA';
 
+let manualWalletAddress: string | null = null;
+
+let pendingTransactionForm: any = null;
+
+export const setPendingForm = (form: any) => { pendingTransactionForm = form; };
+export const getPendingForm = () => pendingTransactionForm;
+export const clearPendingForm = () => { pendingTransactionForm = null; };
+
 export const getCountry = () => currentCountry;
 export const setCountry = (c: string) => { currentCountry = c; };
 
 export const getSubdivision = () => currentSubdivision;
 export const setSubdivision = (s: string) => { currentSubdivision = s; };
+
+let phoneVerifyCanceled = false;
+
+export const markPhoneVerifyCanceled = () => { phoneVerifyCanceled = true; };
+export const getPhoneVerifyWasCanceled = () => phoneVerifyCanceled;
+export const clearPhoneVerifyWasCanceled = () => { phoneVerifyCanceled = false; };
+
+let sandboxMode: boolean = true;
+
+export const getSandboxMode = () => sandboxMode;
+export const setSandboxMode = (enabled: boolean) => { 
+  sandboxMode = enabled;
+  console.log('Sandbox mode:', enabled ? 'ENABLED' : 'DISABLED');
+};
 
 
 export const setCurrentPartnerUserRef = (ref: string | null) => {
@@ -44,11 +66,30 @@ export const getCurrentPartnerUserRef = () => {
   return currentPartnerUserRef;
 };
 
+export const setManualWalletAddress = (addr: string | null) => {
+  manualWalletAddress = addr;
+};
+
+export const getManualWalletAddress = () => manualWalletAddress;
+
 export const setCurrentWalletAddress = (addr: string | null) => {
   currentWalletAddress = addr;
 };
 
-export const getCurrentWalletAddress = () => currentWalletAddress;
+
+// utils/sharedState.ts - document wallet address priority
+/**
+ * Wallet address priority system:
+ * 1. Connected CDP wallet (production)
+ * 2. Manual input (sandbox only)
+ * 3. null (no wallet)
+ */
+export const getCurrentWalletAddress = () => {
+  // Priority: connected wallet > manual address (sandbox only) > null
+  if (currentWalletAddress) return currentWalletAddress;
+  if (sandboxMode && manualWalletAddress) return manualWalletAddress;
+  return null;
+};
 
 export const setVerifiedPhone = async (phone: string | null) => {
   verifiedPhone = phone;
@@ -79,4 +120,30 @@ export const daysUntilExpiry = () => {
   if (!verifiedPhoneAt) return -1;
   const rem = verifiedPhoneAt + PHONE_TTL_MS - Date.now();
   return Math.ceil(rem / (24 * 60 * 60 * 1000));
+};
+
+export const formatPhoneDisplay = (phone: string | null): string => {
+  if (!phone) return '';
+  
+  // Remove all non-digits
+  const digits = phone.replace(/\D/g, '');
+  
+  // Handle +1 prefix (US numbers are 11 digits total)
+  if (digits.length === 11 && digits.startsWith('1')) {
+    const areaCode = digits.slice(1, 4);
+    const exchange = digits.slice(4, 7);
+    const number = digits.slice(7, 11);
+    return `+1 (${areaCode}) ${exchange}-${number}`;
+  }
+  
+  // Handle 10-digit US numbers (add +1)
+  if (digits.length === 10) {
+    const areaCode = digits.slice(0, 3);
+    const exchange = digits.slice(3, 6);
+    const number = digits.slice(6, 10);
+    return `+1 (${areaCode}) ${exchange}-${number}`;
+  }
+  
+  // Fallback: return as-is if not a standard US format
+  return phone;
 };

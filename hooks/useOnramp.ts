@@ -6,7 +6,7 @@ import { OnrampFormData } from "../components/onramp/OnrampForm";
 import { createApplePayOrder } from "../utils/createApplePayOrder";
 import { fetchBuyOptions } from "../utils/fetchBuyOptions";
 import { fetchBuyQuote } from "../utils/fetchBuyQuote";
-import { getCountry, getSubdivision, getVerifiedPhone, getVerifiedPhoneAt, isPhoneFresh60d, setCurrentPartnerUserRef, setSubdivision } from "../utils/sharedState";
+import { getCountry, getSandboxMode, getSubdivision, getVerifiedPhone, getVerifiedPhoneAt, isPhoneFresh60d, setCurrentPartnerUserRef, setSubdivision } from "../utils/sharedState";
 
 
 export type PaymentMethodOption = { display: string; value: string };
@@ -19,7 +19,6 @@ export function useOnramp() {
   // These states from index.tsx:
   const [applePayVisible, setApplePayVisible] = useState(false);
   const [hostedUrl, setHostedUrl] = useState('');
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [transactionStatus, setTransactionStatus] = useState<'pending' | 'success' | 'error' | null>(null);
   const [options, setOptions] = useState<any>(null);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
@@ -27,6 +26,7 @@ export function useOnramp() {
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
   const { currentUser } = useCurrentUser(); 
   const [buyConfig, setBuyConfig] = useState<any>(null);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
 
 
@@ -65,16 +65,20 @@ export function useOnramp() {
       setIsProcessingPayment(true); // Start loading
 
       // Get email from CDP user, fallback to placeholder
-      const userEmail = currentUser?.authenticationMethods.email?.email || 'noemail@example.com';
+      const userEmail = currentUser?.authenticationMethods.email?.email || 'noemail@test.com';
 
       // Generate unique user reference for transaction tracking
-      const partnerUserRef = `${formData.sandbox ? "sandbox-" : ""}user-${formData.address}`;      
+      const sandboxPrefix = getSandboxMode() ? "sandbox-" : "";
+      const partnerUserRef = `${sandboxPrefix}user-${formData.address}`;      
       setCurrentPartnerUserRef(partnerUserRef);
 
-      const phone = getVerifiedPhone();
-      const phoneAt = getVerifiedPhoneAt();
-      if (!phone || !isPhoneFresh60d()) {
-        throw new Error('Phone not verified or expired'); // handle in caller/alert
+      let phone = getVerifiedPhone();
+      let phoneAt = getVerifiedPhoneAt();
+      if (getSandboxMode() && (!phone || !isPhoneFresh60d())) {
+        phone = '+12345678901'; // Mock US number for sandbox
+        phoneAt = Date.now();
+      } else if (!phone || !isPhoneFresh60d()) {
+        throw new Error('Phone not verified or expired');
       }
 
       // Map form values to API format (display names → API values)
@@ -135,7 +139,11 @@ export function useOnramp() {
         subdivision,
       });
   
-      const url = res?.session?.onrampUrl;
+      let url = res?.session?.onrampUrl;
+      if (getSandboxMode() && url) {
+        url = url.replace('pay.coinbase.com', 'pay-sandbox.coinbase.com');
+      }
+      
       if (!url) throw new Error('No onrampUrl returned');
       return url;
     } finally {
@@ -180,6 +188,12 @@ export function useOnramp() {
     }
   }, []);
 
+  // hooks/useOnramp.ts - add comment about dual quote system
+  /**
+   * Quote fetching strategy:
+   * - Apple Pay: Uses v2 orders API (USD only, requires phone)
+   * - Coinbase Widget: Uses v2 session API (multi-currency based on options, no phone required)
+   */
   const fetchQuote = useCallback(async (formData: {
     amount: string;
     asset: string;

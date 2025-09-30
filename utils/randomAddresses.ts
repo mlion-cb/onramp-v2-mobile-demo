@@ -16,20 +16,20 @@ export const demoAddressForNetwork = (network: string) => {
 
   if (n.includes('sol')) {
     // Solana: 44-char base58
-    return rand(BASE58, 44);
+    return '11111111111111111111111111111112'; //  Demo address for quote
   }
 
   if (n.includes('btc') || n.includes('bitcoin')) {
     // Bitcoin bech32-like
-    return 'bc1q' + rand(BECH32_LOW, 38);
+    return '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'; // Genesis block address for demo
   }
 
   if (n.includes('litecoin') || n.includes('ltc')) {
-    return 'ltc1q' + rand(BECH32_LOW, 38);
+    return 'LM2WMpR1Rp6j3Sa59cMXMs1SPzj9eXpGc1'; //  Demo address for quote
   }
 
   if (n.includes('cosmos')) {
-    return 'cosmos1' + rand(BECH32_LOW, 38);
+    return 'cosmos1depk54cuajgkzea6zpgkq36tnjwdzv4afc3d27'; //  Demo address for quote
   }
 
   // Fallback to EVM

@@ -46,14 +46,15 @@ export async function fetchBuyQuote(payload: {
     const country = getCountry();
     const subdivision = getSubdivision();
     
-    const v1Payload = {
+    const v2Payload = {
       country,
       subdivision,
       paymentCurrency: payload.paymentCurrency,
-      paymentMethod: 'CARD', // v1 generic payment method
       purchaseCurrency: payload.purchaseCurrency,
-      purchaseNetwork: payload.destinationNetwork, // note: purchaseNetwork not destinationNetwork
-      paymentAmount: payload.paymentAmount
+      destinationNetwork: payload.destinationNetwork, 
+      paymentAmount: payload.paymentAmount,
+      destinationAddress,
+      paymentMethod: payload.paymentMethod === 'COINBASE_WIDGET' ? 'CARD' : payload.paymentMethod
     };
     // v1 quote for Coinbase Widget (generic quote endpoint)
     const response = await fetch(`${BASE_URL}/server/api`, {
@@ -62,9 +63,9 @@ export async function fetchBuyQuote(payload: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: 'https://api.developer.coinbase.com/onramp/v1/buy/quote',
+        url: 'https://api.cdp.coinbase.com/platform/v2/onramp/sessions',
         method: 'POST',
-        body: v1Payload,
+        body: v2Payload,
       }),
     });
   
@@ -73,15 +74,20 @@ export async function fetchBuyQuote(payload: {
     }
 
     const data = await response.json();
+    const quote = data?.quote;
+    const fees = quote?.fees || [];
+    const coinbaseFee = fees.find((f: any) => f.type === 'FEE_TYPE_EXCHANGE');
+    const networkFee = fees.find((f: any) => f.type === 'FEE_TYPE_NETWORK');
+    
   
     return {
-      purchase_amount: { value: data?.purchase_amount?.value ?? '0', currency: data?.purchase_amount?.currency },
-      payment_subtotal: { value: data?.payment_subtotal?.value ?? '0', currency: data?.payment_subtotal?.currency },
-      payment_total: { value: data?.payment_total?.value ?? '0', currency: data?.payment_total?.currency },
-      coinbase_fee: { value: data?.coinbase_fee?.value ?? '0', currency: data?.coinbase_fee?.currency },
-      network_fee: { value: data?.network_fee?.value ?? '0', currency: data?.network_fee?.currency },
-      exchange_rate: data?.exchange_rate,
-      quote_id: data?.quote_id, // add this field
+      purchase_amount: { value: quote?.purchaseAmount ?? '0', currency: quote?.purchaseCurrency },
+      payment_subtotal: { value: quote?.paymentSubtotal ?? '0', currency: quote?.paymentCurrency },
+      payment_total: { value: quote?.paymentTotal ?? '0', currency: quote?.paymentCurrency },
+      coinbase_fee: { value: coinbaseFee?.amount ?? '0', currency: coinbaseFee?.currency ?? quote?.paymentCurrency },
+      network_fee: { value: networkFee?.amount ?? '0', currency: networkFee?.currency ?? quote?.paymentCurrency },
+      exchange_rate: quote?.exchangeRate,
+      quote_id: data?.session?.sessionId, // use session ID as quote ID
       raw: data,
     };
   }

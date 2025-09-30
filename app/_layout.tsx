@@ -9,6 +9,22 @@ import 'react-native-url-polyfill/auto';
 
 const { BLUE, TEXT_SECONDARY, CARD_BG, BORDER, TEXT_PRIMARY } = COLORS;
 
+// Conditional crypto setup based on build type
+const isExpoGo = process.env.EXPO_PUBLIC_USE_EXPO_CRYPTO === 'true';
+
+if (!isExpoGo) {
+  // TestFlight/Production: use react-native-quick-crypto
+  try {
+    const { install } = require('react-native-quick-crypto');
+    install();
+    console.log('Using react-native-quick-crypto for production build');
+  } catch (e) {
+    console.warn('react-native-quick-crypto not available');
+  }
+} else {
+  console.log('Using expo-crypto via Metro alias for Expo Go');
+}
+
 // CDP configuration using the working pattern from the template
 const cdpConfig: Config = {
   projectId: process.env.EXPO_PUBLIC_CDP_PROJECT_ID!,

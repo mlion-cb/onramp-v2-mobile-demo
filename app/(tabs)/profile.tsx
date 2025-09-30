@@ -10,10 +10,10 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
+import { ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
-import { daysUntilExpiry, getCountry, getSubdivision, getVerifiedPhone, isPhoneFresh60d, setCountry, setCurrentWalletAddress, setSubdivision, setVerifiedPhone } from "../../utils/sharedState";
+import { daysUntilExpiry, formatPhoneDisplay, getCountry, getSandboxMode, getSubdivision, getVerifiedPhone, isPhoneFresh60d, setCountry, setCurrentWalletAddress, setManualWalletAddress, setSandboxMode, setSubdivision, setVerifiedPhone } from "../../utils/sharedState";
 
 const { CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BLUE, BORDER, WHITE } = COLORS;
 
@@ -37,9 +37,17 @@ export default function WalletScreen() {
   const [exporting, setExporting] = useState(false);
 
   const verifiedPhone = getVerifiedPhone();
+  const formattedPhone = formatPhoneDisplay(verifiedPhone);
   const phoneFresh = isPhoneFresh60d();
   const d = daysUntilExpiry();
   const signedButNoSA = isSignedIn && !smartAccount;
+
+  console.log('Profile state:', { 
+    isSignedIn, 
+    smartAccount: !!smartAccount, 
+    signedButNoSA,
+    currentUserEmail: currentUser?.authenticationMethods?.email?.email 
+  });
 
   const [countries, setCountries] = useState<string[]>([]);
   const [usSubs, setUsSubs] = useState<string[]>([]);
@@ -51,13 +59,37 @@ export default function WalletScreen() {
   const sheetTranslate = useRef(new Animated.Value(300)).current;
   const { buyConfig, fetchOptions } = useOnramp(); 
 
+  const sandboxEnabled = getSandboxMode();
+  const [localSandboxEnabled, setLocalSandboxEnabled] = useState(getSandboxMode());
+  const [manualAddress, setManualAddress] = useState('');
+  // sync local state with shared state on mount
+  useEffect(() => {
+    setLocalSandboxEnabled(getSandboxMode());
+  }, []);
+
   useEffect(() => {
     // Ensure this hook instance has loaded the config
     if (!buyConfig) {
       fetchOptions();
     }
   }, [buyConfig, fetchOptions]);
-  
+
+  useEffect(() => {
+    if (isSignedIn && smartAccount) {
+      setManualAddress(''); // Clear manual input when real wallet connects
+      setManualWalletAddress(null);
+    }
+  }, [isSignedIn, smartAccount]);
+
+  // sync manual address with shared state
+  useEffect(() => {
+    if (localSandboxEnabled && !isSignedIn) {
+      setManualWalletAddress(manualAddress);
+    } else {
+      setManualWalletAddress(null);
+    }
+  }, [manualAddress, localSandboxEnabled, isSignedIn]);
+
   useEffect(() => {
     console.log('buyConfig in profile:', buyConfig);
     if (buyConfig?.countries) {
@@ -95,6 +127,7 @@ export default function WalletScreen() {
   }, [smartAccount]);
 
   const handleSignOut = useCallback(async () => {
+    console.log('Sign out button pressed')
     try {
       await signOut();
       setAlertState({ visible: true, title: "Signed out", message: "You've been signed out.", type: 'success' });
@@ -167,7 +200,7 @@ export default function WalletScreen() {
           <View style={styles.container}>
             {/* Account card */}
             <View style={styles.card}>
-              <Text style={styles.rowLabel}>Embedded wallet (email)</Text>
+              <Text style={styles.rowLabel}>Embedded wallet (by Email)</Text>
 
               {signedButNoSA ? (
                 <View style={styles.subContainer}>
@@ -175,7 +208,7 @@ export default function WalletScreen() {
                     <Text style={styles.subValue}>Session active, wallet not ready yet</Text>
                     <Text style={styles.subHint}>Sign out, then sign in again to create your wallet.</Text>
                   </View>
-                  <Pressable style={[styles.buttonSecondary]} onPress={handleSignOut}>
+                  <Pressable style={[styles.buttonSecondary]} onPress={handleSignOut} disabled={false}>
                     <Text style={styles.buttonTextSecondary}>Sign out</Text>
                   </Pressable>
                 </View>
@@ -220,14 +253,45 @@ export default function WalletScreen() {
                 </View>
               )}
             </View>
+            {/* Fallback sign out for edge cases */}
+            {isSignedIn && !signedButNoSA && !smartAccount && (
+              <View style={styles.card}>
+                <Text style={styles.rowLabel}>Session Management</Text>
+                <Pressable style={[styles.buttonSecondary]} onPress={handleSignOut}>
+                  <Text style={styles.buttonTextSecondary}>Sign out</Text>
+                </Pressable>
+              </View>
+            )}
+            {/* Sandbox Wallet Card - NEW, only show when sandbox + no connected wallet */}
+            {localSandboxEnabled && !isSignedIn && (
+              <View style={styles.card}>
+                <Text style={styles.rowLabel}>Sandbox Wallet Address</Text>
+                
+                <View style={styles.subBox}>
+                  <Text style={styles.subHint}>Manual address input (testing only)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={manualAddress}
+                    onChangeText={setManualAddress}
+                    placeholder="Enter any wallet address for testing"
+                    placeholderTextColor={TEXT_SECONDARY}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+                <Text style={styles.helper}>
+                  In sandbox mode, you can input any valid address format for any network to test the onramp flow.
+                </Text>
+              </View>
+            )}
 
             {/* Phone verification card */}
             <View style={styles.card}>
-              <Text style={styles.rowLabel}>Phone verification</Text>
+              <Text style={styles.rowLabel}>Phone verification (for Apple Pay)</Text>
 
               <View style={styles.subBox}>
                 <Text style={styles.subValue}>
-                  {verifiedPhone ? (phoneFresh ? verifiedPhone : `${verifiedPhone} (expired)`) : 'No verified phone'}
+                  {verifiedPhone ? (phoneFresh ? formattedPhone : `${formattedPhone} (expired)`) : 'No verified phone'}
                 </Text>
                 <Text style={styles.subHint}>
                   {verifiedPhone ? (phoneFresh ? `Verified • expires in ${d} day${d===1?'':'s'}` : 'Re-verify required') : 'Required before buying crypto'}
@@ -250,7 +314,7 @@ export default function WalletScreen() {
             </View>
 
             <View style={styles.card}>
-              <Text style={styles.rowLabel}>Region</Text>
+              <Text style={styles.rowLabel}>Region (for Onramp Options)</Text>
 
               <View style={styles.row}>
                 <Text style={styles.rowLabel}>Country</Text>
@@ -273,6 +337,27 @@ export default function WalletScreen() {
                   </Pressable>
                 </View>
               )}
+            </View>
+
+            <View style={styles.card}>
+              
+              <View style={styles.row}>
+                <View style={styles.textContainer}>
+                  <Text style={styles.rowValue}>Sandbox Environment</Text>
+                  <Text style={localSandboxEnabled ? styles.subHint : styles.productionWarning}>
+                    {localSandboxEnabled ? 'Test Mode\n\nNo real transactions will be executed.\n\nYou may experience Onramp flow with optional phone and email verification.\n\nOnly Guest Checkout (Debit Card) will be available for Coinbase Widget.' : 'Production Mode\n\nReal transactions will be executed on chain and balances will be debited if successful.\n\nPhone and email vericiation required.'}
+                  </Text>
+                </View>
+                <Switch
+                  value={localSandboxEnabled}
+                  onValueChange={(value) => {
+                    setLocalSandboxEnabled(value); // Update local state (triggers re-render)
+                    setSandboxMode(value); // Update shared state (for other components)
+                  }}
+                  trackColor={{ true: BLUE, false: BORDER }}
+                  thumbColor={Platform.OS === "android" ? (sandboxEnabled ? "#ffffff" : "#f4f3f4") : undefined}
+                />
+              </View>
             </View>
 
             {/* Export confirm modal */}
@@ -447,6 +532,15 @@ const styles = StyleSheet.create({
     marginTop: 10,               
     minHeight: 36,               
   },
+  textContainer: {
+    flex: 1,           
+    marginRight: 12,  
+  },
+  productionWarning: {
+    fontSize: 12,
+    color: '#FF6B6B',
+    fontWeight: '500',
+  },
   primary: {
     backgroundColor: BLUE,
   },
@@ -522,6 +616,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 10,
     minHeight: 36,
+  },
+  helper: {
+    fontSize: 12,
+    color: TEXT_SECONDARY,
+    marginTop: 8,
+    lineHeight: 16,
   },
   signOutButton: {
     backgroundColor: '#f44336',
