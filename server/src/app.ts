@@ -1,16 +1,24 @@
 import cors from 'cors';
 import express from 'express';
-import twilio from 'twilio';
 import { z } from 'zod';
 
 import { generateJwt } from '@coinbase/cdp-sdk/auth';
 import { resolveClientIp } from './ip.js';
 
+let twilioClient: ReturnType<typeof import('twilio')> | null = null;
+function getTwilio() {
+  if (!twilioClient) {
+    const sid = process.env.TWILIO_ACCOUNT_SID;
+    const token = process.env.TWILIO_AUTH_TOKEN;
+    if (!sid || !token) throw new Error('Twilio env not configured');
+    twilioClient = (require('twilio') as typeof import('twilio'))(sid, token);
+  }
+  return twilioClient;
+}
+
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
 console.log(`Port: ${PORT}; Env: ${process.env.NODE_ENV}`);
-
-const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
 
 // On Vercel, trust proxy to read x-forwarded-for
 app.set('trust proxy', true); 
@@ -136,27 +144,25 @@ app.post("/server/api", async (req, res) => {
 
 app.post('/auth/sms/start', async (req, res) => {
   try {
-    const { phone } = req.body;
+    const { phone } = req.body || {};
     if (!phone) return res.status(400).json({ error: 'phone required' });
-
-    const r = await twilioClient.verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
+    const r = await getTwilio().verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
       .verifications.create({ to: phone, channel: 'sms' });
-
-    return res.json({ status: r.status }); // pending
-  } catch (e:any) {
-    return res.status(500).json({ error: e.message || 'twilio start error' });
+    res.json({ status: r.status });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message || 'twilio start error' });
   }
 });
 
 app.post('/auth/sms/verify', async (req, res) => {
   try {
-    const { phone, code } = req.body;
+    const { phone, code } = req.body || {};
     if (!phone || !code) return res.status(400).json({ error: 'phone and code required' });
 
-    const r = await twilioClient.verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
+    const r = await getTwilio().verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
       .verificationChecks.create({ to: phone, code });
 
-    return res.json({ status: r.status, valid: r.valid }); // approved / pending
+    return res.json({ status: r.status, valid: r.valid });
   } catch (e:any) {
     return res.status(500).json({ error: e.message || 'twilio verify error' });
   }
