@@ -1,4 +1,3 @@
-import cors from 'cors';
 import express from 'express';
 import { z } from 'zod';
 
@@ -23,12 +22,6 @@ console.log(`Port: ${PORT}; Env: ${process.env.NODE_ENV}`);
 
 // On Vercel, trust proxy to read x-forwarded-for
 app.set('trust proxy', true); 
-
-// Or not use CORS at all for mobile apps
-app.use(cors({
-    origin: false, // Deny all browser requests - only works for mobile app 
-    credentials: false // Mobile apps don't need credentials
-  }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
