@@ -3,6 +3,7 @@ import express from 'express';
 import { z } from 'zod';
 
 import { generateJwt } from '@coinbase/cdp-sdk/auth';
+import twilio from 'twilio';
 import { resolveClientIp } from './ip.js';
 
 let twilioClient: ReturnType<typeof import('twilio')> | null = null;
@@ -11,7 +12,7 @@ function getTwilio() {
     const sid = process.env.TWILIO_ACCOUNT_SID;
     const token = process.env.TWILIO_AUTH_TOKEN;
     if (!sid || !token) throw new Error('Twilio env not configured');
-    twilioClient = (require('twilio') as typeof import('twilio'))(sid, token);
+    twilioClient = twilio(sid, token);
   }
   return twilioClient;
 }
