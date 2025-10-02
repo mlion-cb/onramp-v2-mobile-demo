@@ -19,8 +19,8 @@ config.resolver = {
     vm: 'vm-browserify',
   },
   unstable_enableSymlinks: false,
-  unstable_enablePackageExports: false,
-  unstable_conditionNames: ['react-native', 'browser', 'require'],
+  unstable_enablePackageExports: true,
+  unstable_conditionNames: ['react-native', 'browser', 'require', 'default'],
 };
 
 module.exports = config;
