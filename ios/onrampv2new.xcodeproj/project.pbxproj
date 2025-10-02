@@ -345,7 +345,7 @@
 				ENABLE_BITCODE = NO;
 				EXPO_PUBLIC_BASE_URL = "https://onramp-v2-mobile-demo.vercel.app/api";
 				EXPO_PUBLIC_CDP_BASE_PATH = "https://api.cdp.coinbase.com/platform";
-				EXPO_PUBLIC_CDP_CREATE_ACCOUNT_TYPE = "evm-smart";
+				EXPO_PUBLIC_CDP_CREATE_ACCOUNT_TYPE = smart;
 				EXPO_PUBLIC_CDP_PROJECT_ID = "a1be8c57-d4b3-42c5-84a9-736fa68dab63";
 				EXPO_PUBLIC_USE_EXPO_CRYPTO = false;
 				EXPO_PUBLIC_USE_MOCK = false;
@@ -388,7 +388,7 @@
 				DEVELOPMENT_TEAM = 3W8D3S7TCY;
 				EXPO_PUBLIC_BASE_URL = "https://onramp-v2-mobile-demo.vercel.app/api";
 				EXPO_PUBLIC_CDP_BASE_PATH = "https://api.cdp.coinbase.com/platform";
-				EXPO_PUBLIC_CDP_CREATE_ACCOUNT_TYPE = "evm-smart";
+				EXPO_PUBLIC_CDP_CREATE_ACCOUNT_TYPE = smart;
 				EXPO_PUBLIC_CDP_PROJECT_ID = "a1be8c57-d4b3-42c5-84a9-736fa68dab63";
 				EXPO_PUBLIC_USE_EXPO_CRYPTO = false;
 				EXPO_PUBLIC_USE_MOCK = false;
@@ -470,10 +470,7 @@
 				LIBRARY_SEARCH_PATHS = "$(SDKROOT)/usr/lib/swift\"$(inherited)\"";
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					" ",
-				);
+				OTHER_LDFLAGS = "$(inherited)  ";
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
@@ -528,10 +525,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(SDKROOT)/usr/lib/swift\"$(inherited)\"";
 				MTL_ENABLE_DEBUG_INFO = NO;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					" ",
-				);
+				OTHER_LDFLAGS = "$(inherited)  ";
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				USE_HERMES = true;
