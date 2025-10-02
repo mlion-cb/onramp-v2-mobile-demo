@@ -14,7 +14,6 @@ config.resolver = {
     util: 'util',
     url: 'react-native-url-polyfill',
     querystring: 'querystring-es3',
-    '@noble/hashes/crypto': '@noble/hashes/crypto.js',
   },
   unstable_enableSymlinks: false,
   unstable_enablePackageExports: true,
