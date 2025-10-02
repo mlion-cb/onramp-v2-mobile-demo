@@ -49,7 +49,11 @@ export default function EmailCodeScreen() {
     setVerifying(true);
     try {
       await verifyEmailOTP({ flowId, otp });
-      // Navigate back to profile (wallet will be created)
+
+      // Wait a bit for wallet creation to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Navigate back to profile (wallet should now be created)
       router.dismissAll();
     } catch (e:any) {
       setAlert({ visible:true, title:'Error', message:e.message || 'Verification failed', type:'error' });

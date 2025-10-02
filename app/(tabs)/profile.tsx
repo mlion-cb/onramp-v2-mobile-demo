@@ -1,6 +1,7 @@
 import { useOnramp } from "@/hooks/useOnramp";
 import {
   useCurrentUser,
+  useEvmAddress,
   useExportEvmAccount,
   useIsInitialized,
   useIsSignedIn,
@@ -30,7 +31,11 @@ export default function WalletScreen() {
     type: 'success' as 'success' | 'error' | 'info'
   });
 
+  // Smart account address (for display) - this is what user interacts with
   const smartAccount = currentUser?.evmSmartAccounts?.[0];
+
+  // EOA address (for private key export) - only this can be exported
+  const { evmAddress } = useEvmAddress();
   const { exportEvmAccount } = useExportEvmAccount();
 
   const [showExportConfirm, setShowExportConfirm] = useState(false);
@@ -140,16 +145,18 @@ export default function WalletScreen() {
     }
   }, [signOut]);
 
+  
+
   const handleRequestExport = () => {
     if (!isSignedIn || !smartAccount) return;
     setShowExportConfirm(true);
   };
 
   const handleConfirmedExport = async () => {
-    if (!smartAccount) return;
+    if (!evmAddress) return;
     setExporting(true);
     try {
-      const { privateKey } = await exportEvmAccount({ evmAccount: smartAccount });
+      const { privateKey } = await exportEvmAccount({ evmAccount: evmAddress });
       await Clipboard.setStringAsync(privateKey);
       setAlertState({
         visible: true,
@@ -244,7 +251,7 @@ export default function WalletScreen() {
                   <Pressable
                     style={[styles.button, { backgroundColor: '#DC2626' }]}
                     onPress={handleRequestExport}
-                    disabled={!smartAccount || exporting}
+                    disabled={!evmAddress || exporting}
                   >
                     <Text style={styles.buttonText}>
                       {exporting ? "Exporting..." : "Export private key"}
