@@ -28,9 +28,9 @@ if (!isExpoGo) {
 // CDP configuration using the working pattern from the template
 const cdpConfig: Config = {
   projectId: process.env.EXPO_PUBLIC_CDP_PROJECT_ID!,
-  basePath: process.env.EXPO_PUBLIC_CDP_BASE_PATH!,
-  ethereum: {createOnLogin: (process.env.EXPO_PUBLIC_CDP_CREATE_ACCOUNT_TYPE as "eoa" | "smart") || "smart"},
-  useMock: process.env.EXPO_PUBLIC_CDP_USE_MOCK === "true",
+  ethereum: {
+    createOnLogin: "smart"
+  }
 };
 console.log('RootLayout mounted, CDP config:', cdpConfig);
 
