@@ -340,7 +340,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = onrampv2new/onrampv2new.entitlements;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 5F52QH7CD7;
 				ENABLE_BITCODE = NO;
 				EXPO_PUBLIC_BASE_URL = "https://onramp-v2-mobile-demo.vercel.app/api";
@@ -384,7 +384,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = onrampv2new/onrampv2newRelease.entitlements;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 3W8D3S7TCY;
 				EXPO_PUBLIC_BASE_URL = "https://onramp-v2-mobile-demo.vercel.app/api";
 				EXPO_PUBLIC_CDP_BASE_PATH = "https://api.cdp.coinbase.com/platform";
