@@ -157,9 +157,19 @@ export default function WalletScreen() {
   };
 
   const handleConfirmedExport = async () => {
-    if (!evmAddress) return;
+    if (!evmAddress) {
+      setAlertState({
+        visible: true,
+        title: "Export failed",
+        message: "No EOA address found for export.",
+        type: "error",
+      });
+      return;
+    }
+
     setExporting(true);
     try {
+      // Use the exact pattern from documentation
       const { privateKey } = await exportEvmAccount({ evmAccount: evmAddress });
       await Clipboard.setStringAsync(privateKey);
       setAlertState({
@@ -220,9 +230,15 @@ export default function WalletScreen() {
               {signedButNoSA ? (
                 <View style={styles.subContainer}>
                   <View style={styles.subBox}>
-                    <Text style={styles.subValue}>Session active, wallet not ready yet</Text>
-                    <Text style={styles.subHint}>Sign out, then sign in again to create your wallet.</Text>
+                    <Text style={styles.subValue}>Wallet creation failed or still in progress</Text>
+                    <Text style={styles.subHint}>You are signed in but no wallet was created. This suggests an issue with the CDP account creation process.</Text>
                   </View>
+
+                  <View style={styles.subBox}>
+                    <Text style={styles.subHint}>Debug: Current user object</Text>
+                    <Text selectable style={styles.subValue}>{JSON.stringify(currentUser, null, 2) || 'No user data'}</Text>
+                  </View>
+
                   <Pressable style={[styles.buttonSecondary]} onPress={handleSignOut} disabled={false}>
                     <Text style={styles.buttonTextSecondary}>Sign out</Text>
                   </Pressable>
@@ -255,6 +271,11 @@ export default function WalletScreen() {
                   <View style={styles.subBox}>
                     <Text style={styles.subHint}>EOA address (for export)</Text>
                     <Text selectable style={styles.subValue}>{evmAddress || 'Not available'}</Text>
+                  </View>
+
+                  <View style={styles.subBox}>
+                    <Text style={styles.subHint}>Debug: EOA accounts</Text>
+                    <Text selectable style={styles.subValue}>{JSON.stringify(currentUser?.evmAccounts, null, 2) || 'None'}</Text>
                   </View>
 
                   <View style={styles.subBox}>

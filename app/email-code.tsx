@@ -49,25 +49,17 @@ export default function EmailCodeScreen() {
     if (!flowId || !otp) return;
     setVerifying(true);
     try {
+      console.log('Starting email OTP verification...');
       await verifyEmailOTP({ flowId, otp });
+      console.log('Email OTP verification completed');
 
-      // Wait for wallet creation to complete by polling for smart account
-      let attempts = 0;
-      const maxAttempts = 10; // 5 seconds max wait
+      // Give a longer wait for wallet creation - the working demo might just rely on navigation timing
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-      while (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        attempts++;
-
-        // Check if wallet is created (you might need to trigger a re-render here)
-        if (currentUser?.evmSmartAccounts?.[0]) {
-          break;
-        }
-      }
-
-      // Navigate back to profile (wallet should now be created)
+      console.log('Navigating back to profile...');
       router.dismissAll();
     } catch (e:any) {
+      console.error('Verification failed:', e);
       setAlert({ visible:true, title:'Error', message:e.message || 'Verification failed', type:'error' });
     } finally { setVerifying(false); }
   };
