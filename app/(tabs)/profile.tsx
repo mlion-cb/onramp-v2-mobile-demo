@@ -1,7 +1,6 @@
 import { useOnramp } from "@/hooks/useOnramp";
 import {
   useCurrentUser,
-  useEvmAddress,
   useExportEvmAccount,
   useIsInitialized,
   useIsSignedIn,
@@ -31,11 +30,15 @@ export default function WalletScreen() {
     type: 'success' as 'success' | 'error' | 'info'
   });
 
-  // Use the exact pattern from working demo
-  const { evmAddress } = useEvmAddress();
+  // Get EOA account and address
+  const eoaAccount = currentUser?.evmAccounts?.[0];
+  const eoaAddress = typeof eoaAccount === 'string' ? eoaAccount : (eoaAccount as any)?.address || eoaAccount;
 
-  // Primary address (matching working demo priority)
-  const primaryAddress = evmAddress || currentUser?.evmSmartAccounts?.[0];
+  // Smart account for display (primary wallet)
+  const smartAccountAddress = currentUser?.evmSmartAccounts?.[0];
+
+  // Primary address for display (prefer smart account)
+  const primaryAddress = smartAccountAddress || eoaAddress;
 
   const { exportEvmAccount } = useExportEvmAccount();
   
@@ -52,7 +55,7 @@ export default function WalletScreen() {
   console.log('Profile state:', {
     isSignedIn,
     primaryAddress: !!primaryAddress,
-    evmAddress,
+    eoaAddress,
     smartAccounts: currentUser?.evmSmartAccounts,
     signedButNoSA,
     currentUserEmail: currentUser?.authenticationMethods?.email?.email
@@ -152,15 +155,25 @@ export default function WalletScreen() {
   
 
   const handleRequestExport = () => {
-    if (!isSignedIn || !evmAddress) return; // Only allow export if EOA exists
+    if (!isSignedIn || !eoaAddress) return; // Only allow export if EOA exists
     setShowExportConfirm(true);
   };
 
   const handleConfirmedExport = async () => {
-    if (!evmAddress) return;
+    if (!eoaAccount) {
+      setAlertState({
+        visible: true,
+        title: "Export failed",
+        message: "No EOA account found for export.",
+        type: "error",
+      });
+      return;
+    }
+
     setExporting(true);
     try {
-      const { privateKey } = await exportEvmAccount({ evmAccount: evmAddress });
+      // Use the actual EOA account object for export
+      const { privateKey } = await exportEvmAccount({ evmAccount: eoaAccount });
       await Clipboard.setStringAsync(privateKey);
       setAlertState({
         visible: true,
@@ -220,9 +233,15 @@ export default function WalletScreen() {
               {signedButNoSA ? (
                 <View style={styles.subContainer}>
                   <View style={styles.subBox}>
-                    <Text style={styles.subValue}>Session active, wallet not ready yet</Text>
-                    <Text style={styles.subHint}>Sign out, then sign in again to create your wallet.</Text>
+                    <Text style={styles.subValue}>Wallet creation failed or still in progress</Text>
+                    <Text style={styles.subHint}>You are signed in but no wallet was created. This suggests an issue with the CDP account creation process.</Text>
                   </View>
+
+                  <View style={styles.subBox}>
+                    <Text style={styles.subHint}>Debug: Current user object</Text>
+                    <Text selectable style={styles.subValue}>{JSON.stringify(currentUser, null, 2) || 'No user data'}</Text>
+                  </View>
+
                   <Pressable style={[styles.buttonSecondary]} onPress={handleSignOut} disabled={false}>
                     <Text style={styles.buttonTextSecondary}>Sign out</Text>
                   </Pressable>
@@ -254,7 +273,12 @@ export default function WalletScreen() {
 
                   <View style={styles.subBox}>
                     <Text style={styles.subHint}>EOA address (for export)</Text>
-                    <Text selectable style={styles.subValue}>{evmAddress || 'Not available'}</Text>
+                    <Text selectable style={styles.subValue}>{eoaAddress || 'Not available'}</Text>
+                  </View>
+
+                  <View style={styles.subBox}>
+                    <Text style={styles.subHint}>Debug: EOA accounts</Text>
+                    <Text selectable style={styles.subValue}>{JSON.stringify(currentUser?.evmAccounts, null, 2) || 'None'}</Text>
                   </View>
 
                   <View style={styles.subBox}>
@@ -265,7 +289,7 @@ export default function WalletScreen() {
                   <Pressable
                     style={[styles.button, { backgroundColor: '#DC2626' }]}
                     onPress={handleRequestExport}
-                    disabled={!evmAddress || exporting}
+                    disabled={!eoaAddress || exporting}
                   >
                     <Text style={styles.buttonText}>
                       {exporting ? "Exporting..." : "Export private key"}
