@@ -7,13 +7,6 @@ import { useEffect } from "react";
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
-import '@ungap/structured-clone';
-
-import { Buffer as PolyfillBuffer } from '@craftzdog/react-native-buffer';
-if (typeof (global as any).Buffer === 'undefined') {
-  (global as any).Buffer = PolyfillBuffer as any;
-}
-
 const { BLUE, TEXT_SECONDARY, CARD_BG, BORDER, TEXT_PRIMARY } = COLORS;
 
 // Conditional crypto setup based on build type
