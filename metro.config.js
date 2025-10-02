@@ -14,9 +14,12 @@ config.resolver = {
     util: 'util',
     url: 'react-native-url-polyfill',
     querystring: 'querystring-es3',
+    zlib: 'browserify-zlib',
+    path: 'path-browserify',
+    vm: 'vm-browserify',
   },
   unstable_enableSymlinks: false,
-  unstable_enablePackageExports: true,
+  unstable_enablePackageExports: false,
   unstable_conditionNames: ['react-native', 'browser', 'require'],
 };
 

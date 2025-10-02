@@ -8,7 +8,7 @@ const config: ExpoConfig = {
     scheme: 'onrampdemo',
     owner: 'mlion-cb',
     userInterfaceStyle: 'automatic',
-    newArchEnabled: true,
+    newArchEnabled: false,
     icon: './assets/images/icon.png',
 
     ios: {
