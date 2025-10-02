@@ -127,12 +127,16 @@ export default function WalletScreen() {
   }, [smartAccount]);
 
   const handleSignOut = useCallback(async () => {
-    console.log('Sign out button pressed')
     try {
+      console.log('Sign out button pressed');
       await signOut();
-      setAlertState({ visible: true, title: "Signed out", message: "You've been signed out.", type: 'success' });
+    } catch (e) {
+      console.warn('signOut error', e);
     } finally {
       setCurrentWalletAddress(null);
+      setManualWalletAddress(null);
+      await setVerifiedPhone(null);
+      setAlertState({ visible: true, title: "Signed out", message: "You've been signed out.", type: 'success' });
     }
   }, [signOut]);
 
@@ -193,7 +197,7 @@ export default function WalletScreen() {
           style={{ flex: 1, backgroundColor: CARD_BG }}
           contentContainerStyle={{ padding: 20, gap: 24}}
           keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           bounces={true}
           overScrollMode="always"
           showsVerticalScrollIndicator={true}
