@@ -31,12 +31,13 @@ export default function WalletScreen() {
     type: 'success' as 'success' | 'error' | 'info'
   });
 
-  // Smart account address (for display) - this is what user interacts with
-  const smartAccount = currentUser?.evmSmartAccounts?.[0];
-
-  // EOA address (for private key export) - only this can be exported
-  const { exportEvmAccount } = useExportEvmAccount();
+  // Use the exact pattern from working demo
   const { evmAddress } = useEvmAddress();
+
+  // Primary address (matching working demo priority)
+  const primaryAddress = evmAddress || currentUser?.evmSmartAccounts?.[0];
+
+  const { exportEvmAccount } = useExportEvmAccount();
   
 
   const [showExportConfirm, setShowExportConfirm] = useState(false);
@@ -46,13 +47,15 @@ export default function WalletScreen() {
   const formattedPhone = formatPhoneDisplay(verifiedPhone);
   const phoneFresh = isPhoneFresh60d();
   const d = daysUntilExpiry();
-  const signedButNoSA = isSignedIn && !smartAccount;
+  const signedButNoSA = isSignedIn && !primaryAddress;
 
-  console.log('Profile state:', { 
-    isSignedIn, 
-    smartAccount: !!smartAccount, 
+  console.log('Profile state:', {
+    isSignedIn,
+    primaryAddress: !!primaryAddress,
+    evmAddress,
+    smartAccounts: currentUser?.evmSmartAccounts,
     signedButNoSA,
-    currentUserEmail: currentUser?.authenticationMethods?.email?.email 
+    currentUserEmail: currentUser?.authenticationMethods?.email?.email
   });
 
   const [countries, setCountries] = useState<string[]>([]);
@@ -81,11 +84,11 @@ export default function WalletScreen() {
   }, [buyConfig, fetchOptions]);
 
   useEffect(() => {
-    if (isSignedIn && smartAccount) {
+    if (isSignedIn && primaryAddress) {
       setManualAddress(''); // Clear manual input when real wallet connects
       setManualWalletAddress(null);
     }
-  }, [isSignedIn, smartAccount]);
+  }, [isSignedIn, primaryAddress]);
 
   // sync manual address with shared state
   useEffect(() => {
@@ -129,8 +132,8 @@ export default function WalletScreen() {
   }, [router, verifiedPhone]);
 
   useEffect(() => {
-    setCurrentWalletAddress(smartAccount ?? null);
-  }, [smartAccount]);
+    setCurrentWalletAddress(primaryAddress ?? null);
+  }, [primaryAddress]);
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -149,7 +152,7 @@ export default function WalletScreen() {
   
 
   const handleRequestExport = () => {
-    if (!isSignedIn || !smartAccount) return;
+    if (!isSignedIn || !evmAddress) return; // Only allow export if EOA exists
     setShowExportConfirm(true);
   };
 
@@ -245,8 +248,8 @@ export default function WalletScreen() {
                   </View>
 
                   <View style={styles.subBox}>
-                    <Text style={styles.subHint}>Smart account address</Text>
-                    <Text selectable style={styles.subValue}>{smartAccount}</Text>
+                    <Text style={styles.subHint}>Primary address</Text>
+                    <Text selectable style={styles.subValue}>{primaryAddress}</Text>
                   </View>
 
                   <View style={styles.subBox}>
@@ -255,8 +258,8 @@ export default function WalletScreen() {
                   </View>
 
                   <View style={styles.subBox}>
-                    <Text style={styles.subHint}>Debug: All user accounts</Text>
-                    <Text selectable style={styles.subValue}>{JSON.stringify(currentUser?.evmAccounts, null, 2) || 'None'}</Text>
+                    <Text style={styles.subHint}>Debug: Smart accounts</Text>
+                    <Text selectable style={styles.subValue}>{JSON.stringify(currentUser?.evmSmartAccounts, null, 2) || 'None'}</Text>
                   </View>
 
                   <Pressable
@@ -276,7 +279,7 @@ export default function WalletScreen() {
               )}
             </View>
             {/* Fallback sign out for edge cases */}
-            {isSignedIn && !signedButNoSA && !smartAccount && (
+            {isSignedIn && !signedButNoSA && !primaryAddress && (
               <View style={styles.card}>
                 <Text style={styles.rowLabel}>Session Management</Text>
                 <Pressable style={[styles.buttonSecondary]} onPress={handleSignOut}>

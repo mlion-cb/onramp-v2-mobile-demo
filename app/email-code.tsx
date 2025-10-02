@@ -1,4 +1,4 @@
-import { useSignInWithEmail, useVerifyEmailOTP } from '@coinbase/cdp-hooks';
+import { useSignInWithEmail, useVerifyEmailOTP, useCurrentUser } from '@coinbase/cdp-hooks';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -25,6 +25,7 @@ export default function EmailCodeScreen() {
 
   const { signInWithEmail } = useSignInWithEmail();
   const { verifyEmailOTP } = useVerifyEmailOTP();
+  const { currentUser } = useCurrentUser();
 
   const canResend = resendSeconds <= 0 && !sending && !verifying;
 
@@ -50,8 +51,19 @@ export default function EmailCodeScreen() {
     try {
       await verifyEmailOTP({ flowId, otp });
 
-      // Wait a bit for wallet creation to complete
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait for wallet creation to complete by polling for smart account
+      let attempts = 0;
+      const maxAttempts = 10; // 5 seconds max wait
+
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        attempts++;
+
+        // Check if wallet is created (you might need to trigger a re-render here)
+        if (currentUser?.evmSmartAccounts?.[0]) {
+          break;
+        }
+      }
 
       // Navigate back to profile (wallet should now be created)
       router.dismissAll();
