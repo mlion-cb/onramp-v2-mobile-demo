@@ -4,14 +4,36 @@ const config = getDefaultConfig(__dirname);
 
 const useExpoCrypto = process.env.EXPO_PUBLIC_USE_EXPO_CRYPTO === 'true';
 
+// Custom resolver based on working Coinbase demo
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Handle CDP packages with custom resolution
+  if (moduleName.includes('@coinbase/cdp-')) {
+    try {
+      const result = require.resolve(moduleName);
+      return context.resolveRequest(context, result, platform);
+    } catch (e) {
+      // Fallback to default resolution
+    }
+  }
+
+  // Handle noble hashes specifically
+  if (moduleName.includes('@noble/hashes') && moduleName.includes('/crypto.js')) {
+    try {
+      const result = require.resolve('@noble/hashes/crypto.js');
+      return context.resolveRequest(context, result, platform);
+    } catch (e) {
+      // Fallback to default resolution
+    }
+  }
+
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 config.resolver = {
   ...config.resolver,
   alias: {
     ...config.resolver.alias,
-    '@coinbase/cdp-hooks': '@coinbase/cdp-hooks/dist/esm/index.js',
-    '@coinbase/cdp-core': '@coinbase/cdp-core/dist/esm/index.js',
-    '@coinbase/cdp-react': '@coinbase/cdp-react/dist/esm/index.js',
-    '@noble/hashes/crypto.js': '@noble/hashes/crypto.js',
+    // Keep essential polyfills for other packages
     crypto: useExpoCrypto ? 'expo-crypto' : 'react-native-quick-crypto',
     stream: 'readable-stream',
     buffer: '@craftzdog/react-native-buffer',
@@ -19,7 +41,7 @@ config.resolver = {
     url: 'react-native-url-polyfill',
     querystring: 'querystring-es3',
     zlib: 'browserify-zlib',
-    // path: 'path-browserify',
+    path: 'path-browserify',
     vm: 'vm-browserify',
   },
   unstable_enableSymlinks: false,
