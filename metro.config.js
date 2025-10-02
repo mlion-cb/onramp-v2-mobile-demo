@@ -8,6 +8,9 @@ config.resolver = {
   ...config.resolver,
   alias: {
     ...config.resolver.alias,
+    '@coinbase/cdp-hooks': '@coinbase/cdp-hooks/dist/esm/index.js',
+    '@coinbase/cdp-core': '@coinbase/cdp-core/dist/esm/index.js',
+    '@coinbase/cdp-react': '@coinbase/cdp-react/dist/esm/index.js',
     crypto: useExpoCrypto ? 'expo-crypto' : 'react-native-quick-crypto',
     stream: 'readable-stream',
     buffer: '@craftzdog/react-native-buffer',
