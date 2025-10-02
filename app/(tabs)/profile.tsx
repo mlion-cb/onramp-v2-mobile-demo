@@ -145,7 +145,8 @@ export default function WalletScreen() {
     if (!smartAccount) return;
     setExporting(true);
     try {
-      const { privateKey } = await exportEvmAccount({ evmAccount: smartAccount });
+      const { exportEvmAccount: exportAccount } = useExportEvmAccount();
+      const { privateKey } = await exportAccount({ evmAccount: smartAccount });
       await Clipboard.setStringAsync(privateKey);
       setAlertState({
         visible: true,

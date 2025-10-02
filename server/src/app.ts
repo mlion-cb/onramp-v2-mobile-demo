@@ -28,14 +28,14 @@ app.use(express.urlencoded({ extended: true }));
 
 // Inbound request logging
 app.use((req, _res, next) => {
-    console.log('📥 Inbound request', {
-      method: req.method,
-      path: req.path,
-      origin: req.headers.origin,
-      body: req.body ? JSON.stringify(req.body).slice(0, 500) : 'No body'
-    });
-    next();
+  console.log('📥 Inbound request', {
+    method: req.method,
+    path: req.path,
+    origin: req.headers.origin,
+    body: req.body ? JSON.stringify(req.body).slice(0, 500) : 'No body'
   });
+  next();
+});
 
 // Health
 app.get("/health", (_req, res) => {
