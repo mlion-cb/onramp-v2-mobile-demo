@@ -1,7 +1,6 @@
 import { useOnramp } from "@/hooks/useOnramp";
 import {
   useCurrentUser,
-  useEvmAddress,
   useExportEvmAccount,
   useIsInitialized,
   useIsSignedIn,
@@ -31,11 +30,15 @@ export default function WalletScreen() {
     type: 'success' as 'success' | 'error' | 'info'
   });
 
-  // Use the exact pattern from working demo
-  const { evmAddress } = useEvmAddress();
+  // Get EOA account and address
+  const eoaAccount = currentUser?.evmAccounts?.[0];
+  const eoaAddress = typeof eoaAccount === 'string' ? eoaAccount : (eoaAccount as any)?.address || eoaAccount;
 
-  // Primary address (matching working demo priority)
-  const primaryAddress = evmAddress || currentUser?.evmSmartAccounts?.[0];
+  // Smart account for display (primary wallet)
+  const smartAccountAddress = currentUser?.evmSmartAccounts?.[0];
+
+  // Primary address for display (prefer smart account)
+  const primaryAddress = smartAccountAddress || eoaAddress;
 
   const { exportEvmAccount } = useExportEvmAccount();
   
@@ -52,7 +55,7 @@ export default function WalletScreen() {
   console.log('Profile state:', {
     isSignedIn,
     primaryAddress: !!primaryAddress,
-    evmAddress,
+    eoaAddress,
     smartAccounts: currentUser?.evmSmartAccounts,
     signedButNoSA,
     currentUserEmail: currentUser?.authenticationMethods?.email?.email
@@ -152,16 +155,16 @@ export default function WalletScreen() {
   
 
   const handleRequestExport = () => {
-    if (!isSignedIn || !evmAddress) return; // Only allow export if EOA exists
+    if (!isSignedIn || !eoaAddress) return; // Only allow export if EOA exists
     setShowExportConfirm(true);
   };
 
   const handleConfirmedExport = async () => {
-    if (!evmAddress) {
+    if (!eoaAccount) {
       setAlertState({
         visible: true,
         title: "Export failed",
-        message: "No EOA address found for export.",
+        message: "No EOA account found for export.",
         type: "error",
       });
       return;
@@ -169,8 +172,8 @@ export default function WalletScreen() {
 
     setExporting(true);
     try {
-      // Use the exact pattern from documentation
-      const { privateKey } = await exportEvmAccount({ evmAccount: evmAddress });
+      // Use the actual EOA account object for export
+      const { privateKey } = await exportEvmAccount({ evmAccount: eoaAccount });
       await Clipboard.setStringAsync(privateKey);
       setAlertState({
         visible: true,
@@ -270,7 +273,7 @@ export default function WalletScreen() {
 
                   <View style={styles.subBox}>
                     <Text style={styles.subHint}>EOA address (for export)</Text>
-                    <Text selectable style={styles.subValue}>{evmAddress || 'Not available'}</Text>
+                    <Text selectable style={styles.subValue}>{eoaAddress || 'Not available'}</Text>
                   </View>
 
                   <View style={styles.subBox}>
@@ -286,7 +289,7 @@ export default function WalletScreen() {
                   <Pressable
                     style={[styles.button, { backgroundColor: '#DC2626' }]}
                     onPress={handleRequestExport}
-                    disabled={!evmAddress || exporting}
+                    disabled={!eoaAddress || exporting}
                   >
                     <Text style={styles.buttonText}>
                       {exporting ? "Exporting..." : "Export private key"}

@@ -53,8 +53,9 @@ export default function EmailCodeScreen() {
       await verifyEmailOTP({ flowId, otp });
       console.log('Email OTP verification completed');
 
-      // Give a longer wait for wallet creation - the working demo might just rely on navigation timing
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Give much longer wait for wallet creation - CDP might be slow
+      console.log('Waiting for wallet creation...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       console.log('Navigating back to profile...');
       router.dismissAll();
