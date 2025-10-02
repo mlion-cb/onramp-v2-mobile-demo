@@ -15,7 +15,9 @@ config.resolver.sourceExts = Array.from(new Set([
 const useExpoCrypto = process.env.EXPO_PUBLIC_USE_EXPO_CRYPTO === 'true';
 
 // Aliases for Node core modules → RN-friendly shims
-const alias = {
+config.resolver.alias = {
+  ...(config.resolver.alias || {}),
+
   // crypto
   crypto: useExpoCrypto ? require.resolve('expo-crypto') : require.resolve('react-native-quick-crypto'),
   'node:crypto': useExpoCrypto ? require.resolve('expo-crypto') : require.resolve('react-native-quick-crypto'),
@@ -56,41 +58,6 @@ const alias = {
 
   // noble asks for this hint sometimes
   '@noble/hashes/crypto': require.resolve('@noble/hashes/crypto'),
-};
-
-// Map both bare and node: specifiers
-const nodePrefixed = Object.fromEntries(
-  Object.entries(alias).map(([k, v]) => [`node:${k}`, v])
-);
-
-config.resolver.alias = {
-  ...(config.resolver.alias || {}),
-  ...alias,
-  ...nodePrefixed,
-};
-
-// ✅ Critical part: normalize `node:` specifiers before Metro resolves
-const defaultResolve = config.resolver.resolveRequest;
-config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName.startsWith('node:')) {
-    const bare = moduleName.slice(5); // e.g., "node:path" -> "path"
-    const mapped = alias[moduleName] || alias[bare] || bare;
-    return defaultResolve
-      ? defaultResolve(context, mapped, platform)
-      : context.resolveRequest(context, mapped, platform);
-  }
-  return defaultResolve
-    ? defaultResolve(context, moduleName, platform)
-    : context.resolveRequest(context, moduleName, platform);
-};
-
-// Optional: terser minifier & transform opts
-config.transformer = {
-  ...config.transformer,
-  minifierPath: 'metro-minify-terser',
-  getTransformOptions: async () => ({
-    transform: { experimentalImportSupport: false, inlineRequires: true },
-  }),
 };
 
 module.exports = config;
