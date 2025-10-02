@@ -35,8 +35,9 @@ export default function WalletScreen() {
   const smartAccount = currentUser?.evmSmartAccounts?.[0];
 
   // EOA address (for private key export) - only this can be exported
-  const { evmAddress } = useEvmAddress();
   const { exportEvmAccount } = useExportEvmAccount();
+  const { evmAddress } = useEvmAddress();
+  
 
   const [showExportConfirm, setShowExportConfirm] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -246,6 +247,16 @@ export default function WalletScreen() {
                   <View style={styles.subBox}>
                     <Text style={styles.subHint}>Smart account address</Text>
                     <Text selectable style={styles.subValue}>{smartAccount}</Text>
+                  </View>
+
+                  <View style={styles.subBox}>
+                    <Text style={styles.subHint}>EOA address (for export)</Text>
+                    <Text selectable style={styles.subValue}>{evmAddress || 'Not available'}</Text>
+                  </View>
+
+                  <View style={styles.subBox}>
+                    <Text style={styles.subHint}>Debug: All user accounts</Text>
+                    <Text selectable style={styles.subValue}>{JSON.stringify(currentUser?.evmAccounts, null, 2) || 'None'}</Text>
                   </View>
 
                   <Pressable
