@@ -99,13 +99,26 @@ export function OnrampForm({
     return evmList.some((k) => n.includes(k));
   })();
 
+  const isSolanaNetwork = (() => {
+    const n = (network || '').toLowerCase();
+    const solanaList = ['solana', 'sol'];
+    return solanaList.some((k) => n.includes(k));
+  })();
+
   const isAmountValid = Number.isFinite(amountNumber) && amountNumber > 0;
-  const isAddressValid = /^0x[0-9a-fA-F]{40}$/.test(address);
-  // Only allow submit when on an EVM network and address is valid
+  const isEvmAddressValid = /^0x[0-9a-fA-F]{40}$/.test(address);
+  const isSolanaAddressValid = (() => {
+    // Basic Solana address validation: 32-44 characters, base58 encoded
+    if (!address || address.length < 32 || address.length > 44) return false;
+    // Check if it looks like base58 (no 0, O, I, l characters)
+    return /^[1-9A-HJ-NP-Za-km-z]+$/.test(address);
+  })();
+
   const isSandbox = getSandboxMode();
-  const hasValidAddress = isSandbox 
+  const hasValidAddress = isSandbox
     ? !!address && address.trim().length > 0  // In sandbox, just need any non-empty address
-    : (isEvmNetwork ? isAddressValid : false); // In production, need valid EVM address
+    : (isEvmNetwork ? isEvmAddressValid :
+       isSolanaNetwork ? isSolanaAddressValid : false); // In production, need valid address for supported networks
 
   const isFormValid = isAmountValid && !!network && !!asset && hasValidAddress;
   /**
@@ -245,12 +258,12 @@ export function OnrampForm({
     }
   }, [paymentCurrencyPickerVisible]);
 
-  // If user switches to a non‑EVM network, clear the address (no manual entry)
+  // If user switches to a non‑supported network, clear the address (no manual entry)
   useEffect(() => {
-    if (!isEvmNetwork && address) {
+    if (!isEvmNetwork && !isSolanaNetwork && address) {
       onAddressChange('');
     }
-  }, [isEvmNetwork, address, onAddressChange]);
+  }, [isEvmNetwork, isSolanaNetwork, address, onAddressChange]);
 
   const getCurrencyLimits = useCallback(() => {
     if (!options?.payment_currencies) return null;
@@ -536,24 +549,24 @@ export function OnrampForm({
       )}
 
       {/* Wallet Notification */}
-      {!getSandboxMode() && !isEvmNetwork ? (
+      {!getSandboxMode() && !isEvmNetwork && !isSolanaNetwork ? (
         <View style={styles.notificationCard}>
           <View style={styles.notificationHeader}>
             <Ionicons name="information-circle" size={20} color="#FF8C00" />
             <Text style={styles.notificationTitle}>Network Not Supported</Text>
           </View>
           <Text style={styles.notificationText}>
-            This network is available for Onramp, but Embedded Wallet is not supported at the moment. Select an EVM network to proceed.
+            This network is available for Onramp, but Embedded Wallet is not supported at the moment. Select an EVM or Solana network to proceed.
           </Text>
         </View>
-      ) : !getSandboxMode() && !isAddressValid ? (
+      ) : !getSandboxMode() && !hasValidAddress ? (
         <View style={[styles.notificationCard, styles.errorCard]}>
           <View style={styles.notificationHeader}>
             <Ionicons name="alert-circle" size={20} color="#FF6B6B" />
             <Text style={[styles.notificationTitle, { color: '#FF6B6B' }]}>Wallet Required</Text>
           </View>
           <Text style={styles.notificationText}>
-            Connect a valid EVM address to continue
+            Connect a valid {isEvmNetwork ? 'EVM' : isSolanaNetwork ? 'Solana' : 'wallet'} address to continue
           </Text>
         </View>
       ) : getSandboxMode() && !address ? (
@@ -576,7 +589,7 @@ export function OnrampForm({
             Testing with address: {address}
           </Text>
           <Text style={[styles.notificationText, { marginTop: 4, fontStyle: 'italic' }]}>
-            Head to Profile page to input a manual wallet address, or connect to an Embedded Wallet (EVM Network).
+            Head to Profile page to input a manual wallet address, or connect to an Embedded Wallet (EVM or Solana Network).
           </Text>
         </View>
       ) : null}

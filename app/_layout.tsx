@@ -7,29 +7,46 @@ import { useEffect } from "react";
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
+// Import polyfills (only used conditionally)
+import structuredClone from "@ungap/structured-clone";
+import { Buffer } from "buffer";
+
 const { BLUE, TEXT_SECONDARY, CARD_BG, BORDER, TEXT_PRIMARY } = COLORS;
 
 // Conditional crypto setup based on build type
 const isExpoGo = process.env.EXPO_PUBLIC_USE_EXPO_CRYPTO === 'true';
 
 if (!isExpoGo) {
-  // TestFlight/Production: use react-native-quick-crypto
+  // TestFlight/Production: use react-native-quick-crypto + full polyfills
   try {
     const { install } = require('react-native-quick-crypto');
     install();
-    console.log('Using react-native-quick-crypto for production build');
+
+    // Add missing global polyfills needed for CDP export functionality
+    if (!("structuredClone" in globalThis)) {
+      globalThis.structuredClone = structuredClone as any;
+    }
+
+    if (!("Buffer" in globalThis)) {
+      globalThis.Buffer = Buffer as any;
+    }
+
+    console.log('Using react-native-quick-crypto for production build with full polyfills');
   } catch (e) {
-    console.warn('react-native-quick-crypto not available');
+    console.warn('react-native-quick-crypto not available:', e);
   }
 } else {
-  console.log('Using expo-crypto via Metro alias for Expo Go');
+  console.log('Using expo-crypto via Metro alias for Expo Go - export wallet disabled');
 }
 
-// CDP configuration using the working pattern from the template
+// CDP configuration with both ETH and SOL support
 const cdpConfig: Config = {
   projectId: process.env.EXPO_PUBLIC_CDP_PROJECT_ID!,
   ethereum: {
     createOnLogin: "smart"
+  },
+  solana: {
+    createOnLogin: true
   }
 };
 console.log('RootLayout mounted, CDP config:', cdpConfig);
