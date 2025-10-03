@@ -1,6 +1,7 @@
 import { useOnramp } from "@/hooks/useOnramp";
 import {
   useCurrentUser,
+  useEvmAddress,
   useExportEvmAccount,
   useExportSolanaAccount,
   useIsInitialized,
@@ -32,20 +33,56 @@ export default function WalletScreen() {
     type: 'success' as 'success' | 'error' | 'info'
   });
 
-  // Get EOA account and address
-  const eoaAccount = currentUser?.evmAccounts?.[0];
-  const eoaAddress = typeof eoaAccount === 'string' ? eoaAccount : (eoaAccount as any)?.address || eoaAccount;
+  // Address resolution matching working reference project
+  const explicitEOAAddress = currentUser?.evmAccounts?.[0] as string;
+  const smartAccountAddress = currentUser?.evmSmartAccounts?.[0] as string;
 
-  // Smart account for display (primary wallet)
-  const smartAccountAddress = currentUser?.evmSmartAccounts?.[0];
-
-  // Primary address for display (prefer smart account)
-  const primaryAddress = smartAccountAddress || eoaAddress;
+  // For display: prefer smart account, then EOA
+  const primaryAddress = smartAccountAddress || explicitEOAAddress;
 
   const { exportEvmAccount } = useExportEvmAccount();
   const { exportSolanaAccount } = useExportSolanaAccount();
   const { solanaAddress } = useSolanaAddress();
-  
+  const { evmAddress } = useEvmAddress();
+
+  // For export: Use EOA first, then evmAddress hook, then smart account
+  const evmWalletAddress = explicitEOAAddress || evmAddress || smartAccountAddress;
+
+  // Add debugging similar to working reference
+  useEffect(() => {
+    if (currentUser) {
+      console.log('=== DETAILED WALLET INFORMATION ===');
+
+      // EOA Information
+      if (currentUser.evmAccounts && currentUser.evmAccounts.length > 0) {
+        console.log('--- EOA ADDRESSES ---');
+        currentUser.evmAccounts.forEach((account, index) => {
+          console.log(`EOA Address ${index + 1}:`, account);
+        });
+      } else {
+        console.log('EOA Addresses: None found');
+      }
+
+      // Smart Account Information
+      if (currentUser.evmSmartAccounts && currentUser.evmSmartAccounts.length > 0) {
+        console.log('--- SMART ACCOUNT ADDRESSES ---');
+        currentUser.evmSmartAccounts.forEach((account, index) => {
+          console.log(`Smart Account ${index + 1}:`, account);
+        });
+      } else {
+        console.log('Smart Accounts: None found');
+      }
+
+      // Address Resolution
+      console.log('--- ADDRESS RESOLUTION ---');
+      console.log('Explicit EOA:', explicitEOAAddress);
+      console.log('Smart Account:', smartAccountAddress);
+      console.log('useEvmAddress() hook:', evmAddress);
+      console.log('Final evmWalletAddress:', evmWalletAddress);
+      console.log('Solana Address:', solanaAddress);
+      console.log('=== END DETAILED WALLET INFO ===');
+    }
+  }, [currentUser, evmAddress, solanaAddress, explicitEOAAddress, smartAccountAddress, evmWalletAddress]);
 
   const [showExportConfirm, setShowExportConfirm] = useState(false);
   const [exportType, setExportType] = useState<'evm' | 'solana'>('evm');
@@ -149,7 +186,7 @@ export default function WalletScreen() {
   const isExpoGo = process.env.EXPO_PUBLIC_USE_EXPO_CRYPTO === 'true';
 
   const handleRequestExport = () => {
-    if (!isSignedIn || (!eoaAddress && !solanaAddress)) return; // Allow export if either wallet exists
+    if (!isSignedIn || (!evmWalletAddress && !solanaAddress)) return; // Allow export if either wallet exists
 
     if (isExpoGo) {
       setAlertState({
@@ -162,7 +199,7 @@ export default function WalletScreen() {
     }
 
     // If both wallets exist, show choice modal, otherwise export the available one
-    if (eoaAddress && solanaAddress) {
+    if (evmWalletAddress && solanaAddress) {
       // Show choice modal
       setAlertState({
         visible: true,
@@ -170,7 +207,7 @@ export default function WalletScreen() {
         message: "Which wallet would you like to export?",
         type: "info",
       });
-    } else if (eoaAddress) {
+    } else if (evmWalletAddress) {
       setExportType('evm');
       setShowExportConfirm(true);
     } else if (solanaAddress) {
@@ -181,13 +218,13 @@ export default function WalletScreen() {
 
   const handleConfirmedExport = async () => {
     const isEvmExport = exportType === 'evm';
-    const targetAddress = isEvmExport ? eoaAddress : solanaAddress;
+    const targetAddress = isEvmExport ? evmWalletAddress : solanaAddress;
 
     if (!targetAddress) {
       setAlertState({
         visible: true,
         title: "Export failed",
-        message: `No ${isEvmExport ? 'EOA' : 'Solana'} address found for export.`,
+        message: `No ${isEvmExport ? 'EVM' : 'Solana'} address found for export.`,
         type: "error",
       });
       return;
@@ -195,10 +232,11 @@ export default function WalletScreen() {
 
     setExporting(true);
     try {
+      console.log(`Exporting ${isEvmExport ? 'EVM' : 'Solana'} wallet:`, targetAddress);
       let result;
       if (isEvmExport) {
-        // Use the EOA address string (not object) - this is what CDP expects
-        result = await exportEvmAccount({ evmAccount: eoaAddress });
+        // Use the EVM address string - this is what CDP expects
+        result = await exportEvmAccount({ evmAccount: evmWalletAddress as `0x${string}` });
       } else {
         // Export Solana wallet
         result = await exportSolanaAccount({ solanaAccount: solanaAddress as string });
@@ -307,10 +345,10 @@ export default function WalletScreen() {
                     style={[
                       styles.button,
                       { backgroundColor: '#DC2626' },
-                      (isExpoGo || (!eoaAddress && !solanaAddress) || exporting) && styles.buttonDisabled
+                      (isExpoGo || (!evmWalletAddress && !solanaAddress) || exporting) && styles.buttonDisabled
                     ]}
                     onPress={handleRequestExport}
-                    disabled={(!eoaAddress && !solanaAddress) || exporting}
+                    disabled={(!evmWalletAddress && !solanaAddress) || exporting}
                   >
                     <Text style={styles.buttonText}>
                       {exporting ? "Exporting..." : isExpoGo ? "Export unavailable (Expo Go)" : "Export private key"}

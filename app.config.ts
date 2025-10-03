@@ -43,19 +43,6 @@ const config: ExpoConfig = {
 
     experiments: { typedRoutes: true },
 
-    extra: {
-      // Keep EAS project id
-      eas: { projectId: '981ff535-f8bf-4fac-97ef-1cdbc9038e85' },
-
-      // Client-visible env (set locally in .env/.env.local and in EAS Secrets)
-      EXPO_PUBLIC_BASE_URL: process.env.EXPO_PUBLIC_BASE_URL,
-      EXPO_PUBLIC_USE_EXPO_CRYPTO: process.env.EXPO_PUBLIC_USE_EXPO_CRYPTO ?? 'false',
-      EXPO_PUBLIC_CDP_PROJECT_ID: process.env.EXPO_PUBLIC_CDP_PROJECT_ID,
-      EXPO_PUBLIC_CDP_BASE_PATH: process.env.EXPO_PUBLIC_CDP_BASE_PATH ?? 'https://api.cdp.coinbase.com/platform',
-      EXPO_PUBLIC_CDP_CREATE_ACCOUNT_TYPE: process.env.EXPO_PUBLIC_CDP_CREATE_ACCOUNT_TYPE ?? 'evm-smart',
-      EXPO_PUBLIC_CDP_USE_MOCK: process.env.EXPO_PUBLIC_CDP_USE_MOCK ?? 'false'
-    },
-
     // Good hygiene if you later use EAS Update
     runtimeVersion: { policy: 'sdkVersion' }
 };
