@@ -201,7 +201,7 @@ export default function WalletScreen() {
         result = await exportEvmAccount({ evmAccount: eoaAddress });
       } else {
         // Export Solana wallet
-        result = await exportSolanaAccount({ solanaAccount: solanaAddress });
+        result = await exportSolanaAccount({ solanaAccount: solanaAddress as string });
       }
 
       await Clipboard.setStringAsync(result.privateKey);
