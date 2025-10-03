@@ -52,14 +52,6 @@ export default function WalletScreen() {
   const d = daysUntilExpiry();
   const signedButNoSA = isSignedIn && !primaryAddress;
 
-  console.log('Profile state:', {
-    isSignedIn,
-    primaryAddress: !!primaryAddress,
-    eoaAddress,
-    smartAccounts: currentUser?.evmSmartAccounts,
-    signedButNoSA,
-    currentUserEmail: currentUser?.authenticationMethods?.email?.email
-  });
 
   const [countries, setCountries] = useState<string[]>([]);
   const [usSubs, setUsSubs] = useState<string[]>([]);
@@ -103,15 +95,11 @@ export default function WalletScreen() {
   }, [manualAddress, localSandboxEnabled, isSignedIn]);
 
   useEffect(() => {
-    console.log('buyConfig in profile:', buyConfig);
     if (buyConfig?.countries) {
-      console.log('countries array:', buyConfig.countries);
       const validCountries = buyConfig.countries.map((c: any) => c.id).filter(Boolean);
-      console.log('mapped country IDs:', validCountries);
       setCountries(validCountries);
-      
+
       const us = buyConfig.countries.find((c: any) => c.id === 'US');
-      console.log('US entry:', us);
       setUsSubs(us?.subdivisions || []);
     }
   }, [buyConfig]);
@@ -140,7 +128,6 @@ export default function WalletScreen() {
 
   const handleSignOut = useCallback(async () => {
     try {
-      console.log('Sign out button pressed');
       await signOut();
     } catch (e) {
       console.warn('signOut error', e);
@@ -233,16 +220,11 @@ export default function WalletScreen() {
               {signedButNoSA ? (
                 <View style={styles.subContainer}>
                   <View style={styles.subBox}>
-                    <Text style={styles.subValue}>Wallet creation failed or still in progress</Text>
-                    <Text style={styles.subHint}>You are signed in but no wallet was created. This suggests an issue with the CDP account creation process.</Text>
+                    <Text style={styles.subValue}>Wallet creation in progress</Text>
+                    <Text style={styles.subHint}>Please wait while your embedded wallet is being created. This may take a few moments.</Text>
                   </View>
 
-                  <View style={styles.subBox}>
-                    <Text style={styles.subHint}>Debug: Current user object</Text>
-                    <Text selectable style={styles.subValue}>{JSON.stringify(currentUser, null, 2) || 'No user data'}</Text>
-                  </View>
-
-                  <Pressable style={[styles.buttonSecondary]} onPress={handleSignOut} disabled={false}>
+                  <Pressable style={[styles.buttonSecondary]} onPress={handleSignOut}>
                     <Text style={styles.buttonTextSecondary}>Sign out</Text>
                   </Pressable>
                 </View>
@@ -267,23 +249,8 @@ export default function WalletScreen() {
                   </View>
 
                   <View style={styles.subBox}>
-                    <Text style={styles.subHint}>Primary address</Text>
+                    <Text style={styles.subHint}>Wallet address</Text>
                     <Text selectable style={styles.subValue}>{primaryAddress}</Text>
-                  </View>
-
-                  <View style={styles.subBox}>
-                    <Text style={styles.subHint}>EOA address (for export)</Text>
-                    <Text selectable style={styles.subValue}>{eoaAddress || 'Not available'}</Text>
-                  </View>
-
-                  <View style={styles.subBox}>
-                    <Text style={styles.subHint}>Debug: EOA accounts</Text>
-                    <Text selectable style={styles.subValue}>{JSON.stringify(currentUser?.evmAccounts, null, 2) || 'None'}</Text>
-                  </View>
-
-                  <View style={styles.subBox}>
-                    <Text style={styles.subHint}>Debug: Smart accounts</Text>
-                    <Text selectable style={styles.subValue}>{JSON.stringify(currentUser?.evmSmartAccounts, null, 2) || 'None'}</Text>
                   </View>
 
                   <Pressable
