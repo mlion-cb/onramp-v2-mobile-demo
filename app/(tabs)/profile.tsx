@@ -13,7 +13,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
 import { daysUntilExpiry, formatPhoneDisplay, getCountry, getSandboxMode, getSubdivision, getVerifiedPhone, isPhoneFresh60d, setCountry, setCurrentWalletAddress, setManualWalletAddress, setSandboxMode, setSubdivision, setVerifiedPhone } from "../../utils/sharedState";
@@ -200,13 +200,31 @@ export default function WalletScreen() {
 
     // If both wallets exist, show choice modal, otherwise export the available one
     if (evmWalletAddress && solanaAddress) {
-      // Show choice modal
-      setAlertState({
-        visible: true,
-        title: "Choose Wallet Type",
-        message: "Which wallet would you like to export?",
-        type: "info",
-      });
+      // Show choice modal with action buttons
+      Alert.alert(
+        "Choose Wallet Type",
+        "Which wallet would you like to export?",
+        [
+          {
+            text: "Cancel",
+            style: "cancel"
+          },
+          {
+            text: "Export EVM Wallet",
+            onPress: () => {
+              setExportType('evm');
+              setShowExportConfirm(true);
+            }
+          },
+          {
+            text: "Export Solana Wallet",
+            onPress: () => {
+              setExportType('solana');
+              setShowExportConfirm(true);
+            }
+          }
+        ]
+      );
     } else if (evmWalletAddress) {
       setExportType('evm');
       setShowExportConfirm(true);
@@ -236,10 +254,10 @@ export default function WalletScreen() {
       let result;
       if (isEvmExport) {
         // Use the EVM address string - this is what CDP expects
-        result = await exportEvmAccount({ evmAccount: evmWalletAddress as `0x${string}` });
+        result = await exportEvmAccount({ evmAccount: evmWalletAddress! as `0x${string}` });
       } else {
         // Export Solana wallet
-        result = await exportSolanaAccount({ solanaAccount: solanaAddress as string });
+        result = await exportSolanaAccount({ solanaAccount: solanaAddress! });
       }
 
       await Clipboard.setStringAsync(result.privateKey);
@@ -250,10 +268,30 @@ export default function WalletScreen() {
         type: "info",
       });
     } catch (e) {
+      console.error('Export Error Details:', e);
+
+      // Get detailed error information
+      let errorMessage = "Unable to export private key.";
+      let errorDetails = "";
+
+      if (e instanceof Error) {
+        errorMessage = e.message;
+        errorDetails = `\n\nError Type: ${e.name}`;
+        if (e.stack) {
+          // Show first few lines of stack for debugging
+          const stackLines = e.stack.split('\n').slice(0, 3);
+          errorDetails += `\nStack: ${stackLines.join('\n')}`;
+        }
+      } else if (typeof e === 'object' && e !== null) {
+        errorMessage = JSON.stringify(e, null, 2);
+      } else {
+        errorMessage = String(e);
+      }
+
       setAlertState({
         visible: true,
         title: "Export failed",
-        message: e instanceof Error ? e.message : "Unable to export private key.",
+        message: `${errorMessage}${errorDetails}\n\nWallet: ${isEvmExport ? 'EVM' : 'Solana'}\nAddress: ${targetAddress}`,
         type: "error",
       });
     } finally {
