@@ -1,6 +1,20 @@
 
+/**
+ * IP Resolution Service for Coinbase Onramp API
+ *
+ * SECURITY REQUIREMENTS:
+ * - Coinbase requires accurate client IP for security validation
+ * - Headers like X-Forwarded-For can be spoofed and should NOT be trusted
+ * - IP must match the actual requesting user, not proxy/server IP
+ *
+ * DEPLOYMENT CONSIDERATIONS:
+ * - For production behind proxies (Vercel, AWS ALB), configure trusted proxy settings
+ * - External IP services are unreliable and add latency - avoid in production
+ * - Consider using req.socket.remoteAddress as the source of truth
+ */
+
 import { Agent, setGlobalDispatcher } from 'undici';
-setGlobalDispatcher(new Agent({ connect: { family: 4, timeout: 10_000 } })); // prefer IPv4
+setGlobalDispatcher(new Agent({ connect: { family: 0, timeout: 10_000 } })); // allow both IPv4 and IPv6
 
 const isPrivate = (ip?: string) => {
   if (!ip) return true;
@@ -16,25 +30,34 @@ const isPrivate = (ip?: string) => {
   );
 };
 
-let cachedIp = '';
-let cachedAt = 0;
 async function getPublicIp(): Promise<string> {
-  const now = Date.now();
-  if (cachedIp && now - cachedAt < 5 * 60_000) return cachedIp; // 5 min cache
+  // NO CACHING: User IP can change when switching networks (WiFi ↔ Mobile)
+  // Caching would cause mismatches with Coinbase validation
+
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 6000);
+  const t = setTimeout(() => ctrl.abort(), 3000); // Shorter timeout
+
   try {
     const r = await fetch('https://api.ipify.org?format=json', { signal: ctrl.signal });
     const j = await r.json().catch(() => ({}));
-    cachedIp = (j.ip || '').trim();
-    cachedAt = now;
-    return cachedIp;
-  } finally { clearTimeout(t); }
+    return (j.ip || '').trim();
+  } catch {
+    return '';
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 export async function resolveClientIp(req: any): Promise<string> {
-  const xff = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim();
-  const ip = xff || req.socket?.remoteAddress || '';
-  const normalized = ip.replace('::ffff:', '');
-  return isPrivate(normalized) ? await getPublicIp() : normalized;
+  // Simple approach: Use Vercel's req.ip (from trusted x-forwarded-for)
+  // This gives us whatever IP the client is actually using (IPv4 or IPv6)
+  const clientIp = req.ip || req.socket?.remoteAddress || '';
+
+  // For development environments with private IPs, use fallback
+  if (isPrivate(clientIp)) {
+    const fallbackIp = await getPublicIp().catch(() => '');
+    return fallbackIp || clientIp;
+  }
+
+  return clientIp;
 }
