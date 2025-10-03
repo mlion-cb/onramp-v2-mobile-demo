@@ -1,5 +1,5 @@
 
-import { useCurrentUser, useIsSignedIn } from "@coinbase/cdp-hooks";
+import { useCurrentUser, useIsSignedIn, useSolanaAddress, useEvmAddress } from "@coinbase/cdp-hooks";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
@@ -33,6 +33,8 @@ export default function Index() {
 
   const { isSignedIn } = useIsSignedIn();
   const { currentUser } = useCurrentUser();
+  const { evmAddress } = useEvmAddress();
+  const { solanaAddress } = useSolanaAddress();
   const [connectedAddress, setConnectedAddress] = useState('');
   const isConnected = connectedAddress.length > 0;
 
@@ -45,38 +47,57 @@ export default function Index() {
   // Update when CDP session changes
   useEffect(() => {
     if (!isSignedIn) return;
-  
-    // prefer CDP user → fallback to shared state
-    const sa = (currentUser?.evmSmartAccounts?.[0] as string) || (getCurrentWalletAddress() || '');
-    if (sa) {
-      setConnectedAddress(sa);
-      if (!address) setAddress(sa);
+
+    // Get both EVM and Solana addresses
+    const evmSmartAccount = currentUser?.evmSmartAccounts?.[0] as string;
+    const evmEOA = currentUser?.evmAccounts?.[0] as string || evmAddress;
+    const solAccount = currentUser?.solanaAccounts?.[0] as string || solanaAddress;
+    const sharedAddress = getCurrentWalletAddress() || '';
+
+    // Prefer EVM addresses, then Solana, then shared state
+    const bestEvmAddress = evmEOA || evmSmartAccount;
+    const primaryAddress = bestEvmAddress || solAccount || sharedAddress;
+
+    if (primaryAddress) {
+      setConnectedAddress(primaryAddress);
+      if (!address) setAddress(primaryAddress);
       return;
     }
+
     // Poll if not found immediately
     let tries = 0;
     const t = setInterval(() => {
-      const sa = currentUser?.evmSmartAccounts?.[0] as string;
+      const evmSmart = currentUser?.evmSmartAccounts?.[0] as string;
+      const evmEOAPolled = currentUser?.evmAccounts?.[0] as string || evmAddress;
+      const solAccountPolled = currentUser?.solanaAccounts?.[0] as string || solanaAddress;
       const shared = getCurrentWalletAddress() || '';
-      if (sa || shared) {
-        setConnectedAddress(sa || shared);
-        if (!address) setAddress(sa || shared);
+
+      const bestEvm = evmEOAPolled || evmSmart;
+      const primary = bestEvm || solAccountPolled || shared;
+
+      if (primary) {
+        setConnectedAddress(primary);
+        if (!address) setAddress(primary);
         clearInterval(t);
       }
       if (++tries > 10) clearInterval(t); // Reduce to 5s max
     }, 500);
 
     return () => clearInterval(t);
-  }, [isSignedIn, currentUser]);
+  }, [isSignedIn, currentUser, evmAddress, solanaAddress]);
 
   useFocusEffect(
     useCallback(() => {
       // Check wallet status when tab becomes active
       if (isSignedIn) {
-        const sa = currentUser?.evmSmartAccounts?.[0] as string;
+        const evmSmart = currentUser?.evmSmartAccounts?.[0] as string;
+        const evmEOA = currentUser?.evmAccounts?.[0] as string || evmAddress;
+        const solAccount = currentUser?.solanaAccounts?.[0] as string || solanaAddress;
         const shared = getCurrentWalletAddress() || '';
-        const bestAddress = sa || shared;
-        
+
+        const bestEvm = evmEOA || evmSmart;
+        const bestAddress = bestEvm || solAccount || shared;
+
         if (bestAddress) {
           setConnectedAddress(bestAddress);
           if (!address) setAddress(bestAddress);
@@ -84,7 +105,7 @@ export default function Index() {
       } else {
         setConnectedAddress('');
       }
-    }, [isSignedIn, currentUser, address])
+    }, [isSignedIn, currentUser, address, evmAddress, solanaAddress])
   );
 
   
@@ -165,7 +186,25 @@ export default function Index() {
           const isSandbox = getSandboxMode();
           if (isSandbox || (isPhoneFresh60d() && getVerifiedPhone())) {
             const phone = getVerifiedPhone();
-            createOrder({ ...pendingForm, phoneNumber: phone });
+
+            // Determine the correct address based on network type for pending form
+            let targetAddress = pendingForm.address;
+            if (!isSandbox) {
+              const networkType = (pendingForm.network || '').toLowerCase();
+              const isEvmNetwork = ['ethereum', 'base', 'polygon', 'arbitrum', 'optimism', 'avalanche', 'avax', 'bsc', 'fantom', 'linea', 'zksync', 'scroll'].some(k => networkType.includes(k));
+              const isSolanaNetwork = ['solana', 'sol'].some(k => networkType.includes(k));
+
+              if (isEvmNetwork) {
+                const evmEOA = currentUser?.evmAccounts?.[0] as string || evmAddress;
+                const evmSmart = currentUser?.evmSmartAccounts?.[0] as string;
+                targetAddress = evmEOA || evmSmart || targetAddress;
+              } else if (isSolanaNetwork) {
+                const solAccount = currentUser?.solanaAccounts?.[0] as string || solanaAddress;
+                targetAddress = solAccount || targetAddress;
+              }
+            }
+
+            createOrder({ ...pendingForm, phoneNumber: phone, address: targetAddress });
             setPendingForm(null);
           }
         } catch (error) {
@@ -185,24 +224,48 @@ export default function Index() {
   const handleSubmit = useCallback(async (formData: any) => {
     setIsProcessingPayment(true);
     try {
+      // Determine the correct address based on network type
+      const isSandbox = getSandboxMode();
+      let targetAddress = formData.address;
+
+      if (!isSandbox) {
+        // In production mode, use network-specific addresses
+        const networkType = (formData.network || '').toLowerCase();
+        const isEvmNetwork = ['ethereum', 'base', 'polygon', 'arbitrum', 'optimism', 'avalanche', 'avax', 'bsc', 'fantom', 'linea', 'zksync', 'scroll'].some(k => networkType.includes(k));
+        const isSolanaNetwork = ['solana', 'sol'].some(k => networkType.includes(k));
+
+        if (isEvmNetwork) {
+          // Use EVM address for EVM networks
+          const evmEOA = currentUser?.evmAccounts?.[0] as string || evmAddress;
+          const evmSmart = currentUser?.evmSmartAccounts?.[0] as string;
+          targetAddress = evmEOA || evmSmart || targetAddress;
+        } else if (isSolanaNetwork) {
+          // Use Solana address for Solana networks
+          const solAccount = currentUser?.solanaAccounts?.[0] as string || solanaAddress;
+          targetAddress = solAccount || targetAddress;
+        }
+      }
+
+      // Update the form data with the correct address
+      const updatedFormData = { ...formData, address: targetAddress };
+
       // Coinbase Widget: skip phone verification
       if ((formData.paymentMethod || '').toUpperCase() === 'COINBASE_WIDGET') {
-        const url = await createWidgetSession(formData);
+        const url = await createWidgetSession(updatedFormData);
         if (url) Linking.openURL(url);
         return; // do not call createOrder()
       }
-    
+
       // Apple Pay: require phone verification
-      const isSandbox = getSandboxMode();
       const fresh = isPhoneFresh60d();
       const phone = getVerifiedPhone();
       if (!isSandbox && (!fresh || !phone)) {
-        setPendingForm(formData); 
+        setPendingForm(updatedFormData);
         router.push({ pathname: '/phone-verify', params: { initialPhone: phone || '' } });
         return;
       }
-    
-      await createOrder({ ...formData });
+
+      await createOrder(updatedFormData);
     } catch (error) {
       setApplePayAlert({
         visible: true,
@@ -213,7 +276,7 @@ export default function Index() {
       console.error('Error submitting form:', error);
       setIsProcessingPayment(false);
     }
-  }, [createOrder, createWidgetSession, router]);
+  }, [createOrder, createWidgetSession, router, currentUser, evmAddress, solanaAddress]);
     
   
   return (

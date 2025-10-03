@@ -2,9 +2,11 @@ import { useOnramp } from "@/hooks/useOnramp";
 import {
   useCurrentUser,
   useExportEvmAccount,
+  useExportSolanaAccount,
   useIsInitialized,
   useIsSignedIn,
   useSignOut,
+  useSolanaAddress,
 } from "@coinbase/cdp-hooks";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
@@ -41,9 +43,12 @@ export default function WalletScreen() {
   const primaryAddress = smartAccountAddress || eoaAddress;
 
   const { exportEvmAccount } = useExportEvmAccount();
+  const { exportSolanaAccount } = useExportSolanaAccount();
+  const { solanaAddress } = useSolanaAddress();
   
 
   const [showExportConfirm, setShowExportConfirm] = useState(false);
+  const [exportType, setExportType] = useState<'evm' | 'solana'>('evm');
   const [exporting, setExporting] = useState(false);
 
   const verifiedPhone = getVerifiedPhone();
@@ -141,17 +146,48 @@ export default function WalletScreen() {
 
   
 
+  const isExpoGo = process.env.EXPO_PUBLIC_USE_EXPO_CRYPTO === 'true';
+
   const handleRequestExport = () => {
-    if (!isSignedIn || !eoaAddress) return; // Only allow export if EOA exists
-    setShowExportConfirm(true);
+    if (!isSignedIn || (!eoaAddress && !solanaAddress)) return; // Allow export if either wallet exists
+
+    if (isExpoGo) {
+      setAlertState({
+        visible: true,
+        title: "Export not available",
+        message: "Private key export is not available in Expo Go. Please use a development build or TestFlight.",
+        type: "info",
+      });
+      return;
+    }
+
+    // If both wallets exist, show choice modal, otherwise export the available one
+    if (eoaAddress && solanaAddress) {
+      // Show choice modal
+      setAlertState({
+        visible: true,
+        title: "Choose Wallet Type",
+        message: "Which wallet would you like to export?",
+        type: "info",
+      });
+    } else if (eoaAddress) {
+      setExportType('evm');
+      setShowExportConfirm(true);
+    } else if (solanaAddress) {
+      setExportType('solana');
+      setShowExportConfirm(true);
+    }
   };
 
   const handleConfirmedExport = async () => {
-    if (!eoaAccount) {
+    const isEvmExport = exportType === 'evm';
+    const targetAddress = isEvmExport ? eoaAddress : solanaAddress;
+
+    if (!targetAddress) {
       setAlertState({
         visible: true,
         title: "Export failed",
-        message: "No EOA account found for export.",
+        message: `No ${isEvmExport ? 'EOA' : 'Solana'} address found for export.`,
         type: "error",
       });
       return;
@@ -159,13 +195,20 @@ export default function WalletScreen() {
 
     setExporting(true);
     try {
-      // Use the actual EOA account object for export
-      const { privateKey } = await exportEvmAccount({ evmAccount: eoaAccount });
-      await Clipboard.setStringAsync(privateKey);
+      let result;
+      if (isEvmExport) {
+        // Use the EOA address string (not object) - this is what CDP expects
+        result = await exportEvmAccount({ evmAccount: eoaAddress });
+      } else {
+        // Export Solana wallet
+        result = await exportSolanaAccount({ solanaAccount: solanaAddress as string });
+      }
+
+      await Clipboard.setStringAsync(result.privateKey);
       setAlertState({
         visible: true,
         title: "Private key copied",
-        message: "Your private key has been copied to the clipboard. Store it securely and clear your clipboard.",
+        message: `Your ${isEvmExport ? 'EVM' : 'Solana'} private key has been copied to the clipboard. Store it securely and clear your clipboard.`,
         type: "info",
       });
     } catch (e) {
@@ -249,17 +292,28 @@ export default function WalletScreen() {
                   </View>
 
                   <View style={styles.subBox}>
-                    <Text style={styles.subHint}>Wallet address</Text>
+                    <Text style={styles.subHint}>EVM wallet address</Text>
                     <Text selectable style={styles.subValue}>{primaryAddress}</Text>
                   </View>
 
+                  {solanaAddress && (
+                    <View style={styles.subBox}>
+                      <Text style={styles.subHint}>Solana wallet address</Text>
+                      <Text selectable style={styles.subValue}>{solanaAddress}</Text>
+                    </View>
+                  )}
+
                   <Pressable
-                    style={[styles.button, { backgroundColor: '#DC2626' }]}
+                    style={[
+                      styles.button,
+                      { backgroundColor: '#DC2626' },
+                      (isExpoGo || (!eoaAddress && !solanaAddress) || exporting) && styles.buttonDisabled
+                    ]}
                     onPress={handleRequestExport}
-                    disabled={!eoaAddress || exporting}
+                    disabled={(!eoaAddress && !solanaAddress) || exporting}
                   >
                     <Text style={styles.buttonText}>
-                      {exporting ? "Exporting..." : "Export private key"}
+                      {exporting ? "Exporting..." : isExpoGo ? "Export unavailable (Expo Go)" : "Export private key"}
                     </Text>
                   </Pressable>
 
