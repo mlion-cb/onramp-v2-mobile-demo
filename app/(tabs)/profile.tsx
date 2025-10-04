@@ -11,12 +11,12 @@ import {
 } from "@coinbase/cdp-hooks";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
+import { ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
-import { daysUntilExpiry, formatPhoneDisplay, getCountry, getSandboxMode, getSubdivision, getVerifiedPhone, isPhoneFresh60d, setCountry, setCurrentWalletAddress, setManualWalletAddress, setSandboxMode, setSubdivision, setVerifiedPhone } from "../../utils/sharedState";
+import { daysUntilExpiry, formatPhoneDisplay, getCountry, getSandboxMode, getSubdivision, getVerifiedPhone, isPhoneFresh60d, setCountry, setCurrentSolanaAddress, setCurrentWalletAddress, setManualWalletAddress, setSandboxMode, setSubdivision, setVerifiedPhone } from "../../utils/sharedState";
 
 const { CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BLUE, BORDER, WHITE } = COLORS;
 
@@ -88,11 +88,23 @@ export default function WalletScreen() {
   const [exportType, setExportType] = useState<'evm' | 'solana'>('evm');
   const [exporting, setExporting] = useState(false);
 
-  const verifiedPhone = getVerifiedPhone();
+  // Phone verification state - use local state that updates on focus
+  const [verifiedPhone, setVerifiedPhoneLocal] = useState(getVerifiedPhone());
+  const [phoneFresh, setPhoneFresh] = useState(isPhoneFresh60d());
+  const [phoneExpiry, setPhoneExpiry] = useState(daysUntilExpiry());
+
   const formattedPhone = formatPhoneDisplay(verifiedPhone);
-  const phoneFresh = isPhoneFresh60d();
-  const d = daysUntilExpiry();
+  const d = phoneExpiry;
   const signedButNoSA = isSignedIn && !primaryAddress;
+
+  // Refresh phone verification state when tab becomes active
+  useFocusEffect(
+    useCallback(() => {
+      setVerifiedPhoneLocal(getVerifiedPhone());
+      setPhoneFresh(isPhoneFresh60d());
+      setPhoneExpiry(daysUntilExpiry());
+    }, [])
+  );
 
 
   const [countries, setCountries] = useState<string[]>([]);
@@ -166,7 +178,8 @@ export default function WalletScreen() {
 
   useEffect(() => {
     setCurrentWalletAddress(primaryAddress ?? null);
-  }, [primaryAddress]);
+    setCurrentSolanaAddress(solanaAddress ?? null);
+  }, [primaryAddress, solanaAddress]);
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -185,6 +198,8 @@ export default function WalletScreen() {
 
   const isExpoGo = process.env.EXPO_PUBLIC_USE_EXPO_CRYPTO === 'true';
 
+  const [showWalletChoice, setShowWalletChoice] = useState(false);
+
   const handleRequestExport = () => {
     if (!isSignedIn || (!evmWalletAddress && !solanaAddress)) return; // Allow export if either wallet exists
 
@@ -200,31 +215,7 @@ export default function WalletScreen() {
 
     // If both wallets exist, show choice modal, otherwise export the available one
     if (evmWalletAddress && solanaAddress) {
-      // Show choice modal with action buttons
-      Alert.alert(
-        "Choose Wallet Type",
-        "Which wallet would you like to export?",
-        [
-          {
-            text: "Cancel",
-            style: "cancel"
-          },
-          {
-            text: "Export EVM Wallet",
-            onPress: () => {
-              setExportType('evm');
-              setShowExportConfirm(true);
-            }
-          },
-          {
-            text: "Export Solana Wallet",
-            onPress: () => {
-              setExportType('solana');
-              setShowExportConfirm(true);
-            }
-          }
-        ]
-      );
+      setShowWalletChoice(true);
     } else if (evmWalletAddress) {
       setExportType('evm');
       setShowExportConfirm(true);
@@ -302,6 +293,10 @@ export default function WalletScreen() {
 
   const unverifyPhone = async () => {
     await setVerifiedPhone(null);
+    // Update local state immediately
+    setVerifiedPhoneLocal(null);
+    setPhoneFresh(false);
+    setPhoneExpiry(-1);
     setAlertState({
       visible: true,
       title: "Phone removed",
@@ -340,7 +335,11 @@ export default function WalletScreen() {
                 <View style={styles.subContainer}>
                   <View style={styles.subBox}>
                     <Text style={styles.subValue}>Wallet creation in progress</Text>
-                    <Text style={styles.subHint}>Please wait while your embedded wallet is being created. This may take a few moments.</Text>
+                    <Text style={styles.subHint}>
+                      {isExpoGo
+                        ? "Wallet creation is limited in Expo Go. Please use an email address that has been verified for embedded wallet creation previously, or use a development build/TestFlight to create new wallets."
+                        : "Please wait while your embedded wallet is being created. This may take a few moments."}
+                    </Text>
                   </View>
 
                   <Pressable style={[styles.buttonSecondary]} onPress={handleSignOut}>
@@ -506,6 +505,54 @@ export default function WalletScreen() {
               </View>
             </View>
 
+            {/* Wallet choice modal - shown when user has both EVM and Solana wallets */}
+            <Modal
+              visible={showWalletChoice}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setShowWalletChoice(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>Choose Wallet Type</Text>
+                  <Text style={styles.modalMessage}>
+                    Which wallet would you like to export?
+                  </Text>
+
+                  <View style={styles.modalButtonsVertical}>
+                    <Pressable
+                      style={[styles.button, { backgroundColor: BLUE }]}
+                      onPress={() => {
+                        setExportType('evm');
+                        setShowWalletChoice(false);
+                        setShowExportConfirm(true);
+                      }}
+                    >
+                      <Text style={styles.buttonText}>Export EVM Wallet</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={[styles.button, { backgroundColor: BLUE }]}
+                      onPress={() => {
+                        setExportType('solana');
+                        setShowWalletChoice(false);
+                        setShowExportConfirm(true);
+                      }}
+                    >
+                      <Text style={styles.buttonText}>Export Solana Wallet</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={[styles.button, { backgroundColor: BORDER }]}
+                      onPress={() => setShowWalletChoice(false)}
+                    >
+                      <Text style={[styles.buttonText, { color: TEXT_PRIMARY }]}>Cancel</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </Modal>
+
             {/* Export confirm modal */}
             <Modal
               visible={showExportConfirm}
@@ -519,7 +566,7 @@ export default function WalletScreen() {
                   <Text style={styles.modalMessage}>
                     Your private key will be copied to the clipboard. Keep it secure and never share it with anyone.
                   </Text>
-                  
+
                   <View style={styles.modalButtons}>
                     <Pressable
                       style={[styles.button, { backgroundColor: BORDER, flex: 1 }]}
@@ -527,7 +574,7 @@ export default function WalletScreen() {
                     >
                       <Text style={[styles.buttonText, { color: TEXT_PRIMARY }]}>Cancel</Text>
                     </Pressable>
-                    
+
                     <Pressable
                       style={[styles.button, { backgroundColor: '#DC2626', flex: 1 }]}
                       onPress={handleConfirmedExport}
@@ -839,6 +886,10 @@ const styles = StyleSheet.create({
   modalButtons: {
     flexDirection: 'row',
     gap: 12,
+  },
+  modalButtonsVertical: {
+    flexDirection: 'column',
+    gap: 8,
   },
   pillSelect: {
     flexDirection: "row",

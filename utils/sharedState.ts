@@ -20,6 +20,7 @@ export const PHONE_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
 
 let currentPartnerUserRef: string | null = null;
 let currentWalletAddress: string | null = null;
+let currentSolanaAddress: string | null = null;
 
 let verifiedPhone: string | null = null;
 let verifiedPhoneAt: number | null = null;
@@ -28,6 +29,7 @@ let currentCountry: string = 'US';
 let currentSubdivision: string = 'CA';
 
 let manualWalletAddress: string | null = null;
+let currentNetwork: string = 'Base'; // Track selected network
 
 let pendingTransactionForm: any = null;
 
@@ -76,19 +78,56 @@ export const setCurrentWalletAddress = (addr: string | null) => {
   currentWalletAddress = addr;
 };
 
+export const setCurrentSolanaAddress = (addr: string | null) => {
+  currentSolanaAddress = addr;
+};
+
+export const setCurrentNetwork = (network: string) => {
+  currentNetwork = network;
+};
+
+export const getCurrentNetwork = () => currentNetwork;
 
 // utils/sharedState.ts - document wallet address priority
 /**
  * Wallet address priority system:
- * 1. Connected CDP wallet (production)
- * 2. Manual input (sandbox only)
- * 3. null (no wallet)
+ *
+ * SANDBOX MODE:
+ * - SOL network: manual > SOL wallet
+ * - EVM and ANY other network: manual > EVM wallet
+ *
+ * PRODUCTION MODE:
+ * - SOL network: SOL wallet only
+ * - EVM networks: EVM wallet only
+ * - Unsupported networks: null (no address)
  */
 export const getCurrentWalletAddress = () => {
-  // Priority: connected wallet > manual address (sandbox only) > null
-  if (currentWalletAddress) return currentWalletAddress;
-  if (sandboxMode && manualWalletAddress) return manualWalletAddress;
-  return null;
+  const networkLower = (currentNetwork || '').toLowerCase();
+  const isSolanaNetwork = ['solana', 'sol'].some(k => networkLower.includes(k));
+  const isEvmNetwork = ['ethereum', 'base', 'unichain', 'polygon', 'arbitrum', 'optimism', 'avalanche', 'avax', 'bsc', 'fantom', 'linea', 'zksync', 'scroll'].some(k => networkLower.includes(k));
+
+  if (sandboxMode) {
+    // Sandbox mode: allow testing with any address
+    if (isSolanaNetwork) {
+      // SOL network: prefer manual, fallback to SOL wallet
+      return manualWalletAddress || currentSolanaAddress || null;
+    } else {
+      // EVM and ANY other network (including unsupported): prefer manual, fallback to EVM wallet
+      return manualWalletAddress || currentWalletAddress || null;
+    }
+  } else {
+    // Production mode: strict network-wallet matching
+    if (isSolanaNetwork) {
+      // SOL network: SOL wallet only
+      return currentSolanaAddress || null;
+    } else if (isEvmNetwork) {
+      // EVM networks: EVM wallet only
+      return currentWalletAddress || null;
+    } else {
+      // Unsupported networks (Bitcoin, Noble, etc.): NO address
+      return null;
+    }
+  }
 };
 
 export const setVerifiedPhone = async (phone: string | null) => {

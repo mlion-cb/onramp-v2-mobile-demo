@@ -1,12 +1,12 @@
 
-import { useCurrentUser, useIsSignedIn, useSolanaAddress, useEvmAddress } from "@coinbase/cdp-hooks";
+import { useCurrentUser, useEvmAddress, useIsSignedIn, useSolanaAddress } from "@coinbase/cdp-hooks";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { ApplePayWidget, OnrampForm, useOnramp } from "../../components";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
-import { clearPhoneVerifyWasCanceled, getCountry, getCurrentWalletAddress, getPendingForm, getPhoneVerifyWasCanceled, getSandboxMode, getSubdivision, getVerifiedPhone, isPhoneFresh60d, setPendingForm } from "../../utils/sharedState";
+import { clearPhoneVerifyWasCanceled, getCountry, getCurrentNetwork, getCurrentWalletAddress, getPendingForm, getPhoneVerifyWasCanceled, getSandboxMode, getSubdivision, getVerifiedPhone, isPhoneFresh60d, setCurrentSolanaAddress, setCurrentWalletAddress, setPendingForm } from "../../utils/sharedState";
 
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
@@ -37,6 +37,56 @@ export default function Index() {
   const { solanaAddress } = useSolanaAddress();
   const [connectedAddress, setConnectedAddress] = useState('');
   const isConnected = connectedAddress.length > 0;
+  const [trackedNetwork, setTrackedNetwork] = useState(getCurrentNetwork());
+
+  // Initialize on mount
+  useEffect(() => {
+    const walletAddress = getCurrentWalletAddress();
+    if (walletAddress) {
+      setConnectedAddress(walletAddress);
+      setAddress(walletAddress);
+    }
+  }, []);
+
+  // Watch for network changes and update address accordingly
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const currentNetwork = getCurrentNetwork();
+      if (currentNetwork !== trackedNetwork) {
+        setTrackedNetwork(currentNetwork);
+
+        // getCurrentWalletAddress() handles the logic for both modes:
+        // - Sandbox: manual > wallet (network-aware)
+        // - Production: wallet only (network-aware), null for unsupported networks
+        const walletAddress = getCurrentWalletAddress();
+        if (walletAddress) {
+          setConnectedAddress(walletAddress);
+          setAddress(walletAddress);
+        } else {
+          // No address available for this network (e.g., unsupported network in prod)
+          setConnectedAddress('');
+          setAddress('');
+        }
+      }
+    }, 200); // Poll every 200ms for network changes
+
+    return () => clearInterval(interval);
+  }, [trackedNetwork]);
+
+  // Watch for wallet address changes when user is signed in or when addresses load
+  useEffect(() => {
+    const walletAddress = getCurrentWalletAddress();
+
+    if (isSignedIn && walletAddress) {
+      // User is signed in and we have an address - update if different
+      setConnectedAddress(prev => prev !== walletAddress ? walletAddress : prev);
+      setAddress(prev => prev !== walletAddress ? walletAddress : prev);
+    } else if (!isSignedIn) {
+      // User signed out, clear addresses
+      setConnectedAddress('');
+      setAddress('');
+    }
+  }, [isSignedIn, currentUser, evmAddress, solanaAddress]);
 
   useFocusEffect(
     useCallback(() => {
@@ -44,40 +94,41 @@ export default function Index() {
     }, [])
   );
 
-  // Update when CDP session changes
+  // Update shared state and local state when CDP wallet addresses load
   useEffect(() => {
     if (!isSignedIn) return;
 
-    // Get both EVM and Solana addresses
+    // Get addresses from CDP hooks
     const evmSmartAccount = currentUser?.evmSmartAccounts?.[0] as string;
     const evmEOA = currentUser?.evmAccounts?.[0] as string || evmAddress;
     const solAccount = currentUser?.solanaAccounts?.[0] as string || solanaAddress;
-    const sharedAddress = getCurrentWalletAddress() || '';
 
-    // Prefer EVM addresses, then Solana, then shared state
-    const bestEvmAddress = evmEOA || evmSmartAccount;
-    const primaryAddress = bestEvmAddress || solAccount || sharedAddress;
+    // Set in shared state (so getCurrentWalletAddress works)
+    const primaryEvmAddress = evmEOA || evmSmartAccount;
+    if (primaryEvmAddress) {
+      setCurrentWalletAddress(primaryEvmAddress);
+    }
+    if (solAccount) {
+      setCurrentSolanaAddress(solAccount);
+    }
 
-    if (primaryAddress) {
-      setConnectedAddress(primaryAddress);
-      if (!address) setAddress(primaryAddress);
+    // Get network-aware wallet address from shared state
+    const walletAddress = getCurrentWalletAddress();
+
+    if (walletAddress) {
+      setConnectedAddress(walletAddress);
+      if (!address) setAddress(walletAddress);
       return;
     }
 
     // Poll if not found immediately
     let tries = 0;
     const t = setInterval(() => {
-      const evmSmart = currentUser?.evmSmartAccounts?.[0] as string;
-      const evmEOAPolled = currentUser?.evmAccounts?.[0] as string || evmAddress;
-      const solAccountPolled = currentUser?.solanaAccounts?.[0] as string || solanaAddress;
-      const shared = getCurrentWalletAddress() || '';
+      const polledAddress = getCurrentWalletAddress();
 
-      const bestEvm = evmEOAPolled || evmSmart;
-      const primary = bestEvm || solAccountPolled || shared;
-
-      if (primary) {
-        setConnectedAddress(primary);
-        if (!address) setAddress(primary);
+      if (polledAddress) {
+        setConnectedAddress(polledAddress);
+        if (!address) setAddress(polledAddress);
         clearInterval(t);
       }
       if (++tries > 10) clearInterval(t); // Reduce to 5s max
@@ -88,19 +139,13 @@ export default function Index() {
 
   useFocusEffect(
     useCallback(() => {
-      // Check wallet status when tab becomes active
+      // Check wallet status when tab becomes active - network-aware
       if (isSignedIn) {
-        const evmSmart = currentUser?.evmSmartAccounts?.[0] as string;
-        const evmEOA = currentUser?.evmAccounts?.[0] as string || evmAddress;
-        const solAccount = currentUser?.solanaAccounts?.[0] as string || solanaAddress;
-        const shared = getCurrentWalletAddress() || '';
+        const walletAddress = getCurrentWalletAddress();
 
-        const bestEvm = evmEOA || evmSmart;
-        const bestAddress = bestEvm || solAccount || shared;
-
-        if (bestAddress) {
-          setConnectedAddress(bestAddress);
-          if (!address) setAddress(bestAddress);
+        if (walletAddress) {
+          setConnectedAddress(walletAddress);
+          if (!address) setAddress(walletAddress);
         }
       } else {
         setConnectedAddress('');
@@ -191,7 +236,7 @@ export default function Index() {
             let targetAddress = pendingForm.address;
             if (!isSandbox) {
               const networkType = (pendingForm.network || '').toLowerCase();
-              const isEvmNetwork = ['ethereum', 'base', 'polygon', 'arbitrum', 'optimism', 'avalanche', 'avax', 'bsc', 'fantom', 'linea', 'zksync', 'scroll'].some(k => networkType.includes(k));
+              const isEvmNetwork = ['ethereum', 'base', 'unichain', 'polygon', 'arbitrum', 'optimism', 'avalanche', 'avax', 'bsc', 'fantom', 'linea', 'zksync', 'scroll'].some(k => networkType.includes(k));
               const isSolanaNetwork = ['solana', 'sol'].some(k => networkType.includes(k));
 
               if (isEvmNetwork) {
@@ -307,16 +352,19 @@ export default function Index() {
       <OnrampForm
         key={`${getCountry()}-${getSubdivision()}`}   // remount on region change
         address={address}
-        onAddressChange={() => {}}
+        onAddressChange={(newAddress) => {
+          setAddress(newAddress);
+          setConnectedAddress(newAddress);
+        }}
         onSubmit={handleSubmit}
         isLoading={isProcessingPayment}
         options={options}
         isLoadingOptions={isLoadingOptions}
         getAvailableNetworks={getAvailableNetworks}
         getAvailableAssets={getAvailableAssets}
-        currentQuote={currentQuote}     
-        isLoadingQuote={isLoadingQuote} 
-        fetchQuote={fetchQuote}         
+        currentQuote={currentQuote}
+        isLoadingQuote={isLoadingQuote}
+        fetchQuote={fetchQuote}
         paymentCurrencies={paymentCurrencies}
         amount={amount}
         onAmountChange={setAmount}
