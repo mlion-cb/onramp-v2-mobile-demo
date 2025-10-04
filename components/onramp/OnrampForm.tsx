@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { COLORS } from '../../constants/Colors';
-import { getCountry, getSandboxMode } from '../../utils/sharedState';
+import { getCountry, getCurrentWalletAddress, getSandboxMode, setCurrentNetwork } from '../../utils/sharedState';
 import { SwipeToConfirm } from '../ui/SwipeToConfirm';
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE, SILVER } = COLORS;
@@ -50,13 +50,17 @@ export function OnrampForm({
   isLoadingOptions,
   getAvailableNetworks,
   getAvailableAssets,
-  currentQuote,       
-  isLoadingQuote,     
+  currentQuote,
+  isLoadingQuote,
   fetchQuote,
   paymentCurrencies,
   amount,
   onAmountChange
 }: OnrampFormProps) {
+  // Import only isSignedIn hook for production card visibility
+  const { useIsSignedIn } = require('@coinbase/cdp-hooks');
+  const { isSignedIn } = useIsSignedIn();
+
   const [asset, setAsset] = useState("USDC");
   const [network, setNetwork] = useState("Base");
   const [paymentMethod, setPaymentMethod] = useState("GUEST_CHECKOUT_APPLE_PAY");
@@ -79,9 +83,33 @@ export function OnrampForm({
 
   useEffect(() => {
     // if Apple Pay selected, force USD
-    if (isApplePay && paymentCurrency !== 'USD') 
+    if (isApplePay && paymentCurrency !== 'USD')
       setPaymentCurrency('USD');
   }, [isApplePay, paymentCurrency]);
+
+  // Track network changes in shared state
+  useEffect(() => {
+    setCurrentNetwork(network);
+  }, [network]);
+
+  // Separate effect to update address when network changes (to avoid recursion)
+  const prevNetworkRef = useRef(network);
+  useEffect(() => {
+    // Only run when network actually changes (not on initial mount or address changes)
+    if (prevNetworkRef.current === network) return;
+    prevNetworkRef.current = network;
+
+    const isSandbox = getSandboxMode();
+    if (!isSandbox && (isEvmNetwork || isSolanaNetwork)) {
+      // Only update address for supported networks (EVM/Solana)
+      // For unsupported networks (Noble, etc.), don't auto-update
+      const { getCurrentWalletAddress } = require('../../utils/sharedState');
+      const newAddress = getCurrentWalletAddress();
+      if (newAddress && newAddress !== address) {
+        onAddressChange(newAddress);
+      }
+    }
+  }, [network, address, onAddressChange, isEvmNetwork, isSolanaNetwork]);
   
 
   const amountNumber = useMemo(() => {
@@ -258,9 +286,11 @@ export function OnrampForm({
     }
   }, [paymentCurrencyPickerVisible]);
 
-  // If user switches to a non‑supported network, clear the address (no manual entry)
+  // If user switches to a non‑supported network, clear the address (only in production mode)
+  // In sandbox mode, allow any address for any network
   useEffect(() => {
-    if (!isEvmNetwork && !isSolanaNetwork && address) {
+    const isSandbox = getSandboxMode();
+    if (!isSandbox && !isEvmNetwork && !isSolanaNetwork && address) {
       onAddressChange('');
     }
   }, [isEvmNetwork, isSolanaNetwork, address, onAddressChange]);
@@ -385,7 +415,7 @@ export function OnrampForm({
       paymentMethod,
       paymentCurrency,
       sandbox,
-      quoteId: currentQuote.quote_id, // Include quote ID
+      quoteId: currentQuote?.quote_id, // Include quote ID if available (optional)
       agreementAcceptedAt: agreementTimestamp ? new Date(agreementTimestamp).toISOString() : new Date().toISOString(),
     });
   }, [isFormValid, currentQuote, asset, network, address, sandbox, paymentMethod, paymentCurrency, onSubmit, agreementTimestamp]);
@@ -589,8 +619,27 @@ export function OnrampForm({
             Testing with address: {address}
           </Text>
           <Text style={[styles.notificationText, { marginTop: 4, fontStyle: 'italic' }]}>
-            Head to Profile page to input a manual wallet address, or connect to an Embedded Wallet (EVM or Solana Network).
+            Head to Profile page to input a manual wallet address (if signed out), or connect to an Embedded Wallet (EVM or Solana Network).
           </Text>
+        </View>
+      ) : isSignedIn ? (
+        <View style={[styles.notificationCard, styles.productionCard]}>
+          <View style={styles.notificationHeader}>
+            <Ionicons name="warning" size={20} color="#FF6B6B" />
+            <Text style={[styles.notificationTitle, { color: '#FF6B6B' }]}>Production Mode</Text>
+          </View>
+          <Text style={[styles.notificationText, { fontWeight: '600' }]}>
+            Real transactions will be executed on-chain
+          </Text>
+          {address ? (
+            <Text style={[styles.notificationText, { marginTop: 8, fontFamily: 'monospace' }]}>
+              Using: {address.slice(0, 8)}...{address.slice(-6)}
+            </Text>
+          ) : !isEvmNetwork && !isSolanaNetwork ? (
+            <Text style={[styles.notificationText, { marginTop: 8, fontStyle: 'italic', color: TEXT_SECONDARY }]}>
+              Network not supported for embedded wallets
+            </Text>
+          ) : null}
         </View>
       ) : null}
   
@@ -1268,6 +1317,11 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: BLUE,
     backgroundColor: BLUE + '08', // Very light blue tint
+  },
+  productionCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B6B',
+    backgroundColor: '#FF6B6B08', // Very light red tint
   },
   notificationHeader: {
     flexDirection: 'row',

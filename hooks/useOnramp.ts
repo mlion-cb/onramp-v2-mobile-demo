@@ -193,6 +193,10 @@ export function useOnramp() {
    * Quote fetching strategy:
    * - Apple Pay: Uses v2 orders API (USD only, requires phone)
    * - Coinbase Widget: Uses v2 session API (multi-currency based on options, no phone required)
+   *
+   * Quote is OPTIONAL for order submission:
+   * - If quote succeeds: Shows fees/total to user, includes quote_id in order
+   * - If quote fails (unsupported network, demo address unavailable, etc.): User can still submit order with actual wallet address
    */
   const fetchQuote = useCallback(async (formData: {
     amount: string;
@@ -206,12 +210,12 @@ export function useOnramp() {
       setCurrentQuote(null);
       return;
     }
-  
+
     try {
       setIsLoadingQuote(true);
       const assetSymbol = getAssetSymbolFromName(formData.asset);
       const networkName = getNetworkNameFromDisplayName(formData.network);
-      
+
       const quote = await fetchBuyQuote({
         paymentAmount: formData.amount,
         paymentCurrency: formData.paymentCurrency,
@@ -219,10 +223,10 @@ export function useOnramp() {
         destinationNetwork: networkName,
         paymentMethod: formData.paymentMethod || 'COINBASE_WIDGET'
       });
-      
+
       setCurrentQuote(quote);
     } catch (error) {
-      console.log('Failed to fetch quote (likely out of limits):', error);
+      console.log('Failed to fetch quote (unsupported network or demo address unavailable):', error);
       setCurrentQuote(null);
     } finally {
       setIsLoadingQuote(false);

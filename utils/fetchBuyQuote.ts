@@ -12,6 +12,13 @@ export async function fetchBuyQuote(payload: {
   paymentMethod: string;
 }) {
   const destinationAddress = demoAddressForNetwork(payload.destinationNetwork);
+
+  // If we couldn't generate a demo address for this network, return null instead of erroring
+  if (!destinationAddress) {
+    console.log(`No demo address available for network: ${payload.destinationNetwork}`);
+    return null;
+  }
+
   const isApplePay = payload.paymentMethod === 'GUEST_CHECKOUT_APPLE_PAY';
 
   if (isApplePay) {

@@ -20,7 +20,7 @@
 		13B07F961A680F5B00A75B9A /* OnrampV2Demo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OnrampV2Demo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = OnrampV2Demo/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = OnrampV2Demo/Info.plist; sourceTree = "<group>"; };
-		8AA867C7B2779DE808DCDFFB /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = OnrampV2Demo/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		8AA867C7B2779DE808DCDFFB /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = OnrampV2Demo/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		977DA6894B7E00736DD23BEA /* Pods-OnrampV2Demo.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-OnrampV2Demo.debug.xcconfig"; path = "Target Support Files/Pods-OnrampV2Demo/Pods-OnrampV2Demo.debug.xcconfig"; sourceTree = "<group>"; };
 		9FF242C66CF004E0AABC70FE /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-OnrampV2Demo/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = OnrampV2Demo/SplashScreen.storyboard; sourceTree = "<group>"; };
@@ -128,7 +128,6 @@
 				977DA6894B7E00736DD23BEA /* Pods-OnrampV2Demo.debug.xcconfig */,
 				B7FBD1D7E435C6728D645318 /* Pods-OnrampV2Demo.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -340,7 +339,11 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = OnrampV2Demo/OnrampV2Demo.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3W8D3S7TCY;
 				ENABLE_BITCODE = NO;
+				EXPO_PUBLIC_BASE_URL = "https://onramp-v2-mobile-demo.vercel.app/api";
+				EXPO_PUBLIC_CDP_PROJECT_ID = "a1be8c57-d4b3-42c5-84a9-736fa68dab63";
+				EXPO_PUBLIC_USE_EXPO_CRYPTO = false;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"FB_SONARKIT_ENABLED=1",
@@ -358,7 +361,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mlion-cb.onrampv2demo";
+				PRODUCT_BUNDLE_IDENTIFIER = com.mlioncb.onrampv2demo;
 				PRODUCT_NAME = OnrampV2Demo;
 				SWIFT_OBJC_BRIDGING_HEADER = "OnrampV2Demo/OnrampV2Demo-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -376,6 +379,10 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = OnrampV2Demo/OnrampV2Demo.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3W8D3S7TCY;
+				EXPO_PUBLIC_BASE_URL = "https://onramp-v2-mobile-demo.vercel.app/api";
+				EXPO_PUBLIC_CDP_PROJECT_ID = "a1be8c57-d4b3-42c5-84a9-736fa68dab63";
+				EXPO_PUBLIC_USE_EXPO_CRYPTO = false;
 				INFOPLIST_FILE = OnrampV2Demo/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -389,7 +396,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.mlion-cb.onrampv2demo";
+				PRODUCT_BUNDLE_IDENTIFIER = com.mlioncb.onrampv2demo;
 				PRODUCT_NAME = OnrampV2Demo;
 				SWIFT_OBJC_BRIDGING_HEADER = "OnrampV2Demo/OnrampV2Demo-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -453,10 +460,7 @@
 				LIBRARY_SEARCH_PATHS = "$(SDKROOT)/usr/lib/swift\"$(inherited)\"";
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					" ",
-				);
+				OTHER_LDFLAGS = "$(inherited)  ";
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
@@ -511,10 +515,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(SDKROOT)/usr/lib/swift\"$(inherited)\"";
 				MTL_ENABLE_DEBUG_INFO = NO;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					" ",
-				);
+				OTHER_LDFLAGS = "$(inherited)  ";
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				USE_HERMES = true;
