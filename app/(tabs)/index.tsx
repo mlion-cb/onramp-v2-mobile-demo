@@ -36,7 +36,12 @@ export default function Index() {
   const { evmAddress } = useEvmAddress();
   const { solanaAddress } = useSolanaAddress();
   const [connectedAddress, setConnectedAddress] = useState('');
-  const isConnected = connectedAddress.length > 0;
+
+  // Wallet is connected if user has ANY wallet (EVM or SOL), regardless of current network
+  const hasEvmWallet = !!(currentUser?.evmAccounts?.[0] || currentUser?.evmSmartAccounts?.[0] || evmAddress);
+  const hasSolWallet = !!(currentUser?.solanaAccounts?.[0] || solanaAddress);
+  const isConnected = isSignedIn && (hasEvmWallet || hasSolWallet);
+
   const [trackedNetwork, setTrackedNetwork] = useState(getCurrentNetwork());
 
   // Initialize on mount
