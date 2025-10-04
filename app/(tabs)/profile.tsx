@@ -521,7 +521,7 @@ export default function WalletScreen() {
 
                   <View style={styles.modalButtonsVertical}>
                     <Pressable
-                      style={[styles.button, { backgroundColor: BLUE }]}
+                      style={[styles.button, styles.modalButton, { backgroundColor: BLUE }]}
                       onPress={() => {
                         setExportType('evm');
                         setShowWalletChoice(false);
@@ -532,7 +532,7 @@ export default function WalletScreen() {
                     </Pressable>
 
                     <Pressable
-                      style={[styles.button, { backgroundColor: BLUE }]}
+                      style={[styles.button, styles.modalButton, { backgroundColor: BLUE }]}
                       onPress={() => {
                         setExportType('solana');
                         setShowWalletChoice(false);
@@ -543,7 +543,7 @@ export default function WalletScreen() {
                     </Pressable>
 
                     <Pressable
-                      style={[styles.button, { backgroundColor: BORDER }]}
+                      style={[styles.button, styles.modalButton, { backgroundColor: BORDER }]}
                       onPress={() => setShowWalletChoice(false)}
                     >
                       <Text style={[styles.buttonText, { color: TEXT_PRIMARY }]}>Cancel</Text>
@@ -724,6 +724,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 10,               
     minHeight: 36,               
+  },
+  modalButton: {
+    marginTop: 0,
   },
   textContainer: {
     flex: 1,           

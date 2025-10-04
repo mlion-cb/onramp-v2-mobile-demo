@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { COLORS } from '../../constants/Colors';
-import { getCountry, getCurrentWalletAddress, getSandboxMode, setCurrentNetwork } from '../../utils/sharedState';
+import { getCountry, getSandboxMode, setCurrentNetwork } from '../../utils/sharedState';
 import { SwipeToConfirm } from '../ui/SwipeToConfirm';
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE, SILVER } = COLORS;
@@ -76,6 +76,21 @@ export function OnrampForm({
   const sheetTranslate = useRef(new Animated.Value(300)).current;
   const isApplePay = paymentMethod === 'GUEST_CHECKOUT_APPLE_PAY';
 
+  const isEvmNetwork = (() => {
+    const n = (network || '').toLowerCase();
+    const evmList = [
+      'ethereum','base','polygon','arbitrum','optimism','avalanche','avax','bsc',
+      'fantom','linea','zksync','scroll'
+    ];
+    return evmList.some((k) => n.includes(k));
+  })();
+
+  const isSolanaNetwork = (() => {
+    const n = (network || '').toLowerCase();
+    const solanaList = ['solana', 'sol'];
+    return solanaList.some((k) => n.includes(k));
+  })();
+
   const displayCurrencies = React.useMemo(() => {
     const list = Array.isArray(paymentCurrencies) && paymentCurrencies.length ? paymentCurrencies : ['USD'];
     return isApplePay ? ['USD'] : list;
@@ -117,21 +132,6 @@ export function OnrampForm({
     const parsed = Number.parseFloat(cleaned);
     return Number.isFinite(parsed) ? parsed : NaN;
   }, [amount]);
-
-  const isEvmNetwork = (() => {
-    const n = (network || '').toLowerCase();
-    const evmList = [
-      'ethereum','base','polygon','arbitrum','optimism','avalanche','avax','bsc',
-      'fantom','linea','zksync','scroll'
-    ];
-    return evmList.some((k) => n.includes(k));
-  })();
-
-  const isSolanaNetwork = (() => {
-    const n = (network || '').toLowerCase();
-    const solanaList = ['solana', 'sol'];
-    return solanaList.some((k) => n.includes(k));
-  })();
 
   const isAmountValid = Number.isFinite(amountNumber) && amountNumber > 0;
   const isEvmAddressValid = /^0x[0-9a-fA-F]{40}$/.test(address);
@@ -616,10 +616,16 @@ export function OnrampForm({
             <Text style={[styles.notificationTitle, { color: BLUE }]}>Sandbox Mode</Text>
           </View>
           <Text style={styles.notificationText}>
-            Testing with address: {address}
+            Testing with address:{' '}
+            <Text style={styles.addressMono}>{address}</Text>
           </Text>
-          <Text style={[styles.notificationText, { marginTop: 4, fontStyle: 'italic' }]}>
-            Head to Profile page to input a manual wallet address (if signed out), or connect to an Embedded Wallet (EVM or Solana Network).
+
+          <Text style={[styles.notificationText, styles.italicNote]}>
+            Head to the <Text style={styles.badgeProd}>Profile</Text> page to use a manual wallet address (signed out), or connect to an Embedded Wallet (EVM or Solana Network).
+          </Text>
+
+          <Text style={[styles.notificationText, styles.italicNote]}>
+            You may toggle to Production Mode to test with a real wallet on the <Text style={styles.badgeProd}>Profile</Text> page.
           </Text>
         </View>
       ) : isSignedIn ? (
@@ -1122,6 +1128,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: TEXT_SECONDARY,
     lineHeight: 16,
+  },
+  addressMono: {
+    fontFamily: 'monospace',
+    fontWeight: '700',
+  },
+  
+  italicNote: {
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  
+  badgeProd: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: 'hidden',
+    fontWeight: '600',
+    backgroundColor: 'rgba(37, 99, 235, 0.12)',
+    color: '#2563EB',
   },
   input: {
     backgroundColor: CARD_BG,
