@@ -102,8 +102,7 @@ npx expo start
 
 ## User Sequence Flow
 
- ![Architecture](https://www.plantuml.com/plantuml/proxy?src=https://raw.github.com/mlion-cb/onramp-v2-mobile-demo/main/assets/docs/architecture.puml)
-
+![Architecture](https://www.plantuml.com/plantuml/proxy?cache=no&src=https://raw.githubusercontent.com/mlion-cb/onramp-v2-demo/main/assets/docs/architecture.puml)
 
 ## 🔐 Security Architecture
 
