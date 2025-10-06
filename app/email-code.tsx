@@ -1,4 +1,4 @@
-import { useSignInWithEmail, useVerifyEmailOTP, useCurrentUser } from '@coinbase/cdp-hooks';
+import { useSignInWithEmail, useVerifyEmailOTP, useCurrentUser, useIsInitialized } from '@coinbase/cdp-hooks';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -26,6 +26,7 @@ export default function EmailCodeScreen() {
   const { signInWithEmail } = useSignInWithEmail();
   const { verifyEmailOTP } = useVerifyEmailOTP();
   const { currentUser } = useCurrentUser();
+  const { isInitialized } = useIsInitialized();
 
   const canResend = resendSeconds <= 0 && !sending && !verifying;
 
@@ -53,11 +54,20 @@ export default function EmailCodeScreen() {
       await verifyEmailOTP({ flowId, otp });
       console.log('Email OTP verification completed');
 
-      // Give much longer wait for wallet creation - CDP might be slow
+      // Wait for CDP to finish wallet initialization using proper hook
       console.log('Waiting for wallet creation...');
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      const maxWaitTime = 10000; // 10 second timeout
+      const startTime = Date.now();
 
-      console.log('Navigating back to profile...');
+      while (!isInitialized) {
+        if (Date.now() - startTime > maxWaitTime) {
+          console.warn('Wallet initialization timeout - navigating anyway');
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 200)); // Check every 200ms
+      }
+
+      console.log('Wallet initialized, navigating back to profile...');
       router.dismissAll();
     } catch (e:any) {
       console.error('Verification failed:', e);

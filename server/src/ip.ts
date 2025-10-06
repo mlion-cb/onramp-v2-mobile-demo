@@ -2,15 +2,34 @@
 /**
  * IP Resolution Service for Coinbase Onramp API
  *
- * SECURITY REQUIREMENTS:
- * - Coinbase requires accurate client IP for security validation
- * - Headers like X-Forwarded-For can be spoofed and should NOT be trusted
- * - IP must match the actual requesting user, not proxy/server IP
+ * COINBASE SECURITY REQUIREMENTS (Official Docs):
+ * @see https://docs.cdp.coinbase.com/onramp-&-offramp/security-requirements
+ * @see https://docs.cdp.coinbase.com/onramp-&-offramp/onramp-apis/generating-onramp-url
  *
- * DEPLOYMENT CONSIDERATIONS:
- * - For production behind proxies (Vercel, AWS ALB), configure trusted proxy settings
- * - External IP services are unreliable and add latency - avoid in production
- * - Consider using req.socket.remoteAddress as the source of truth
+ * "The client IP address of the end user. This parameter is required for security
+ * validation to ensure the quote can only be used by the requesting user.
+ * Do not trust HTTP headers like X-Forwarded-For — these can be easily spoofed."
+ *
+ * IMPLEMENTATION STRATEGY:
+ *
+ * 1. TRUSTED PROXY (Production on Vercel):
+ *    - Use req.ip (Vercel sets this from actual TCP connection, NOT raw client headers)
+ *    - Vercel strips client-provided X-Forwarded-For and sets its own trusted value
+ *    - This gives the true client IP even when behind CDN/load balancer
+ *
+ * 2. DIRECT CONNECTION (Self-hosted):
+ *    - Use req.socket.remoteAddress (direct TCP connection IP)
+ *    - No proxy headers involved - pure socket-level IP
+ *
+ * 3. LOCALHOST (Development):
+ *    - Both approaches give 127.0.0.1 (server and client on same machine)
+ *    - MUST use external IP service (ipify.org) to get developer's real public IP
+ *    - Coinbase will reject localhost IPs in production mode
+ *
+ * SECURITY NOTE:
+ * - Never trust raw X-Forwarded-For header from req.headers (client can spoof)
+ * - Always use req.ip (framework-sanitized) or req.socket.remoteAddress (TCP-level)
+ * - For hosted platforms, verify they use trusted proxy configuration
  */
 
 import { Agent, setGlobalDispatcher } from 'undici';

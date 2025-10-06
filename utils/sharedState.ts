@@ -1,15 +1,86 @@
 /**
- * Simple global state for sharing data between tabs
- * Alternative to React Context - lightweight for demo purposes
- * 
- * Stores: currentPartnerUserRef (for transaction history lookup)
- * Updated: When user completes an onramp transaction
- * Used by: History page to fetch transactions for specific user
- * 
- * Production apps are suggested to use:
- * - React Context + useContext
- * - Redux/Zustand for complex state
- * - React Query for server state
+ * ============================================================================
+ * SHARED STATE MANAGEMENT - LIGHTWEIGHT GLOBAL STATE
+ * ============================================================================
+ *
+ * PURPOSE:
+ * Alternative to React Context for cross-tab/cross-screen state sharing.
+ * Used for demo purposes - production apps should use Redux/Zustand/React Query.
+ *
+ * STATE CATEGORIES:
+ *
+ * 1. WALLET ADDRESSES (currentWalletAddress, currentSolanaAddress, manualWalletAddress)
+ *    - EVM address: Smart Account or EOA from CDP
+ *    - Solana address: Solana account from CDP
+ *    - Manual address: Testing-only input for sandbox mode
+ *    - getCurrentWalletAddress(): Network-aware resolution (see below)
+ *
+ * 2. NETWORK TRACKING (currentNetwork)
+ *    - Tracks selected blockchain network (Base, Ethereum, Solana, etc.)
+ *    - Updated by OnrampForm when user changes network dropdown
+ *    - Used for address resolution logic
+ *
+ * 3. PHONE VERIFICATION (verifiedPhone, verifiedPhoneAt)
+ *    - Stored in AsyncStorage (persists across app restarts)
+ *    - Required for Apple Pay transactions
+ *    - 60-day expiry (PHONE_TTL_MS constant)
+ *    - hydrateVerifiedPhone(): Called in _layout.tsx on app start
+ *
+ * 4. REGION (currentCountry, currentSubdivision)
+ *    - Determines available payment methods and currencies
+ *    - US requires subdivision (state) for compliance
+ *    - Triggers OnrampForm remount on change (key prop)
+ *
+ * 5. SANDBOX MODE (sandboxMode)
+ *    - NOT PERSISTED (resets on app restart - intentional for safety)
+ *    - Test mode: uses mock data, optional verification
+ *    - Production mode: real transactions, strict validation
+ *
+ * 6. TRANSACTION TRACKING (currentPartnerUserRef, pendingTransactionForm)
+ *    - partnerUserRef: Unique identifier for transaction history lookup
+ *    - pendingForm: Stores form data when user needs phone verification
+ *
+ * ============================================================================
+ * WALLET ADDRESS PRIORITY SYSTEM - NETWORK-AWARE ROUTING
+ * ============================================================================
+ *
+ * getCurrentWalletAddress() returns different addresses based on:
+ * - Current network (EVM vs Solana vs Unsupported)
+ * - Sandbox vs Production mode
+ * - Available wallet types
+ *
+ * SANDBOX MODE (testing with flexibility):
+ * ┌─────────────────┬──────────────────────────────────────┐
+ * │ Network Type    │ Address Priority                     │
+ * ├─────────────────┼──────────────────────────────────────┤
+ * │ Solana/SOL      │ manual > SOL wallet > null           │
+ * │ EVM (eth, base) │ manual > EVM wallet > null           │
+ * │ Other (bitcoin) │ manual > EVM wallet > null           │
+ * └─────────────────┴──────────────────────────────────────┘
+ *
+ * PRODUCTION MODE (strict network-wallet matching):
+ * ┌─────────────────┬──────────────────────────────────────┐
+ * │ Network Type    │ Address Priority                     │
+ * ├─────────────────┼──────────────────────────────────────┤
+ * │ SOL             │ SOL wallet ONLY > null               │
+ * │ EVM (eth, base) │ EVM wallet ONLY > null               │
+ * │ Other (bitcoin) │ NULL (unsupported)                   │
+ * └─────────────────┴──────────────────────────────────────┘
+ *
+ * EXAMPLES:
+ * - User has EVM + SOL wallets, selects "Solana" → returns SOL address
+ * - User has EVM wallet only, selects "Base" → returns EVM address
+ * - User has EVM wallet only, selects "Bitcoin" (prod) → returns null (shows error card)
+ * - User in sandbox with manual address, selects any network → returns manual address
+ *
+ * WHY THIS DESIGN?
+ * - Sandbox: Flexibility for testing any network with demo addresses
+ * - Production: Safety - prevent sending crypto to wrong address type
+ * - Network-aware: Same user can have multiple wallets for different chains
+ *
+ * @see components/onramp/OnrampForm.tsx for network change handling
+ * @see app/(tabs)/index.tsx for address updates on network changes
+ * @see app/(tabs)/profile.tsx for manual address input (sandbox only)
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';

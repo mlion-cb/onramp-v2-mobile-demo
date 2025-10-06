@@ -18,7 +18,6 @@ function getTwilio() {
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
-console.log(`Port: ${PORT}; Env: ${process.env.NODE_ENV}`);
 
 // On Vercel, trust proxy to read x-forwarded-for
 app.set('trust proxy', true); 
@@ -59,7 +58,6 @@ app.get("/health", (_req, res) => {
 app.post("/server/api", async (req, res) => {
 
   try {
-    let rawIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
     const clientIp = await resolveClientIp(req);
     
     // Validate the request structure
