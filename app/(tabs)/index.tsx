@@ -1,3 +1,94 @@
+/**
+ * ============================================================================
+ * HOME/INDEX - MAIN ONRAMP PAGE (Tab 1)
+ * ============================================================================
+ *
+ * This is the main page where users purchase crypto. It coordinates:
+ * - OnrampForm component (user input)
+ * - useOnramp hook (API calls)
+ * - ApplePayWidget component (payment processing)
+ * - Wallet connection state
+ *
+ * ADDRESS STATE MANAGEMENT (Critical for UX):
+ *
+ * Three address-related states:
+ * 1. address: Current form input (what user sees in form)
+ * 2. connectedAddress: Wallet connection status (for "Connected" button)
+ * 3. isConnected: Derived boolean (has ANY wallet, regardless of network support)
+ *
+ * Why separate states?
+ * - address: Can be empty for unsupported networks (Bitcoin in prod)
+ * - connectedAddress: Still valid (user HAS a wallet, just wrong type)
+ * - isConnected: Shows "Connected" button (user is signed in with wallet)
+ *
+ * Example:
+ * - User has EVM wallet, selects Bitcoin network
+ * - address: "" (no EVM wallet works for Bitcoin)
+ * - connectedAddress: "0x1234..." (still has EVM wallet)
+ * - isConnected: true (shows "Connected" button, not "Connect Wallet")
+ *
+ * NETWORK POLLING (200ms interval):
+ *
+ * Polls getCurrentNetwork() to detect changes from OnrampForm:
+ * 1. Form dropdown changes network
+ * 2. setCurrentNetwork() called in sharedState
+ * 3. Polling detects change (trackedNetwork !== currentNetwork)
+ * 4. Calls getCurrentWalletAddress() for new network
+ * 5. Updates address and connectedAddress
+ *
+ * Why polling instead of callback?
+ * - Shared state is global (not React state)
+ * - Multiple components can change network
+ * - Polling ensures all components stay in sync
+ * - 200ms is fast enough for real-time feel, low overhead
+ *
+ * PHONE VERIFICATION FLOW (Apple Pay only):
+ *
+ * Decision tree for submission:
+ * ┌─────────────────────────────────────────────────────────────┐
+ * │ User clicks "Swipe to Deposit"                              │
+ * │   ↓                                                         │
+ * │ Payment method?                                             │
+ * │   ├─ Widget → createWidgetSession() → Browser (NO PHONE)   │
+ * │   └─ Apple Pay → Check phone verification:                 │
+ * │       ├─ Sandbox → Use mock phone (+12345678901)           │
+ * │       └─ Production:                                        │
+ * │           ├─ Has fresh phone? → createOrder()              │
+ * │           └─ No phone? → setPendingForm() → /phone-verify  │
+ * └─────────────────────────────────────────────────────────────┘
+ *
+ * PENDING FORM RESUMPTION:
+ *
+ * When user returns from phone verification:
+ * 1. useFocusEffect detects tab focus
+ * 2. Checks getPendingForm() for saved form data
+ * 3. If Widget: Creates session immediately (no phone needed)
+ * 4. If Apple Pay: Verifies phone is fresh, then creates order
+ * 5. Clears pending form to prevent re-processing
+ *
+ * WALLET INITIALIZATION (Multiple sources):
+ *
+ * CDP wallets can come from multiple sources:
+ * - currentUser.evmAccounts[0]: EOA (Externally Owned Account)
+ * - currentUser.evmSmartAccounts[0]: Smart Account (Account Abstraction)
+ * - currentUser.solanaAccounts[0]: Solana account
+ * - evmAddress hook: Fallback EVM address
+ * - solanaAddress hook: Fallback Solana address
+ *
+ * Priority for setting shared state:
+ * EVM: evmEOA > evmSmartAccount > evmAddress hook
+ * SOL: solanaAccounts[0] > solanaAddress hook
+ *
+ * This runs in multiple useEffects to handle:
+ * - Initial load (may take 5s for wallet creation)
+ * - Tab focus (user might verify in another tab)
+ * - Network changes (switch between EVM/SOL)
+ *
+ * @see components/onramp/OnrampForm.tsx for form UI
+ * @see components/onramp/ApplePayWidget.tsx for payment WebView
+ * @see hooks/useOnramp.ts for API calls
+ * @see utils/sharedState.ts for address resolution
+ */
 
 import { useCurrentUser, useEvmAddress, useIsSignedIn, useSolanaAddress } from "@coinbase/cdp-hooks";
 import { useFocusEffect, useRouter } from "expo-router";

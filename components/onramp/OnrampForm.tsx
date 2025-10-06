@@ -1,3 +1,86 @@
+/**
+ * ============================================================================
+ * ONRAMP FORM - MAIN USER INTERFACE FOR CRYPTO PURCHASES
+ * ============================================================================
+ *
+ * This is the central form where users configure their crypto purchase.
+ * It handles complex relationships between assets, networks, payment methods.
+ *
+ * DYNAMIC FILTERING (Many-to-Many Relationships):
+ *
+ * Assets and Networks have a many-to-many relationship:
+ * - USDC available on: Base, Ethereum, Polygon, Solana, etc.
+ * - Base supports: USDC, USDT, ETH
+ *
+ * Form behavior:
+ * 1. Select "Base" network → filters assets to only those available on Base
+ * 2. Select "USDC" asset → filters networks to only those supporting USDC
+ * 3. Auto-clears invalid selections when options change
+ *
+ * Implementation:
+ * - getAvailableNetworks(asset) → returns networks for selected asset
+ * - getAvailableAssets(network) → returns assets for selected network
+ * - useEffect hooks auto-reset to first valid option if current becomes invalid
+ *
+ * NETWORK CHANGE HANDLING:
+ *
+ * When user changes network, address must update (network-aware routing):
+ * 1. User selects "Solana" network
+ * 2. Form detects network change (useEffect with prevNetworkRef)
+ * 3. Calls getCurrentWalletAddress() from sharedState
+ * 4. Gets Solana-specific address
+ * 5. Calls onAddressChange() to update parent (index.tsx)
+ * 6. Parent updates both address and connectedAddress states
+ *
+ * Using ref (prevNetworkRef) prevents infinite loops:
+ * - Without ref: network change → address update → re-render → network change → loop
+ * - With ref: only triggers when network actually changes, ignores address changes
+ *
+ * VALIDATION LOGIC:
+ *
+ * Three validation layers:
+ * 1. Amount: Must be positive number, within payment method limits
+ * 2. Address: Format validation based on network type
+ *    - EVM: 0x + 40 hex characters
+ *    - Solana: 32-44 base58 characters (no 0, O, I, l)
+ *    - Sandbox: Any non-empty string (testing flexibility)
+ * 3. Network Support: EVM/SOL only in production, any in sandbox
+ *
+ * NOTIFICATION CARDS (Context-Aware Messaging):
+ *
+ * Shows different cards based on state:
+ * 1. Network Not Supported (prod, non-EVM/SOL): Orange warning
+ * 2. Wallet Required (prod, no address): Red error
+ * 3. Address Required (sandbox, no address): Red error
+ * 4. Sandbox Mode (sandbox, has address): Blue info
+ * 5. Production Mode (prod, signed in): Red warning
+ *
+ * Card priority (first match wins):
+ * - Unsupported network (highest priority - blocks all)
+ * - Invalid address for current network
+ * - Sandbox/Production status info
+ *
+ * PAYMENT METHOD RESTRICTIONS:
+ *
+ * Apple Pay (GUEST_CHECKOUT_APPLE_PAY):
+ * - USD only (auto-forces USD when selected)
+ * - US residents only (filtered by country)
+ * - $0-$500 limit
+ *
+ * Coinbase Widget (COINBASE_WIDGET):
+ * - Multi-currency (based on buy options API)
+ * - Multiple payment methods (Card, ACH, etc.)
+ * - Limit depends on payment method selected in widget
+ *
+ * displayCurrencies memo:
+ * - Apple Pay: Always ['USD']
+ * - Widget: Uses paymentCurrencies from API (USD, EUR, GBP, etc.)
+ *
+ * @see hooks/useOnramp.ts for API orchestration
+ * @see utils/sharedState.ts for getCurrentWalletAddress() logic
+ * @see components/ui/SwipeToConfirm.tsx for submission gesture
+ */
+
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';

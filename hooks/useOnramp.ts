@@ -1,3 +1,83 @@
+/**
+ * ============================================================================
+ * ONRAMP HOOK - CENTRAL STATE & API ORCHESTRATION
+ * ============================================================================
+ *
+ * This hook manages all onramp-related state and coordinates API calls.
+ * It's the single source of truth for the onramp flow.
+ *
+ * RESPONSIBILITIES:
+ * 1. Fetch available options (assets, networks, payment methods, currencies)
+ * 2. Dynamic quote fetching (real-time pricing with fees)
+ * 3. Order creation (Apple Pay native flow)
+ * 4. Widget session creation (Coinbase-hosted checkout)
+ * 5. Form validation state management
+ *
+ * DATA FLOW:
+ * ┌──────────────────────────────────────────────────────────────────┐
+ * │ 1. USER SELECTS REGION (Profile) → fetchOptions()               │
+ * │    ↓                                                             │
+ * │ 2. LOADS ASSETS/NETWORKS → getAvailableAssets/Networks()        │
+ * │    ↓                                                             │
+ * │ 3. USER ENTERS AMOUNT/SELECTS ASSET → fetchQuote() (debounced)  │
+ * │    ↓                                                             │
+ * │ 4. SHOWS FEES/TOTAL → User reviews                              │
+ * │    ↓                                                             │
+ * │ 5. USER SLIDES CONFIRM → createOrder() OR createWidgetSession() │
+ * │    ↓                                                             │
+ * │ 6. PAYMENT FLOW → ApplePayWidget OR Browser Redirect            │
+ * └──────────────────────────────────────────────────────────────────┘
+ *
+ * TWO PAYMENT PATHS:
+ *
+ * A. APPLE PAY (GUEST_CHECKOUT_APPLE_PAY):
+ *    - Native iOS Apple Pay sheet
+ *    - Requires phone verification (60-day cache)
+ *    - USD only
+ *    - Hidden WebView handles v2 orders API
+ *    - Real-time transaction tracking via post-events
+ *    Flow: createOrder() → ApplePayWidget → Native sheet → Blockchain
+ *
+ * B. COINBASE WIDGET (COINBASE_WIDGET):
+ *    - Browser-based checkout (Linking.openURL)
+ *    - NO phone verification required
+ *    - Multi-currency support (USD, EUR, GBP, etc.)
+ *    - User can select payment method in widget (Card, ACH, etc.)
+ *    - Coinbase-hosted page handles payment
+ *    Flow: createWidgetSession() → Browser → Coinbase page → Return to app
+ *
+ * API DATA FORMAT MAPPING (Critical for integration):
+ *
+ * Coinbase API uses TWO different name formats:
+ * 1. DISPLAY NAMES (for UI): "USD Coin", "Base", "Ethereum"
+ * 2. API VALUES (for submission): "USDC", "base", "ethereum"
+ *
+ * Helper functions:
+ * - getAssetSymbolFromName(): "USD Coin" → "USDC"
+ * - getNetworkNameFromDisplayName(): "Base" → "base"
+ *
+ * These ensure form selects (display names) are properly converted
+ * before sending to Coinbase API (needs lowercase network names, uppercase symbols).
+ *
+ * QUOTE SYSTEM (Optional but recommended):
+ *
+ * Quote fetching is OPTIONAL - orders can succeed without quotes:
+ * - WITH quote: Shows exact fees, includes quote_id for price lock
+ * - WITHOUT quote: Still creates order, Coinbase calculates fees server-side
+ *
+ * Why quote might fail:
+ * - Network not supported for quotes (Bitcoin, Noble, etc.)
+ * - Demo address unavailable for that network
+ * - Rate limit or API timeout
+ *
+ * Quote failure does NOT block submission if user has valid wallet address.
+ *
+ * @see components/onramp/OnrampForm.tsx for form UI and validation
+ * @see utils/createApplePayOrder.ts for Apple Pay API integration
+ * @see utils/createOnrampSession.ts for Widget session API
+ * @see utils/fetchBuyQuote.ts for quote generation logic
+ */
+
 import { createOnrampSession } from "@/utils/createOnrampSession";
 import { fetchBuyConfig } from "@/utils/fetchBuyConfig";
 import { useCurrentUser } from "@coinbase/cdp-hooks";
@@ -10,11 +90,6 @@ import { getCountry, getSandboxMode, getSubdivision, getVerifiedPhone, getVerifi
 
 
 export type PaymentMethodOption = { display: string; value: string };
-
-/**
- * Custom hook that manages all onramp-related state and API calls
- * Handles: order creation, Apple Pay flow, dynamic options, transaction status
- */
 export function useOnramp() {
   // These states from index.tsx:
   const [applePayVisible, setApplePayVisible] = useState(false);

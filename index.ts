@@ -1,3 +1,21 @@
+/**
+ * This file handles crypto polyfill installation which is required by @coinbase/cdp-hooks.
+ *
+ * TWO BUILD MODES:
+ * 1. Expo Go (EXPO_PUBLIC_USE_EXPO_CRYPTO=true):
+ *    - Uses expo-crypto via Metro alias (limited functionality)
+ *    - Wallet export disabled
+ *    - Can only use previously verified email addresses
+ *
+ * 2. TestFlight/Production (EXPO_PUBLIC_USE_EXPO_CRYPTO=false):
+ *    - Uses react-native-quick-crypto (full native crypto)
+ *    - Wallet export enabled via expo-secure-store
+ *    - Full wallet creation supported
+ *
+ * @see app.config.ts for expo-secure-store plugin configuration
+ * @see metro.config.js for module resolution (no aliases to avoid conflicts)
+ */
+
 import structuredClone from "@ungap/structured-clone";
 import { Buffer } from "buffer";
 import "react-native-get-random-values";

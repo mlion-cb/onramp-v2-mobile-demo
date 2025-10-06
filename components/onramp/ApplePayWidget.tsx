@@ -3,22 +3,67 @@ import { WebView } from "react-native-webview";
 
 /**
  * CRITICAL: Apple Pay Webview Event Flow
- * 
+ *
  * This component orchestrates the entire payment process:
- * 
+ *
  * - onramp_api.load_success: Page loaded → Auto-hide & click Apple Pay button
  * - onramp_api.commit_success: Payment authorized by user → start blockchain tracking
  * - onramp_api.polling_start: Begin tracking blockchain transaction
  * - onramp_api.polling_success: Crypto delivered to wallet → show success
  * - onramp_api.polling_error: Transaction failed on blockchain → show error
- * - onramp_api.cancel: User cancels payment → show info 
- * - onramp_api.load_error: Page load fails → show error 
- * - onramp_api.commit_error: Payment authorization fails → show error 
- * 
+ * - onramp_api.cancel: User cancels payment → show info
+ * - onramp_api.load_error: Page load fails → show error
+ * - onramp_api.commit_error: Payment authorization fails → show error
+ *
  * These post events ensure smooth execution of the payment process from start to finish.
- * 
+ *
  * The WebView is hidden (1x1px, off-screen) but functional.
  * All user interaction happens through native Apple Pay sheet.
+ *
+ * POST-EVENT TIMING & EXPECTED FLOW:
+ *
+ * Normal success flow (with times):
+ * 1. onramp_api.load_success (~2s after mount)
+ *    → Hides button, auto-clicks, shows Apple Pay sheet
+ *
+ * 2. User authorizes payment in Apple Pay sheet (~10-30s)
+ *
+ * 3. onramp_api.commit_success (immediately after authorization)
+ *    → Shows "Payment Successful!" alert
+ *    → Clears 30s timeout
+ *    → Starts 5min blockchain delivery timeout
+ *
+ * 4. onramp_api.polling_start (~1-2s after commit)
+ *    → Backend begins tracking blockchain transaction
+ *
+ * 5. onramp_api.polling_success (~30s-2min after polling start)
+ *    → Crypto delivered to wallet
+ *    → Shows "Complete!" alert
+ *    → Auto-closes after 2s
+ *
+ * Error scenarios:
+ * - User cancels Apple Pay sheet → onramp_api.cancel (anytime)
+ * - Payment card declined → onramp_api.commit_error (during authorization)
+ * - Blockchain network issue → onramp_api.polling_error (during delivery)
+ * - Timeout (30s) → Shows timeout alert, stops processing
+ *
+ * TIMEOUT STRATEGY:
+ * - 30s timeout for payment authorization (load → commit)
+ * - 5min timeout for blockchain delivery (commit → polling success)
+ * - Timeouts are cleared on success/error events
+ * - Payment success timeout does NOT close widget (let polling continue)
+ *
+ * HIDDEN WEBVIEW TECHNIQUE:
+ * - WebView is 1x1 pixel, positioned off-screen (-1000px)
+ * - Opacity 0 (fully transparent)
+ * - Still functional (loads page, runs JS, receives events)
+ * - Native Apple Pay sheet is shown by iOS (triggered by button click)
+ * - User never sees the webpage, only native payment UI
+ *
+ * WHY forceFeature=true?
+ * - Demo/testing parameter for Coinbase sandbox
+ * - Remove this in production code (use original paymentUrl)
+ * - Ensures feature is enabled regardless of sandbox/prod mode
  */
 export function ApplePayWidget({ 
   paymentUrl, 

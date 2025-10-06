@@ -1,3 +1,89 @@
+/**
+ * ============================================================================
+ * PROFILE PAGE - WALLET & SETTINGS MANAGEMENT (Tab 3)
+ * ============================================================================
+ *
+ * Central hub for:
+ * 1. Wallet connection & export
+ * 2. Phone verification management
+ * 3. Region selection (country/subdivision)
+ * 4. Sandbox/Production mode toggle
+ * 5. Manual address input (sandbox only)
+ *
+ * WALLET EXPORT FLOW:
+ *
+ * User has multiple wallets (EVM + SOL):
+ * 1. Click "Export private key"
+ * 2. Choose wallet type modal (EVM or Solana)
+ * 3. Confirmation modal (security warning)
+ * 4. exportEvmAccount() or exportSolanaAccount() from CDP
+ * 5. Private key copied to clipboard
+ * 6. Alert shown with security reminder
+ *
+ * Single wallet (EVM only or SOL only):
+ * 1. Click "Export private key"
+ * 2. Skip choice modal (auto-detect wallet type)
+ * 3. Go directly to confirmation modal
+ * 4. Export and copy to clipboard
+ *
+ * EXPO GO LIMITATIONS:
+ * - Wallet export disabled (expo-crypto doesn't support key export)
+ * - Wallet creation limited (can only use previously verified emails)
+ * - Shows explanatory hints in UI
+ * - Button disabled with "(Expo Go)" text
+ *
+ * TestFlight/Production:
+ * - Full wallet export supported via react-native-quick-crypto
+ * - Full wallet creation for new emails
+ * - Export button enabled
+ *
+ * PHONE VERIFICATION STATE (useFocusEffect):
+ *
+ * Phone state is stored in sharedState (global), but UI needs local state:
+ * - Local state: verifiedPhone, phoneFresh, phoneExpiry
+ * - Updated on tab focus (useFocusEffect)
+ * - Also updated immediately when user unlinks phone
+ *
+ * Why both local and global?
+ * - Global: Shared across components (OnrampForm needs phone for orders)
+ * - Local: Triggers React re-renders (profile UI updates)
+ * - useFocusEffect: Syncs local from global when tab becomes active
+ *
+ * This ensures phone state updates when:
+ * - User verifies phone (returns from phone-code screen)
+ * - User unlinks phone (clicks "Unlink Phone" button)
+ * - User switches tabs and comes back
+ *
+ * REGION SELECTION IMPACT:
+ *
+ * Changing region triggers:
+ * 1. setCountry() or setSubdivision() in sharedState
+ * 2. OnrampForm remount (key=`${country}-${subdivision}`)
+ * 3. fetchOptions() called with new region
+ * 4. Available assets/networks/currencies update
+ *
+ * US subdivisions:
+ * - Only shown when country is "US"
+ * - Required for compliance (state regulations vary)
+ * - Auto-sets to "CA" if US selected without subdivision
+ *
+ * SANDBOX MODE (Not Persisted):
+ *
+ * Intentionally resets on app restart for safety:
+ * - Toggle ON: Manual address input appears, mock phone accepted
+ * - Toggle OFF: Production warnings shown, real transactions
+ * - Affects validation, phone requirements, address priority
+ *
+ * Why not persisted?
+ * - Prevent accidental real transactions thinking it's sandbox
+ * - Forces user to consciously enable sandbox each session
+ * - Production mode is the safe default
+ *
+ * @see utils/sharedState.ts for address priority system
+ * @see app/phone-verify.tsx for phone verification flow
+ * @see hooks/useOnramp.ts for how region affects options
+ */
+
 import { useOnramp } from "@/hooks/useOnramp";
 import {
   useCurrentUser,

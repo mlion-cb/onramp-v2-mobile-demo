@@ -1,50 +1,135 @@
-# Welcome to your Expo app 👋
+# Coinbase Onramp V2 Demo App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+React Native + Expo Router demo showcasing Coinbase's Onramp v2 API with embedded wallets.
 
-## Get started
+See the [CDP React Native Quickstart](https://docs.cdp.coinbase.com/embedded-wallets/react-native/quickstart) and [Onramp Quickstart](https://docs.cdp.coinbase.com/onramp-&-offramp/introduction/quickstart) for more details.
 
-1. Install dependencies
+## 🏗️ Architecture Overview
+### Main User Flow
+1. Wallet Creation: email-verify → email-code → CDP creates      
+2. Crypto Purchase (Apple Pay): OnrampForm → Apple Pay → (phone?) → Creates order 
+3. Crypto Purchase (Coinbase Widget): OnrampForm → Coinbase Widget → Creates order  
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+### Key Directories
+```
+/app/                 # Expo Router pages (file-based routing) 
+  ├─ (tabs)/          # Main app with bottom tabs              
+  │   ├─ index.tsx    # Home: Onramp form + purchase           
+  │   ├─ profile.tsx  # Settings: wallet, phone, region        
+  │   └─ history.tsx  # Transaction list                       
+  ├─ _layout.tsx      # Root: CDP provider + hydrate phone     
+  ├─ email-*.tsx      # Email verification flow (CDP)          
+  └─ phone-*.tsx      # Phone verification flow (Twilio)       
+                                                                
+/components/          # Reusable UI components                 
+  ├─ onramp/          # Onramp-specific components              
+  │   ├─ OnrampForm.tsx        # Main form UI                  
+  │   └─ ApplePayWidget.tsx    # Hidden WebView for Apple Pay  
+  └─ ui/              # Generic UI components                   
+                                                                
+/hooks/               # Custom React hooks                     
+  └─ useOnramp.ts     # Central onramp state & API calls        
+                                                                
+/utils/               # Helper functions & API calls           
+  ├─ sharedState.ts   # Global state (addresses, phone, etc.)  
+  ├─ create*.ts       # Onramp V2 API endpoints to fetch quote and onramp URL for order                  
+  └─ fetch*.ts        # Onramp V1 API endpoints to fetch Onramp config and options               
+                                                                
+/server/              # Node.js proxy (API key security)       
+  └─ index.js         # Forwards requests to Coinbase with keys
+                                                                
+/index.ts             # Crypto setup entry point 
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 🚀 Getting Started
 
-## Learn more
+### Prerequisites
+- Node.js v20+
+- iOS Simulator or TestFlight (Android not tested)
+- Coinbase CDP API keys
+- (Optional) Twilio account for phone verification
 
-To learn more about developing your project with Expo, look at the following resources:
+### Environment Setup
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+#### Create `.env`
+1. Copy `.env` file
+```bash
+cp .env.example .env
+```
+2. Fetch your Project ID from [CDP Portal](https://portal.cdp.coinbase.com/) and update `EXPO_PUBLIC_CDP_PROJECT_ID` in `.env`.
+```bash
+EXPO_PUBLIC_CDP_PROJECT_ID=your_cdp_project_id
+```
+3. Update `EXPO_PUBLIC_BASE_URL`. If using device to test, run on local Terminal `ipconfig getifaddr en0` to get IP address. If running on iOS Simulator, use `localhost`.
+```bash
+EXPO_PUBLIC_BASE_URL=http://<localhost>:3000
+```
+4. Use `true` if running on Expo Go, and `false` for TestFlight
+```bash
+EXPO_PUBLIC_USE_EXPO_CRYPTO=false 
+```
 
-## Join the community
+#### Create `/server/.env`
+1. Copy `/server/.env` file
+```bash
+cp /server/.env.example /server/.env
+```
+2. See [API Authentication](https://docs.cdp.coinbase.com/api-reference/v2/authentication#secret-api-key) to get your Secret API Key
+```bash
+CDP_API_KEY_NAME=your_api_key_name
+CDP_API_KEY_PRIVATE_KEY=your_private_key
+```
+3. (Optional) Use the [Twilio Verify API](https://www.twilio.com/docs/verify/api) service for phone authentication
+```bash
+TWILIO_ACCOUNT_SID=your_twilio_sid
+TWILIO_AUTH_TOKEN=your_twilio_token
+TWILIO_VERIFY_SERVICE_SID=your_verify_service_sid
+```
 
-Join our community of developers creating universal apps.
+### Installation & Running
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+# Install dependencies
+npm install && cd server && npm install && cd ..
+
+# Start backend proxy (for Onramp API calls)
+cd server && npm run dev &
+
+# Expo Go (limited Wallet features)
+npx expo start
+
+```
+
+## User Sequence Flow
+ ![Architecture](https://www.plantuml.com/plantuml/proxy?src=https://github.com/mlion-cb/onramp-v2-mobile-demo/main/assets/docs/architecture.puml)
+
+
+## 🔐 Security Architecture
+
+### API Key Protection
+- **Never** expose CDP API keys in client code
+- All Coinbase API calls proxy through `/server/index.js`
+- Server adds authentication headers before forwarding
+
+### Sandbox vs Production
+- Sandbox: Mock data, optional verification
+- Production: Real transactions, strict validation
+
+## 📱 Two Build Modes
+
+### Expo Go (Development)
+- Uses `expo-crypto` (JavaScript polyfill)
+- **Limitations:**
+  - No wallet export (crypto.subtle missing)
+  - Can't create new wallets (only use verified emails)
+
+### TestFlight (Production)
+- Uses `react-native-quick-crypto` (native C++)
+- **Full Features:**
+  - Wallet export enabled
+  - New wallet creation
+
+## 📚 API Documentation
+- [CDP Onramp v2 API](https://docs.cdp.coinbase.com/onramp/docs/)
+- [CDP Hooks React](https://docs.cdp.coinbase.com/cdp-hooks/docs/)
+
