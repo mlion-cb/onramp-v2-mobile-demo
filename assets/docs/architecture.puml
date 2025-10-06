@@ -1,4 +1,3 @@
-'EOF'
 @startuml
 !theme plain
   title Coinbase Onramp V2 Demo App - Core Flows
@@ -145,4 +144,3 @@
       KYC, and transaction
   end note
 @enduml
-EOF
