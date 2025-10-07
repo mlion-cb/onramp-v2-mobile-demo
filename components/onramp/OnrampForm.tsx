@@ -112,12 +112,13 @@ type OnrampFormProps = {
   isLoadingOptions: boolean;
   getAvailableNetworks: (selectedAsset?: string) => any[];
   getAvailableAssets: (selectedNetwork?: string) => any[];
-  currentQuote: any;          
-  isLoadingQuote: boolean;    
-  fetchQuote: (formData: any) => void; 
+  currentQuote: any;
+  isLoadingQuote: boolean;
+  fetchQuote: (formData: any) => void;
   paymentCurrencies: string[];
   amount: string;
   onAmountChange: (amount: string) => void;
+  sandboxMode?: boolean; // Add sandbox prop
 };
 
 /**
@@ -138,7 +139,8 @@ export function OnrampForm({
   fetchQuote,
   paymentCurrencies,
   amount,
-  onAmountChange
+  onAmountChange,
+  sandboxMode
 }: OnrampFormProps) {
   // Import only isSignedIn hook for production card visibility
   const { useIsSignedIn } = require('@coinbase/cdp-hooks');
@@ -225,13 +227,28 @@ export function OnrampForm({
     return /^[1-9A-HJ-NP-Za-km-z]+$/.test(address);
   })();
 
-  const isSandbox = getSandboxMode();
+  // Use prop if provided, otherwise fallback to getSandboxMode()
+  const isSandbox = sandboxMode ?? getSandboxMode();
   const hasValidAddress = isSandbox
     ? !!address && address.trim().length > 0  // In sandbox, just need any non-empty address
     : (isEvmNetwork ? isEvmAddressValid :
        isSolanaNetwork ? isSolanaAddressValid : false); // In production, need valid address for supported networks
 
   const isFormValid = isAmountValid && !!network && !!asset && hasValidAddress;
+
+  // Debug logging for form validation
+  useEffect(() => {
+    console.log('🔍 Form Validation:', {
+      isSandbox,
+      sandboxModeProp: sandboxMode,
+      address: address?.slice(0, 10) + '...',
+      hasValidAddress,
+      isAmountValid,
+      network,
+      asset,
+      isFormValid
+    });
+  }, [isSandbox, sandboxMode, address, hasValidAddress, isAmountValid, network, asset, isFormValid]);
   /**
    * Dynamic filtering: changing asset updates available networks, and vice versa
    * 

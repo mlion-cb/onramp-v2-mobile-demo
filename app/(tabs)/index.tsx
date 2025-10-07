@@ -97,7 +97,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { ApplePayWidget, OnrampForm, useOnramp } from "../../components";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
-import { clearPhoneVerifyWasCanceled, getCountry, getCurrentNetwork, getCurrentWalletAddress, getPendingForm, getPhoneVerifyWasCanceled, getSandboxMode, getSubdivision, getVerifiedPhone, isPhoneFresh60d, setCurrentSolanaAddress, setCurrentWalletAddress, setPendingForm } from "../../utils/sharedState";
+import { clearPhoneVerifyWasCanceled, getCountry, getCurrentNetwork, getCurrentWalletAddress, getPendingForm, getPhoneVerifyWasCanceled, getSandboxMode, getSubdivision, getTestWalletEvm, getTestWalletSol, getVerifiedPhone, isPhoneFresh60d, isTestSessionActive, setCurrentSolanaAddress, setCurrentWalletAddress, setPendingForm } from "../../utils/sharedState";
 
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
@@ -118,31 +118,41 @@ export default function Index() {
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
   const [amount, setAmount] = useState("");
+  const [sandboxMode, setSandboxModeState] = useState(getSandboxMode());
   const router = useRouter();
   const pendingForm = getPendingForm();
 
 
+  // Check for test session first
+  const testSession = isTestSessionActive();
+
+  // CDP hooks (overridden for test session)
   const { isSignedIn } = useIsSignedIn();
   const { currentUser } = useCurrentUser();
-  const { evmAddress } = useEvmAddress();
-  const { solanaAddress } = useSolanaAddress();
+  const { evmAddress: cdpEvmAddress } = useEvmAddress();
+  const { solanaAddress: cdpSolanaAddress } = useSolanaAddress();
   const [connectedAddress, setConnectedAddress] = useState('');
 
+  // Override addresses for test session
+  const evmAddress = testSession ? getTestWalletEvm() : cdpEvmAddress;
+  const solanaAddress = testSession ? getTestWalletSol() : cdpSolanaAddress;
+
   // Wallet is connected if user has ANY wallet (EVM or SOL), regardless of current network
-  const hasEvmWallet = !!(currentUser?.evmAccounts?.[0] || currentUser?.evmSmartAccounts?.[0] || evmAddress);
-  const hasSolWallet = !!(currentUser?.solanaAccounts?.[0] || solanaAddress);
-  const isConnected = isSignedIn && (hasEvmWallet || hasSolWallet);
+  const hasEvmWallet = testSession ? !!getTestWalletEvm() : !!(currentUser?.evmAccounts?.[0] || currentUser?.evmSmartAccounts?.[0] || evmAddress);
+  const hasSolWallet = testSession ? !!getTestWalletSol() : !!(currentUser?.solanaAccounts?.[0] || solanaAddress);
+  const effectiveIsSignedIn = testSession || isSignedIn;
+  const isConnected = effectiveIsSignedIn && (hasEvmWallet || hasSolWallet);
 
   const [trackedNetwork, setTrackedNetwork] = useState(getCurrentNetwork());
 
-  // Initialize on mount
+  // Initialize on mount AND when test session changes
   useEffect(() => {
     const walletAddress = getCurrentWalletAddress();
     if (walletAddress) {
       setConnectedAddress(walletAddress);
       setAddress(walletAddress);
     }
-  }, []);
+  }, [testSession]); // Re-run when test session changes
 
   // Watch for network changes and update address accordingly
   useEffect(() => {
@@ -173,26 +183,43 @@ export default function Index() {
   useEffect(() => {
     const walletAddress = getCurrentWalletAddress();
 
-    if (isSignedIn && walletAddress) {
+    if (effectiveIsSignedIn && walletAddress) {
       // User is signed in and we have an address - update if different
       setConnectedAddress(prev => prev !== walletAddress ? walletAddress : prev);
       setAddress(prev => prev !== walletAddress ? walletAddress : prev);
-    } else if (!isSignedIn) {
+    } else if (!effectiveIsSignedIn) {
       // User signed out, clear addresses
       setConnectedAddress('');
       setAddress('');
     }
-  }, [isSignedIn, currentUser, evmAddress, solanaAddress]);
+  }, [effectiveIsSignedIn, currentUser, evmAddress, solanaAddress]);
 
   useFocusEffect(
     useCallback(() => {
-      setConnectedAddress(getCurrentWalletAddress() ?? '');
+      const walletAddress = getCurrentWalletAddress();
+      setConnectedAddress(walletAddress ?? '');
+      // Always update address on focus (important for test account returning from verification)
+      if (walletAddress) {
+        setAddress(walletAddress);
+      }
+      // Update sandbox mode state when tab becomes active
+      setSandboxModeState(getSandboxMode());
     }, [])
   );
 
   // Update shared state and local state when CDP wallet addresses load
   useEffect(() => {
-    if (!isSignedIn) return;
+    if (!effectiveIsSignedIn) return;
+
+    // Skip CDP polling for test session (addresses already set)
+    if (testSession) {
+      const walletAddress = getCurrentWalletAddress();
+      if (walletAddress) {
+        setConnectedAddress(walletAddress);
+        if (!address) setAddress(walletAddress);
+      }
+      return;
+    }
 
     // Get addresses from CDP hooks
     const evmSmartAccount = currentUser?.evmSmartAccounts?.[0] as string;
@@ -231,12 +258,12 @@ export default function Index() {
     }, 500);
 
     return () => clearInterval(t);
-  }, [isSignedIn, currentUser, evmAddress, solanaAddress]);
+  }, [effectiveIsSignedIn, testSession, currentUser, evmAddress, solanaAddress]);
 
   useFocusEffect(
     useCallback(() => {
       // Check wallet status when tab becomes active - network-aware
-      if (isSignedIn) {
+      if (effectiveIsSignedIn) {
         const walletAddress = getCurrentWalletAddress();
 
         if (walletAddress) {
@@ -246,7 +273,7 @@ export default function Index() {
       } else {
         setConnectedAddress('');
       }
-    }, [isSignedIn, currentUser, address, evmAddress, solanaAddress])
+    }, [effectiveIsSignedIn, currentUser, address, evmAddress, solanaAddress])
   );
 
   
@@ -439,7 +466,7 @@ export default function Index() {
               textAlign: "center",
               color: isConnected ? "#4ADE80" : TEXT_PRIMARY
             }]}>
-              {isConnected ? "Connected" : connecting ? "Connecting…" : "Connect Wallet"}
+              {isConnected ? "Connected" : connecting ? "Logging in…" : "Login"}
             </Text>
           </View>
         </Pressable>
@@ -464,6 +491,7 @@ export default function Index() {
         paymentCurrencies={paymentCurrencies}
         amount={amount}
         onAmountChange={setAmount}
+        sandboxMode={sandboxMode}
       />
 
       {applePayVisible && (

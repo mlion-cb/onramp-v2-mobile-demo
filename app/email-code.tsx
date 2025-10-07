@@ -1,10 +1,12 @@
-import { useSignInWithEmail, useVerifyEmailOTP, useCurrentUser, useIsInitialized } from '@coinbase/cdp-hooks';
+import { useCurrentUser, useIsInitialized, useSignInWithEmail, useVerifyEmailOTP } from '@coinbase/cdp-hooks';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CoinbaseAlert } from '../components/ui/CoinbaseAlerts';
 import { COLORS } from '../constants/Colors';
+import { isTestAccount, TEST_ACCOUNTS } from '../constants/TestAccounts';
+import { setCurrentSolanaAddress, setCurrentWalletAddress, setTestSession } from '../utils/sharedState';
 
 const { DARK_BG, CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BORDER, BLUE, WHITE } = COLORS;
 const RESEND_SECONDS = 30;
@@ -50,6 +52,35 @@ export default function EmailCodeScreen() {
     if (!flowId || !otp) return;
     setVerifying(true);
     try {
+      // Check if this is a test account (TestFlight)
+      if (isTestAccount(email)) {
+        console.log('🧪 Test account detected, activating mock session');
+
+        // Verify OTP matches
+        if (otp !== TEST_ACCOUNTS.otp) {
+          throw new Error(`Test account OTP must be: ${TEST_ACCOUNTS.otp}`);
+        }
+
+        // Set up mock session (no CDP involved)
+        await setTestSession(TEST_ACCOUNTS.wallets.evm, TEST_ACCOUNTS.wallets.solana);
+        setCurrentWalletAddress(TEST_ACCOUNTS.wallets.evm);
+        setCurrentSolanaAddress(TEST_ACCOUNTS.wallets.solana);
+        // Note: NOT forcing sandbox - let reviewer test production flow
+        // Transaction will fail at payment anyway (no real payment method)
+
+        setAlert({
+          visible: true,
+          title: 'TestFlight Mode',
+          message: `Welcome, TestFlight Reviewer!\n\nTest Credentials:\n• Email: ${TEST_ACCOUNTS.email}\n• OTP: ${TEST_ACCOUNTS.otp}\n• Phone: ${TEST_ACCOUNTS.phone}\n• SMS Code: ${TEST_ACCOUNTS.smsCode}\n\nYou can test the full production flow without going through with any payment.`,
+          type: 'info'
+        });
+
+        // Navigate immediately
+        router.dismissAll();
+        return;
+      }
+
+      // Real account flow
       console.log('Starting email OTP verification...');
       await verifyEmailOTP({ flowId, otp });
       console.log('Email OTP verification completed');

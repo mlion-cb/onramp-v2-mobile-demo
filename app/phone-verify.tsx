@@ -5,6 +5,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaV
 import { CoinbaseAlert } from '../components/ui/CoinbaseAlerts';
 import { BASE_URL } from '../constants/BASE_URL';
 import { COLORS } from '../constants/Colors';
+import { TEST_ACCOUNTS } from '../constants/TestAccounts';
 import { clearPendingForm, markPhoneVerifyCanceled } from '../utils/sharedState';
 
 const { DARK_BG, CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BORDER, BLUE, WHITE } = COLORS;
@@ -85,13 +86,26 @@ export default function PhoneVerifyScreen() {
     }
     setSending(true);
     try {
-      const r = await fetch(`${BASE_URL}/auth/sms/start`, { 
-        method:'POST', 
-        headers:{'Content-Type':'application/json'}, 
+      // Check if this is test phone (TestFlight) - bypass Twilio
+      if (phoneE164 === TEST_ACCOUNTS.phone) {
+        console.log('🧪 Test phone detected, skipping Twilio SMS');
+
+        // Navigate directly to code screen
+        router.push({
+          pathname: '/phone-code',
+          params: { phone: phoneE164 }
+        });
+        return;
+      }
+
+      // Real phone verification flow
+      const r = await fetch(`${BASE_URL}/auth/sms/start`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ phone: phoneE164 }) // Send E164 format
       }).then(res => res.json());
       if (r.error) throw new Error(r.error);
-      
+
       // Navigate to code verification page
       router.push({
         pathname: '/phone-code',
