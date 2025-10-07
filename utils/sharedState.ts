@@ -123,10 +123,73 @@ export const clearPhoneVerifyWasCanceled = () => { phoneVerifyCanceled = false; 
 let sandboxMode: boolean = true;
 
 export const getSandboxMode = () => sandboxMode;
-export const setSandboxMode = (enabled: boolean) => { 
+export const setSandboxMode = (enabled: boolean) => {
   sandboxMode = enabled;
   console.log('Sandbox mode:', enabled ? 'ENABLED' : 'DISABLED');
 };
+
+// ============================================================================
+// TEST ACCOUNT SESSION (TestFlight Only)
+// ============================================================================
+// Stores mock session for TestFlight reviewers who use test account
+// Persists until sign out (email) or unlink phone
+
+const TEST_SESSION_KEY = '@onramp_test_session';
+
+let testSessionActive = false;
+let testWalletEvm: string | null = null;
+let testWalletSol: string | null = null;
+
+export const setTestSession = async (evmAddress: string, solAddress: string) => {
+  testSessionActive = true;
+  testWalletEvm = evmAddress;
+  testWalletSol = solAddress;
+
+  await AsyncStorage.setItem(TEST_SESSION_KEY, JSON.stringify({
+    active: true,
+    evm: evmAddress,
+    sol: solAddress
+  }));
+
+  console.log('✅ Test session activated (TestFlight)');
+};
+
+export const clearTestSession = async () => {
+  testSessionActive = false;
+  testWalletEvm = null;
+  testWalletSol = null;
+
+  await AsyncStorage.removeItem(TEST_SESSION_KEY);
+  console.log('❌ Test session cleared');
+};
+
+export const hydrateTestSession = async () => {
+  try {
+    const data = await AsyncStorage.getItem(TEST_SESSION_KEY);
+    if (data) {
+      const parsed = JSON.parse(data);
+
+      // Safety check: Validate test session data
+      if (parsed.active && parsed.evm && parsed.sol) {
+        testSessionActive = true;
+        testWalletEvm = parsed.evm;
+        testWalletSol = parsed.sol;
+        console.log('🔄 Test session hydrated from storage');
+      } else {
+        // Invalid data, clear it
+        console.warn('⚠️ Invalid test session data, clearing');
+        await clearTestSession();
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error hydrating test session:', error);
+    await clearTestSession();
+  }
+};
+
+export const isTestSessionActive = () => testSessionActive;
+export const getTestWalletEvm = () => testWalletEvm;
+export const getTestWalletSol = () => testWalletSol;
 
 
 export const setCurrentPartnerUserRef = (ref: string | null) => {

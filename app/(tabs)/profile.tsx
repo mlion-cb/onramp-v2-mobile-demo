@@ -102,11 +102,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
-import { daysUntilExpiry, formatPhoneDisplay, getCountry, getSandboxMode, getSubdivision, getVerifiedPhone, isPhoneFresh60d, setCountry, setCurrentSolanaAddress, setCurrentWalletAddress, setManualWalletAddress, setSandboxMode, setSubdivision, setVerifiedPhone } from "../../utils/sharedState";
+import { TEST_ACCOUNTS } from "../../constants/TestAccounts";
+import { clearTestSession, daysUntilExpiry, formatPhoneDisplay, getCountry, getSandboxMode, getSubdivision, getTestWalletEvm, getTestWalletSol, getVerifiedPhone, isPhoneFresh60d, isTestSessionActive, setCountry, setCurrentSolanaAddress, setCurrentWalletAddress, setManualWalletAddress, setSandboxMode, setSubdivision, setVerifiedPhone } from "../../utils/sharedState";
 
 const { CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BLUE, BORDER, WHITE } = COLORS;
 
 export default function WalletScreen() {
+  // Check for test session first
+  const testSession = isTestSessionActive();
+
+  // CDP hooks (only used for real accounts)
   const { isInitialized } = useIsInitialized();
   const { isSignedIn } = useIsSignedIn();
   const { currentUser } = useCurrentUser();
@@ -119,8 +124,8 @@ export default function WalletScreen() {
     type: 'success' as 'success' | 'error' | 'info'
   });
 
-  // Address resolution matching working reference project
-  const explicitEOAAddress = currentUser?.evmAccounts?.[0] as string;
+  // Override CDP data if test session active
+  const explicitEOAAddress = testSession ? getTestWalletEvm() : (currentUser?.evmAccounts?.[0] as string);
   const smartAccountAddress = currentUser?.evmSmartAccounts?.[0] as string;
 
   // For display: prefer smart account, then EOA
@@ -128,8 +133,11 @@ export default function WalletScreen() {
 
   const { exportEvmAccount } = useExportEvmAccount();
   const { exportSolanaAccount } = useExportSolanaAccount();
-  const { solanaAddress } = useSolanaAddress();
+  const { solanaAddress: cdpSolanaAddress } = useSolanaAddress();
   const { evmAddress } = useEvmAddress();
+
+  // Override solana address for test session
+  const solanaAddress = testSession ? getTestWalletSol() : cdpSolanaAddress;
 
   // For export: Use EOA first, then evmAddress hook, then smart account
   const evmWalletAddress = explicitEOAAddress || evmAddress || smartAccountAddress;
@@ -181,7 +189,13 @@ export default function WalletScreen() {
 
   const formattedPhone = formatPhoneDisplay(verifiedPhone);
   const d = phoneExpiry;
-  const signedButNoSA = isSignedIn && !primaryAddress;
+
+  // Override sign-in status for test session
+  const effectiveIsSignedIn = testSession || isSignedIn;
+  const signedButNoSA = effectiveIsSignedIn && !primaryAddress;
+
+  // Override email display for test session
+  const displayEmail = testSession ? TEST_ACCOUNTS.email : (currentUser?.authenticationMethods.email?.email || 'No email');
 
   // Refresh phone verification state when tab becomes active
   useFocusEffect(
@@ -219,20 +233,20 @@ export default function WalletScreen() {
   }, [buyConfig, fetchOptions]);
 
   useEffect(() => {
-    if (isSignedIn && primaryAddress) {
+    if (effectiveIsSignedIn && primaryAddress) {
       setManualAddress(''); // Clear manual input when real wallet connects
       setManualWalletAddress(null);
     }
-  }, [isSignedIn, primaryAddress]);
+  }, [effectiveIsSignedIn, primaryAddress]);
 
   // sync manual address with shared state
   useEffect(() => {
-    if (localSandboxEnabled && !isSignedIn) {
+    if (localSandboxEnabled && !effectiveIsSignedIn) {
       setManualWalletAddress(manualAddress);
     } else {
       setManualWalletAddress(null);
     }
-  }, [manualAddress, localSandboxEnabled, isSignedIn]);
+  }, [manualAddress, localSandboxEnabled, effectiveIsSignedIn]);
 
   useEffect(() => {
     if (buyConfig?.countries) {
@@ -269,7 +283,14 @@ export default function WalletScreen() {
 
   const handleSignOut = useCallback(async () => {
     try {
-      await signOut();
+      // Check if this is a test session
+      if (isTestSessionActive()) {
+        console.log('🧪 Clearing test session');
+        await clearTestSession();
+      } else {
+        // Real CDP sign out
+        await signOut();
+      }
     } catch (e) {
       console.warn('signOut error', e);
     } finally {
@@ -287,7 +308,7 @@ export default function WalletScreen() {
   const [showWalletChoice, setShowWalletChoice] = useState(false);
 
   const handleRequestExport = () => {
-    if (!isSignedIn || (!evmWalletAddress && !solanaAddress)) return; // Allow export if either wallet exists
+    if (!effectiveIsSignedIn || (!evmWalletAddress && !solanaAddress)) return; // Allow export if either wallet exists
 
     if (isExpoGo) {
       setAlertState({
@@ -312,6 +333,34 @@ export default function WalletScreen() {
   };
 
   const handleConfirmedExport = async () => {
+    // Check if this is a test account (TestFlight)
+    if (isTestSessionActive()) {
+      console.log('🧪 Test account - exporting mock seed phrase');
+      setExporting(true);
+      try {
+        // Copy mock seed phrase to clipboard
+        await Clipboard.setStringAsync(TEST_ACCOUNTS.seedPhrase);
+        setAlertState({
+          visible: true,
+          title: "Mock Seed Phrase Copied (TestFlight)",
+          message: `This is a mock seed phrase for TestFlight testing only:\n\n"${TEST_ACCOUNTS.seedPhrase}"\n\nNo real wallet exists. This is for demonstration purposes only.`,
+          type: "info",
+        });
+      } catch (e) {
+        setAlertState({
+          visible: true,
+          title: "Export failed",
+          message: "Unable to copy mock seed phrase to clipboard.",
+          type: "error",
+        });
+      } finally {
+        setExporting(false);
+        setShowExportConfirm(false);
+      }
+      return;
+    }
+
+    // Real account export flow
     const isEvmExport = exportType === 'evm';
     const targetAddress = isEvmExport ? evmWalletAddress : solanaAddress;
 
@@ -432,14 +481,14 @@ export default function WalletScreen() {
                     <Text style={styles.buttonTextSecondary}>Sign out</Text>
                   </Pressable>
                 </View>
-              ) : !isSignedIn ? (
+              ) : !effectiveIsSignedIn ? (
                 <View style={styles.subContainer}>
                   <View style={styles.subBox}>
                     <Text style={styles.subValue}>No wallet connected</Text>
                     <Text style={styles.subHint}>Sign in with email to create your embedded wallet</Text>
                   </View>
-                  <Pressable 
-                    style={[styles.button]} 
+                  <Pressable
+                    style={[styles.button]}
                     onPress={() => router.push('/email-verify')}
                   >
                     <Text style={styles.buttonText}>Connect wallet</Text>
@@ -448,8 +497,8 @@ export default function WalletScreen() {
               ) : (
                 <View style={styles.subContainer}>
                   <View style={styles.subBox}>
-                    <Text style={styles.subHint}>Email address</Text>
-                    <Text style={styles.subValue}>{currentUser?.authenticationMethods.email?.email || 'No email'}</Text>
+                    <Text style={styles.subHint}>Email address {testSession && '(TestFlight)'}</Text>
+                    <Text style={styles.subValue}>{displayEmail}</Text>
                   </View>
 
                   <View style={styles.subBox}>
@@ -485,7 +534,7 @@ export default function WalletScreen() {
               )}
             </View>
             {/* Fallback sign out for edge cases */}
-            {isSignedIn && !signedButNoSA && !primaryAddress && (
+            {effectiveIsSignedIn && !signedButNoSA && !primaryAddress && (
               <View style={styles.card}>
                 <Text style={styles.rowLabel}>Session Management</Text>
                 <Pressable style={[styles.buttonSecondary]} onPress={handleSignOut}>
@@ -494,7 +543,7 @@ export default function WalletScreen() {
               </View>
             )}
             {/* Sandbox Wallet Card - NEW, only show when sandbox + no connected wallet */}
-            {localSandboxEnabled && !isSignedIn && (
+            {localSandboxEnabled && !effectiveIsSignedIn && (
               <View style={styles.card}>
                 <Text style={styles.rowLabel}>Sandbox Wallet Address</Text>
                 
@@ -574,7 +623,7 @@ export default function WalletScreen() {
               
               <View style={styles.row}>
                 <View style={styles.textContainer}>
-                  <Text style={styles.rowValue}>Sandbox Environment</Text>
+                  <Text style={styles.rowValue}>{localSandboxEnabled ? 'Sandbox Environment' : 'Production Environment'}</Text>
                   <Text style={localSandboxEnabled ? styles.subHint : styles.productionWarning}>
                     {localSandboxEnabled ? 'Test Mode\n\nNo real transactions will be executed.\n\nYou may experience Onramp flow with optional phone and email verification.\n\nOnly Guest Checkout (Debit Card) will be available for Coinbase Widget.' : 'Production Mode\n\nReal transactions will be executed on chain and balances will be debited if successful.\n\nPhone and email vericiation required.'}
                   </Text>

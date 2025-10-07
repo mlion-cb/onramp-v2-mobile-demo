@@ -2,7 +2,7 @@ import { CDPHooksProvider, Config } from "@coinbase/cdp-hooks";
 import { Stack } from "expo-router";
 import { COLORS } from "../constants/Colors";
 
-import { hydrateVerifiedPhone } from "@/utils/sharedState";
+import { hydrateTestSession, hydrateVerifiedPhone, setCurrentSolanaAddress, setCurrentWalletAddress, setSandboxMode, getTestWalletEvm, getTestWalletSol, isTestSessionActive } from "@/utils/sharedState";
 import { useEffect } from "react";
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
@@ -30,7 +30,18 @@ console.log('RootLayout mounted, CDP config:', cdpConfig);
 
 export default function RootLayout() {
   useEffect(() => {
+    // Hydrate phone verification
     hydrateVerifiedPhone().catch(() => {});
+
+    // Hydrate test session (TestFlight)
+    hydrateTestSession().then(() => {
+      if (isTestSessionActive()) {
+        console.log('🧪 Test session restored from storage');
+        setCurrentWalletAddress(getTestWalletEvm());
+        setCurrentSolanaAddress(getTestWalletSol());
+        // Note: NOT forcing sandbox - let reviewer choose mode via Profile
+      }
+    }).catch(() => {});
   }, []);
 
   return (

@@ -5,6 +5,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaV
 import { CoinbaseAlert } from '../components/ui/CoinbaseAlerts';
 import { BASE_URL } from '../constants/BASE_URL';
 import { COLORS } from '../constants/Colors';
+import { TEST_ACCOUNTS } from '../constants/TestAccounts';
 import { setVerifiedPhone } from '../utils/sharedState';
 
 const { DARK_BG, CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BORDER, BLUE, WHITE } = COLORS;
@@ -50,8 +51,23 @@ export default function PhoneCodeScreen() {
     if (!phone || !code) return;
     setVerifying(true);
     try {
+      // Check if this is test phone (TestFlight)
+      if (phone === TEST_ACCOUNTS.phone) {
+        console.log('🧪 Test phone detected, using mock verification');
+
+        if (code !== TEST_ACCOUNTS.smsCode) {
+          throw new Error(`Test SMS code must be: ${TEST_ACCOUNTS.smsCode}`);
+        }
+
+        // Store test phone with 60-day expiry (same as real flow)
+        await setVerifiedPhone(phone);
+        router.dismissAll();
+        return;
+      }
+
+      // Real phone verification flow
       const r = await fetch(`${BASE_URL}/auth/sms/verify`, {
-        method:'POST', 
+        method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ phone, code })
       }).then(res => res.json());
