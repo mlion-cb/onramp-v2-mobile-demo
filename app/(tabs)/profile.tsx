@@ -99,11 +99,11 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
 import { TEST_ACCOUNTS } from "../../constants/TestAccounts";
-import { clearTestSession, daysUntilExpiry, formatPhoneDisplay, getCountry, getSandboxMode, getSubdivision, getTestWalletEvm, getTestWalletSol, getVerifiedPhone, isPhoneFresh60d, isTestSessionActive, setCountry, setCurrentSolanaAddress, setCurrentWalletAddress, setManualWalletAddress, setSandboxMode, setSubdivision, setVerifiedPhone } from "../../utils/sharedState";
+import { clearManualAddress, clearTestSession, daysUntilExpiry, formatPhoneDisplay, getCountry, getManualWalletAddress, getSandboxMode, getSubdivision, getTestWalletEvm, getTestWalletSol, getVerifiedPhone, isPhoneFresh60d, isTestSessionActive, setCountry, setCurrentSolanaAddress, setCurrentWalletAddress, setManualWalletAddress, setSandboxMode, setSubdivision, setVerifiedPhone } from "../../utils/sharedState";
 
 const { CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BLUE, BORDER, WHITE } = COLORS;
 
@@ -220,10 +220,16 @@ export default function WalletScreen() {
   const sandboxEnabled = getSandboxMode();
   const [localSandboxEnabled, setLocalSandboxEnabled] = useState(getSandboxMode());
   const [manualAddress, setManualAddress] = useState('');
+
   // sync local state with shared state on mount
   useEffect(() => {
     setLocalSandboxEnabled(getSandboxMode());
-  }, []);
+    // Load manual address if in sandbox mode
+    const stored = getManualWalletAddress();
+    if (sandboxEnabled && stored) {
+      setManualAddress(stored);
+    }
+  }, [sandboxEnabled]);
 
   useEffect(() => {
     // Ensure this hook instance has loaded the config
@@ -232,21 +238,16 @@ export default function WalletScreen() {
     }
   }, [buyConfig, fetchOptions]);
 
+  // Save manual address to shared state when changed
   useEffect(() => {
-    if (effectiveIsSignedIn && primaryAddress) {
-      setManualAddress(''); // Clear manual input when real wallet connects
-      setManualWalletAddress(null);
-    }
-  }, [effectiveIsSignedIn, primaryAddress]);
-
-  // sync manual address with shared state
-  useEffect(() => {
-    if (localSandboxEnabled && !effectiveIsSignedIn) {
-      setManualWalletAddress(manualAddress);
+    if (localSandboxEnabled) {
+      // In sandbox mode, save manual address (can be empty string or actual address)
+      setManualWalletAddress(manualAddress || null);
     } else {
+      // In production mode, always clear manual address
       setManualWalletAddress(null);
     }
-  }, [manualAddress, localSandboxEnabled, effectiveIsSignedIn]);
+  }, [manualAddress, localSandboxEnabled]);
 
   useEffect(() => {
     if (buyConfig?.countries) {
@@ -297,9 +298,10 @@ export default function WalletScreen() {
       setCurrentWalletAddress(null);
       setManualWalletAddress(null);
       await setVerifiedPhone(null);
-      setAlertState({ visible: true, title: "Signed out", message: "You've been signed out.", type: 'success' });
+      // Navigate to login screen
+      router.replace('/auth/login');
     }
-  }, [signOut]);
+  }, [signOut, router]);
 
   
 
@@ -542,25 +544,45 @@ export default function WalletScreen() {
                 </Pressable>
               </View>
             )}
-            {/* Sandbox Wallet Card - NEW, only show when sandbox + no connected wallet */}
-            {localSandboxEnabled && !effectiveIsSignedIn && (
+            {/* Sandbox Wallet Card - show when sandbox mode is enabled */}
+            {localSandboxEnabled && (
               <View style={styles.card}>
-                <Text style={styles.rowLabel}>Sandbox Wallet Address</Text>
-                
+                <Text style={styles.rowLabel}>🧪 Sandbox Testing</Text>
+
                 <View style={styles.subBox}>
-                  <Text style={styles.subHint}>Manual address input (testing only)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={manualAddress}
-                    onChangeText={setManualAddress}
-                    placeholder="Enter any wallet address for testing"
-                    placeholderTextColor={TEXT_SECONDARY}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
+                  <Text style={styles.subHint}>Manual Wallet Address (Optional Override)</Text>
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      style={[styles.input, { flex: 1, marginRight: 8 }]}
+                      value={manualAddress}
+                      onChangeText={setManualAddress}
+                      placeholder="Enter any wallet address for testing"
+                      placeholderTextColor={TEXT_SECONDARY}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    {manualAddress ? (
+                      <Pressable
+                        style={styles.pasteButton}
+                        onPress={() => setManualAddress('')}
+                      >
+                        <Ionicons name="close-circle" size={20} color={TEXT_SECONDARY} />
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        style={styles.pasteButton}
+                        onPress={async () => {
+                          const text = await Clipboard.getStringAsync();
+                          if (text) setManualAddress(text);
+                        }}
+                      >
+                        <Ionicons name="clipboard-outline" size={20} color={BLUE} />
+                      </Pressable>
+                    )}
+                  </View>
                 </View>
                 <Text style={styles.helper}>
-                  In sandbox mode, you can input any valid address format for any network to test the onramp flow.
+                  ⚠️ Manual address will be cleared when switching to production mode. In sandbox mode, you can input any address to override your connected wallet for testing purposes.
                 </Text>
               </View>
             )}
@@ -631,8 +653,29 @@ export default function WalletScreen() {
                 <Switch
                   value={localSandboxEnabled}
                   onValueChange={(value) => {
-                    setLocalSandboxEnabled(value); // Update local state (triggers re-render)
-                    setSandboxMode(value); // Update shared state (for other components)
+                    if (!value && manualAddress) {
+                      // Switching to production with manual address set - show confirmation
+                      Alert.alert(
+                        'Switch to Production?',
+                        'Your manual wallet address will be cleared.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Confirm',
+                            style: 'destructive',
+                            onPress: () => {
+                              setLocalSandboxEnabled(value);
+                              setSandboxMode(value);
+                              clearManualAddress();
+                              setManualAddress('');
+                            }
+                          }
+                        ]
+                      );
+                    } else {
+                      setLocalSandboxEnabled(value); // Update local state (triggers re-render)
+                      setSandboxMode(value); // Update shared state (for other components)
+                    }
                   }}
                   trackColor={{ true: BLUE, false: BORDER }}
                   thumbColor={Platform.OS === "android" ? (sandboxEnabled ? "#ffffff" : "#f4f3f4") : undefined}
@@ -934,6 +977,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     color: TEXT_PRIMARY,
     padding: 14,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pasteButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   buttonDisabled: {
     opacity: 0.6,

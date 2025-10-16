@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { generateJwt } from '@coinbase/cdp-sdk/auth';
 import twilio from 'twilio';
 import { resolveClientIp } from './ip.js';
+import { validateAccessToken } from './validateToken.js';
 
 let twilioClient: ReturnType<typeof import('twilio')> | null = null;
 function getTwilio() {
@@ -36,9 +37,21 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Health
+// Health check (no auth required)
 app.get("/health", (_req, res) => {
   res.json({ ok: true, message: 'Server is running' });
+});
+
+// 🔒 GLOBAL AUTHENTICATION MIDDLEWARE
+// All routes except /health require valid CDP access token
+app.use((req, res, next) => {
+  // Skip authentication for health check
+  if (req.path === '/health') {
+    return next();
+  }
+
+  // Apply authentication to all other routes
+  return validateAccessToken(req, res, next);
 });
 
 /**
@@ -46,14 +59,16 @@ app.get("/health", (_req, res) => {
  * - Handles JWT authentication and forwards requests to avoid CORS issues
  * - JWT generation requires server-side CDP secrets
  * - Centralizes authentication logic
- * 
+ *
  * Usage: POST /server/api with { url, method, body }
  * Usage Pattern: Frontend → POST /server/api → Coinbase API → Response
- *  
+ *
  * Automatically handles:
  * - JWT generation for api.developer.coinbase.com
  * - Method switching (GET for options, POST for orders)
  * - Error forwarding with proper status codes
+ *
+ * Note: Authentication handled by global middleware above
  */
 app.post("/server/api", async (req, res) => {
 
@@ -134,14 +149,22 @@ app.post("/server/api", async (req, res) => {
 });
 
 
+// Twilio SMS endpoints
+// Note: Authentication handled by global middleware above
 app.post('/auth/sms/start', async (req, res) => {
   try {
     const { phone } = req.body || {};
     if (!phone) return res.status(400).json({ error: 'phone required' });
+
+    console.log('📱 [TWILIO] SMS start request - User:', req.userId, 'Phone:', phone);
+
     const r = await getTwilio().verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
       .verifications.create({ to: phone, channel: 'sms' });
+
+    console.log('✅ [TWILIO] SMS sent successfully - Status:', r.status);
     res.json({ status: r.status });
   } catch (e: any) {
+    console.error('❌ [TWILIO] SMS start error:', e.message);
     res.status(500).json({ error: e.message || 'twilio start error' });
   }
 });
@@ -151,11 +174,15 @@ app.post('/auth/sms/verify', async (req, res) => {
     const { phone, code } = req.body || {};
     if (!phone || !code) return res.status(400).json({ error: 'phone and code required' });
 
+    console.log('🔐 [TWILIO] SMS verify request - User:', req.userId, 'Phone:', phone);
+
     const r = await getTwilio().verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
       .verificationChecks.create({ to: phone, code });
 
+    console.log('✅ [TWILIO] SMS verification result - Status:', r.status, 'Valid:', r.valid);
     return res.json({ status: r.status, valid: r.valid });
   } catch (e:any) {
+    console.error('❌ [TWILIO] SMS verify error:', e.message);
     return res.status(500).json({ error: e.message || 'twilio verify error' });
   }
 });

@@ -6,6 +6,7 @@ import { CoinbaseAlert } from '../components/ui/CoinbaseAlerts';
 import { BASE_URL } from '../constants/BASE_URL';
 import { COLORS } from '../constants/Colors';
 import { TEST_ACCOUNTS } from '../constants/TestAccounts';
+import { authenticatedFetch } from '../utils/authenticatedFetch';
 import { clearPendingForm, markPhoneVerifyCanceled } from '../utils/sharedState';
 
 const { DARK_BG, CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BORDER, BLUE, WHITE } = COLORS;
@@ -17,7 +18,6 @@ export default function PhoneVerifyScreen() {
   const [phoneDisplay, setPhoneDisplay] = useState(''); // What user sees: (201) 555-0123
   const [phoneE164, setPhoneE164] = useState(''); // What we send: +12015550123
 
-  
   const [phone, setPhone] = useState(initialPhone);
   const [sending, setSending] = useState(false);
   const [alert, setAlert] = useState<{visible:boolean; title:string; message:string; type:'success'|'error'|'info'}>({
@@ -98,13 +98,20 @@ export default function PhoneVerifyScreen() {
         return;
       }
 
-      // Real phone verification flow
-      const r = await fetch(`${BASE_URL}/auth/sms/start`, {
+      // Real phone verification flow (auth handled by authenticatedFetch)
+      console.log('📤 [SMS Start] Sending authenticated request to backend');
+
+      const r = await authenticatedFetch(`${BASE_URL}/auth/sms/start`, {
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ phone: phoneE164 }) // Send E164 format
       }).then(res => res.json());
+
       if (r.error) throw new Error(r.error);
+
+      console.log('✅ [SMS Start] SMS sent successfully');
 
       // Navigate to code verification page
       router.push({
@@ -112,6 +119,7 @@ export default function PhoneVerifyScreen() {
         params: { phone: phoneE164 }
       });
     } catch (e:any) {
+      console.error('❌ [SMS Start] Error:', e.message);
       setAlert({ visible:true, title:'Error', message:e.message || 'Failed to send SMS', type:'error' });
     } finally { setSending(false); }
   };

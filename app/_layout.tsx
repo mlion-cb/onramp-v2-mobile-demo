@@ -3,6 +3,8 @@ import { Stack } from "expo-router";
 import { COLORS } from "../constants/Colors";
 
 import { hydrateTestSession, hydrateVerifiedPhone, setCurrentSolanaAddress, setCurrentWalletAddress, setSandboxMode, getTestWalletEvm, getTestWalletSol, isTestSessionActive } from "@/utils/sharedState";
+import { AuthInitializer } from "@/components/AuthInitializer";
+import { AuthGate } from "@/components/AuthGate";
 import { useEffect } from "react";
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
@@ -46,26 +48,40 @@ export default function RootLayout() {
 
   return (
     <CDPHooksProvider config={cdpConfig}>
-      <Stack screenOptions={{ headerShown: false }}>
-        {/* Phone verification pages - no tabs */}
-        <Stack.Screen 
-          name="phone-verify" 
-          options={{
-            presentation: 'card',
-            animation: 'none', 
-          }}
-        />
-        <Stack.Screen 
-            name="phone-code" 
-            options={{
-              presentation: 'card',
-              animation: 'none',
-            }}
-        />
-        
-        {/* Main app with tabs */}
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack>
+      <AuthInitializer>
+        <AuthGate>
+          <Stack screenOptions={{ headerShown: false }}>
+            {/* Auth screens */}
+            <Stack.Screen
+              name="auth/login"
+              options={{
+                headerShown: false,
+                gestureEnabled: false,  // Can't swipe back from login
+                animation: 'fade',
+              }}
+            />
+
+            {/* Phone verification pages - no tabs */}
+            <Stack.Screen
+              name="phone-verify"
+              options={{
+                presentation: 'card',
+                animation: 'none',
+              }}
+            />
+            <Stack.Screen
+                name="phone-code"
+                options={{
+                  presentation: 'card',
+                  animation: 'none',
+                }}
+            />
+
+            {/* Main app with tabs */}
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          </Stack>
+        </AuthGate>
+      </AuthInitializer>
     </CDPHooksProvider>
   );
 }

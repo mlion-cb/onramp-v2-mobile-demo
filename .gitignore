@@ -39,4 +39,6 @@ yarn-error.*
 app-example
 
 
-ARCHITECTURE.md
+TESTFLIGHT_SETUP.md
+TESTFLIGHT_SAFETY.md
+BACKEND_AUTH.md

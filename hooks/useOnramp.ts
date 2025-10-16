@@ -59,19 +59,6 @@
  * These ensure form selects (display names) are properly converted
  * before sending to Coinbase API (needs lowercase network names, uppercase symbols).
  *
- * QUOTE SYSTEM (Optional but recommended):
- *
- * Quote fetching is OPTIONAL - orders can succeed without quotes:
- * - WITH quote: Shows exact fees, includes quote_id for price lock
- * - WITHOUT quote: Still creates order, Coinbase calculates fees server-side
- *
- * Why quote might fail:
- * - Network not supported for quotes (Bitcoin, Noble, etc.)
- * - Demo address unavailable for that network
- * - Rate limit or API timeout
- *
- * Quote failure does NOT block submission if user has valid wallet address.
- *
  * @see components/onramp/OnrampForm.tsx for form UI and validation
  * @see utils/createApplePayOrder.ts for Apple Pay API integration
  * @see utils/createOnrampSession.ts for Widget session API
@@ -97,12 +84,12 @@ export function useOnramp() {
   const [transactionStatus, setTransactionStatus] = useState<'pending' | 'success' | 'error' | null>(null);
   const [options, setOptions] = useState<any>(null);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
   const [currentQuote, setCurrentQuote] = useState<any>(null);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
-  const { currentUser } = useCurrentUser(); 
+  const { currentUser } = useCurrentUser();
   const [buyConfig, setBuyConfig] = useState<any>(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-
 
 
   /**
@@ -157,7 +144,7 @@ export function useOnramp() {
       }
 
       // Map form values to API format (display names → API values)
-      // Order creation: API call to Coinbase
+      // Order creation: API call to Coinbase (auth handled by authenticatedFetch)
       const result = await createApplePayOrder({
         paymentAmount: formData.amount,
         paymentCurrency: formData.paymentCurrency,
@@ -202,8 +189,9 @@ export function useOnramp() {
       if (country === 'US' && !subdivision) {
         subdivision = 'CA';
         setSubdivision('CA');
-      } 
-  
+      }
+
+      // Auth handled by authenticatedFetch
       const res = await createOnrampSession({
         purchaseCurrency: assetSymbol,
         destinationNetwork: networkName,
@@ -239,6 +227,7 @@ export function useOnramp() {
    */
   const fetchOptions = useCallback(async () => {
     setIsLoadingOptions(true);
+    setOptionsError(null); // Clear previous error
     try {
       const country = getCountry();
       let subdivision = getSubdivision();
@@ -251,13 +240,17 @@ export function useOnramp() {
         // Filter countries to only those with CARD payment method (Buy & Send)
         const filteredConfig = {
           ...cfg,
-          countries: (cfg?.countries || []).filter((country: any) => 
+          countries: (cfg?.countries || []).filter((country: any) =>
             country.payment_methods?.some((pm: any) => pm.id === 'CARD')
           )
       };
       setBuyConfig(filteredConfig);
+      setOptionsError(null); // Success - clear error
     } catch (error) {
       console.error('Failed to fetch options:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load payment options';
+      setOptionsError(errorMessage);
+      // Keep any existing options instead of clearing (better UX)
     } finally {
       setIsLoadingOptions(false);
     }
@@ -268,10 +261,6 @@ export function useOnramp() {
    * Quote fetching strategy:
    * - Apple Pay: Uses v2 orders API (USD only, requires phone)
    * - Coinbase Widget: Uses v2 session API (multi-currency based on options, no phone required)
-   *
-   * Quote is OPTIONAL for order submission:
-   * - If quote succeeds: Shows fees/total to user, includes quote_id in order
-   * - If quote fails (unsupported network, demo address unavailable, etc.): User can still submit order with actual wallet address
    */
   const fetchQuote = useCallback(async (formData: {
     amount: string;
@@ -291,6 +280,7 @@ export function useOnramp() {
       const assetSymbol = getAssetSymbolFromName(formData.asset);
       const networkName = getNetworkNameFromDisplayName(formData.network);
 
+      // Auth handled by authenticatedFetch
       const quote = await fetchBuyQuote({
         paymentAmount: formData.amount,
         paymentCurrency: formData.paymentCurrency,
@@ -362,7 +352,7 @@ export function useOnramp() {
     return fromConfig.length ? fromConfig : ['USD'];
   }, [options, buyConfig]);
 
-  
+
   return {
     // State
     applePayVisible,
@@ -371,6 +361,7 @@ export function useOnramp() {
     transactionStatus,
     options,
     isLoadingOptions,
+    optionsError,
     isLoadingQuote,
     currentQuote,
     paymentCurrencies,

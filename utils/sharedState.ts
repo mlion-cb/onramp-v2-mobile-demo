@@ -208,6 +208,11 @@ export const setManualWalletAddress = (addr: string | null) => {
 
 export const getManualWalletAddress = () => manualWalletAddress;
 
+export const clearManualAddress = () => {
+  manualWalletAddress = '';
+  console.log('🧹 [SHARED STATE] Manual address cleared (production mode)');
+};
+
 export const setCurrentWalletAddress = (addr: string | null) => {
   currentWalletAddress = addr;
 };
