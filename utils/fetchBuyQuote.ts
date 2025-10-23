@@ -1,5 +1,6 @@
 
 import { BASE_URL } from '@/constants/BASE_URL';
+import { authenticatedFetch } from './authenticatedFetch';
 import { createApplePayOrder } from './createApplePayOrder';
 import { demoAddressForNetwork } from './randomAddresses';
 import { getCountry, getSubdivision } from './sharedState';
@@ -22,18 +23,17 @@ export async function fetchBuyQuote(payload: {
   const isApplePay = payload.paymentMethod === 'GUEST_CHECKOUT_APPLE_PAY';
 
   if (isApplePay) {
-    const response = await createApplePayOrder(
-      {...payload, 
-        isQuote: true,
-        paymentMethod: "GUEST_CHECKOUT_APPLE_PAY",
-        email: 'testquote@test.com',
-        phoneNumber: '+12345678901',
-        agreementAcceptedAt: new Date().toISOString(),
-        phoneNumberVerifiedAt: new Date().toISOString(),
-        partnerUserRef: 'testquote',
-        destinationAddress,
-      },
-    );
+    const response = await createApplePayOrder({
+      ...payload,
+      isQuote: true,
+      paymentMethod: "GUEST_CHECKOUT_APPLE_PAY",
+      email: 'testquote@test.com',
+      phoneNumber: '+12345678901',
+      agreementAcceptedAt: new Date().toISOString(),
+      phoneNumberVerifiedAt: new Date().toISOString(),
+      partnerUserRef: 'testquote',
+      destinationAddress,
+    });
       
     const order = response?.order ?? response;
     
@@ -47,24 +47,27 @@ export async function fetchBuyQuote(payload: {
       coinbase_fee:     { value: coinbaseFee?.amount ?? '0',    currency: coinbaseFee?.currency ?? order?.paymentCurrency },
       network_fee:      { value: networkFee?.amount ?? '0',     currency: networkFee?.currency ?? order?.paymentCurrency },
       exchange_rate:    order?.exchangeRate,
-      raw:              order, 
+      raw:              order,
     };
   } else {
     const country = getCountry();
     const subdivision = getSubdivision();
-    
+
     const v2Payload = {
       country,
       subdivision,
       paymentCurrency: payload.paymentCurrency,
       purchaseCurrency: payload.purchaseCurrency,
-      destinationNetwork: payload.destinationNetwork, 
+      destinationNetwork: payload.destinationNetwork,
       paymentAmount: payload.paymentAmount,
       destinationAddress,
       paymentMethod: payload.paymentMethod === 'COINBASE_WIDGET' ? 'CARD' : payload.paymentMethod
     };
-    // v1 quote for Coinbase Widget (generic quote endpoint)
-    const response = await fetch(`${BASE_URL}/server/api`, {
+
+    console.log('📤 [API] fetchBuyQuote (Widget)');
+
+    // v2 quote for Coinbase Widget (session endpoint)
+    const response = await authenticatedFetch(`${BASE_URL}/server/api`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -94,7 +97,6 @@ export async function fetchBuyQuote(payload: {
       coinbase_fee: { value: coinbaseFee?.amount ?? '0', currency: coinbaseFee?.currency ?? quote?.paymentCurrency },
       network_fee: { value: networkFee?.amount ?? '0', currency: networkFee?.currency ?? quote?.paymentCurrency },
       exchange_rate: quote?.exchangeRate,
-      quote_id: data?.session?.sessionId, // use session ID as quote ID
       raw: data,
     };
   }

@@ -187,7 +187,7 @@ export default function History() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Transaction History (Apple Pay only)</Text>
+        <Text style={styles.title}>Onramp Transaction History</Text>
         <Pressable
           onPress={handleRefresh}
           disabled={loading}

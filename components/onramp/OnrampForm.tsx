@@ -98,7 +98,6 @@ export type OnrampFormData = {
   sandbox: boolean;
   paymentMethod: string;
   paymentCurrency: string;
-  quoteId?: string;
   phoneNumber?: string;
   agreementAcceptedAt?: string;
 };
@@ -262,13 +261,17 @@ export function OnrampForm({
   const country = getCountry(); 
 
   const availableNetworks = useMemo(() => {
-    if (!getAvailableNetworks) return ["ethereum", "base"]; // Fallback
-    return getAvailableNetworks(asset);
+    if (!getAvailableNetworks) return ["ethereum", "base"]; // Fallback (shouldn't happen)
+    const networks = getAvailableNetworks(asset);
+    console.log('📊 [DEBUG] availableNetworks:', networks?.length, 'networks');
+    return networks;
   }, [asset, getAvailableNetworks]);
 
   const availableAssets = useMemo(() => {
-    if (!getAvailableAssets) return ["USDC", "ETH"]; // Fallback
-    return getAvailableAssets(network);
+    if (!getAvailableAssets) return ["USDC", "ETH"]; // Fallback (shouldn't happen)
+    const assets = getAvailableAssets(network);
+    console.log('📊 [DEBUG] availableAssets:', assets?.length, 'assets');
+    return assets;
   }, [network, getAvailableAssets]);
 
   const methods = useMemo(() => {
@@ -515,7 +518,6 @@ export function OnrampForm({
       paymentMethod,
       paymentCurrency,
       sandbox,
-      quoteId: currentQuote?.quote_id, // Include quote ID if available (optional)
       agreementAcceptedAt: agreementTimestamp ? new Date(agreementTimestamp).toISOString() : new Date().toISOString(),
     });
   }, [isFormValid, currentQuote, asset, network, address, sandbox, paymentMethod, paymentCurrency, onSubmit, agreementTimestamp]);

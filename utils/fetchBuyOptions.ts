@@ -1,13 +1,13 @@
 import { BASE_URL } from "../constants/BASE_URL";
+import { authenticatedFetch } from "./authenticatedFetch";
 
-export async function fetchBuyOptions(payload: any ) {
-
+export async function fetchBuyOptions(payload: any) {
   try {
-  // Build query parameters using spread
+    // Build query parameters using spread
     const params = new URLSearchParams(payload);
     const fullUrl = `https://api.developer.coinbase.com/onramp/v1/buy/options?${params.toString()}`;
 
-    const response = await fetch(`${BASE_URL}/server/api`, {
+    const response = await authenticatedFetch(`${BASE_URL}/server/api`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"

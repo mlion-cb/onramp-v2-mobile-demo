@@ -6,6 +6,7 @@ import { CoinbaseAlert } from '../components/ui/CoinbaseAlerts';
 import { BASE_URL } from '../constants/BASE_URL';
 import { COLORS } from '../constants/Colors';
 import { TEST_ACCOUNTS } from '../constants/TestAccounts';
+import { authenticatedFetch } from '../utils/authenticatedFetch';
 import { setVerifiedPhone } from '../utils/sharedState';
 
 const { DARK_BG, CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BORDER, BLUE, WHITE } = COLORS;
@@ -15,7 +16,7 @@ export default function PhoneCodeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const phone = params.phone as string;
-  
+
   const [code, setCode] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [sending, setSending] = useState(false);
@@ -35,14 +36,23 @@ export default function PhoneCodeScreen() {
   const resendCode = async () => {
     setSending(true);
     try {
-      const r = await fetch(`${BASE_URL}/auth/sms/start`, { 
-        method:'POST', 
-        headers:{'Content-Type':'application/json'}, 
-        body: JSON.stringify({ phone }) 
+      // Auth handled by authenticatedFetch
+      console.log('📤 [SMS Resend] Sending authenticated request to backend');
+
+      const r = await authenticatedFetch(`${BASE_URL}/auth/sms/start`, {
+        method:'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phone })
       }).then(res => res.json());
+
       if (r.error) throw new Error(r.error);
+
+      console.log('✅ [SMS Resend] SMS sent successfully');
       setResendSeconds(RESEND_SECONDS);
     } catch (e:any) {
+      console.error('❌ [SMS Resend] Error:', e.message);
       setAlert({ visible:true, title:'Error', message:e.message || 'Failed to resend SMS', type:'error' });
     } finally { setSending(false); }
   };
@@ -65,21 +75,30 @@ export default function PhoneCodeScreen() {
         return;
       }
 
-      // Real phone verification flow
-      const r = await fetch(`${BASE_URL}/auth/sms/verify`, {
+      // Real phone verification flow (auth handled by authenticatedFetch)
+      console.log('📤 [SMS Verify] Sending authenticated request to backend');
+
+      const r = await authenticatedFetch(`${BASE_URL}/auth/sms/verify`, {
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ phone, code })
       }).then(res => res.json());
+
       if (r.error) throw new Error(r.error);
+
       if (r.status === 'approved' && r.valid) {
+        console.log('✅ [SMS Verify] Phone verified successfully');
         await setVerifiedPhone(phone);
         // Navigate back to home (or wherever you want)
         router.dismissAll(); // This will go back to the main screen
       } else {
+        console.warn('⚠️ [SMS Verify] Invalid code');
         setAlert({visible:true,title:'Invalid code',message:'Please try again',type:'error'});
       }
     } catch (e:any) {
+      console.error('❌ [SMS Verify] Error:', e.message);
       setAlert({visible:true,title:'Error',message:e.message || 'Verification failed',type:'error'});
     } finally { setVerifying(false); }
   };

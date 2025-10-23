@@ -114,7 +114,6 @@ function generateMockAddress(): string {
 
 export default function Index() {
   const [address, setAddress] = useState("");
-  const [connecting, setConnecting] = useState(false);
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
   const [amount, setAmount] = useState("");
@@ -222,6 +221,12 @@ export default function Index() {
     }
 
     // Get addresses from CDP hooks
+    console.log('🔍 [DEBUG] currentUser.evmSmartAccounts:', currentUser?.evmSmartAccounts);
+    console.log('🔍 [DEBUG] currentUser.evmAccounts:', currentUser?.evmAccounts);
+    console.log('🔍 [DEBUG] evmAddress from hook:', evmAddress);
+    console.log('🔍 [DEBUG] currentUser.solanaAccounts:', currentUser?.solanaAccounts);
+    console.log('🔍 [DEBUG] solanaAddress from hook:', solanaAddress);
+
     const evmSmartAccount = currentUser?.evmSmartAccounts?.[0] as string;
     const evmEOA = currentUser?.evmAccounts?.[0] as string || evmAddress;
     const solAccount = currentUser?.solanaAccounts?.[0] as string || solanaAddress;
@@ -284,8 +289,6 @@ export default function Index() {
     }, [])
   );
 
-  const onConnectPress = useCallback(() => router.push("../email-verify"), [router]);
-
 
   const [applePayAlert, setApplePayAlert] = useState<{
     visible: boolean;
@@ -301,34 +304,37 @@ export default function Index() {
 
 
   const { 
-    createOrder, 
+    createOrder,
     createWidgetSession,
-    closeApplePay, 
+    closeApplePay,
     options,
     isLoadingOptions,
+    optionsError,
     getAvailableNetworks,
     getAvailableAssets,
     fetchOptions,
-    currentQuote,       
-    isLoadingQuote,     
-    fetchQuote,         
-    applePayVisible, 
-    hostedUrl, 
+    currentQuote,
+    isLoadingQuote,
+    fetchQuote,
+    applePayVisible,
+    hostedUrl,
     isProcessingPayment,
     setTransactionStatus,
-    setIsProcessingPayment ,
+    setIsProcessingPayment,
     paymentCurrencies
   } = useOnramp();
 
-  // Fetch options on component mount
+  // Fetch options on component mount (only when signed in)
   useFocusEffect(
     useCallback(() => {
-      fetchOptions(); // only refetch options on focus
+      if (effectiveIsSignedIn) {
+        fetchOptions(); // only refetch options on focus when logged in
+      }
       if (getPhoneVerifyWasCanceled()) {
         setIsProcessingPayment(false); // reset slider
         clearPhoneVerifyWasCanceled();
       }
-    }, [fetchOptions, setIsProcessingPayment])
+    }, [fetchOptions, setIsProcessingPayment, effectiveIsSignedIn])
   );
 
   // 1) Resume after returning to this tab
@@ -451,26 +457,26 @@ export default function Index() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Onramp V2 Demo</Text>
-        <Pressable
-          onPress={onConnectPress}
-          disabled={connecting || isConnected}
-          style={({ pressed }) => [
-            styles.headerButton,
-            (connecting || isConnected) && { opacity: 0.6 },
-            pressed && { opacity: 0.85 },
-          ]}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {isConnected && <View style={styles.connectedDot} />}
-            <Text style={[styles.headerButtonText, { 
-              textAlign: "center",
-              color: isConnected ? "#4ADE80" : TEXT_PRIMARY
-            }]}>
-              {isConnected ? "Connected" : connecting ? "Logging in…" : "Login"}
-            </Text>
-          </View>
-        </Pressable>
       </View>
+
+      {/* Error banner for failed options fetch */}
+      {optionsError && !isLoadingOptions && (
+        <View style={styles.errorBanner}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.errorTitle}>⚠️ Failed to load payment options</Text>
+            <Text style={styles.errorMessage}>{optionsError}</Text>
+          </View>
+          <Pressable
+            onPress={fetchOptions}
+            style={({ pressed }) => [
+              styles.retryButton,
+              pressed && { opacity: 0.7 }
+            ]}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      )}
 
       <OnrampForm
         key={`${getCountry()}-${getSubdivision()}`}   // remount on region change
@@ -596,6 +602,40 @@ const styles = StyleSheet.create({
     color: WHITE,
     fontSize: 14,
     fontWeight: '700',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: CARD_BG,
+    borderWidth: 1,
+    borderColor: '#FF6B6B', // Error red (same as alert icon)
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 20,
+    marginTop: 16,
+    gap: 12,
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: TEXT_PRIMARY,
+    marginBottom: 4,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: TEXT_SECONDARY,
+    lineHeight: 20,
+  },
+  retryButton: {
+    backgroundColor: BLUE,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    color: WHITE,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 
