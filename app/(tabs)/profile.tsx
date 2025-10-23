@@ -143,8 +143,15 @@ export default function WalletScreen() {
   // For export: Use EOA first, then evmAddress hook, then smart account
   const evmWalletAddress = explicitEOAAddress || evmAddress || smartAccountAddress;
 
-  // Add debugging similar to working reference
+  // Add debugging + track user changes
   useEffect(() => {
+    console.log('🔄 [PROFILE] currentUser changed:', {
+      userId: currentUser?.userId,
+      hasUser: !!currentUser,
+      isSignedIn,
+      testSession
+    });
+
     if (currentUser) {
       console.log('=== DETAILED WALLET INFORMATION ===');
 
@@ -284,10 +291,28 @@ export default function WalletScreen() {
     });
   }, [router, verifiedPhone]);
 
+  // Clear UI state when user signs out
   useEffect(() => {
-    setCurrentWalletAddress(primaryAddress ?? null);
-    setCurrentSolanaAddress(solanaAddress ?? null);
-  }, [primaryAddress, solanaAddress]);
+    if (!effectiveIsSignedIn) {
+      console.log('🧹 [PROFILE] User signed out - clearing UI state');
+      setBalances([]);
+      setBalancesError(null);
+      setCurrentWalletAddress(null);
+      setCurrentSolanaAddress(null);
+    }
+  }, [effectiveIsSignedIn]);
+
+  // Update wallet addresses when they change
+  useEffect(() => {
+    if (effectiveIsSignedIn) {
+      console.log('💼 [PROFILE] Updating wallet addresses:', {
+        primaryAddress,
+        solanaAddress
+      });
+      setCurrentWalletAddress(primaryAddress ?? null);
+      setCurrentSolanaAddress(solanaAddress ?? null);
+    }
+  }, [primaryAddress, solanaAddress, effectiveIsSignedIn]);
 
   // Fetch balances when wallet addresses are available
   const fetchBalances = useCallback(async () => {
@@ -297,15 +322,26 @@ export default function WalletScreen() {
     setBalancesError(null);
 
     try {
-      // Get access token from CDP (same as other API calls)
-      const { getAccessTokenGlobal } = await import('@/utils/getAccessTokenGlobal');
-      const accessToken = await getAccessTokenGlobal();
+      // Check if TestFlight mode
+      const { isTestSessionActive } = await import('@/utils/sharedState');
+      const isTestFlight = isTestSessionActive();
 
-      if (!accessToken) {
-        console.error('❌ [PROFILE] No access token available');
-        setBalancesError('Authentication required');
-        setLoadingBalances(false);
-        return;
+      let accessToken: string | null = null;
+
+      if (isTestFlight) {
+        console.log('🧪 [PROFILE] TestFlight mode - using mock token');
+        accessToken = 'testflight-mock-token';
+      } else {
+        // Get access token from CDP (real accounts)
+        const { getAccessTokenGlobal } = await import('@/utils/getAccessTokenGlobal');
+        accessToken = await getAccessTokenGlobal();
+
+        if (!accessToken) {
+          console.error('❌ [PROFILE] No access token available');
+          setBalancesError('Authentication required');
+          setLoadingBalances(false);
+          return;
+        }
       }
 
       const allBalances: any[] = [];
@@ -655,7 +691,7 @@ export default function WalletScreen() {
                 </Pressable>
 
                 <Text style={styles.helper}>
-                  Showing balances for Base and Ethereum mainnet only
+                  Showing balances for Base, Ethereum, and Solana mainnet
                 </Text>
 
                 {balancesExpanded && (
@@ -682,7 +718,7 @@ export default function WalletScreen() {
                           No tokens found. Purchase crypto to see your balances.
                         </Text>
                         <Pressable style={[styles.button, { marginTop: 12 }]} onPress={fetchBalances}>
-                          <Text style={styles.buttonText}>🔄 Refresh Balances</Text>
+                          <Text style={styles.buttonText}>Refresh Balances</Text>
                         </Pressable>
                       </View>
                     )}

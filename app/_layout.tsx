@@ -2,7 +2,7 @@ import { CDPHooksProvider, Config } from "@coinbase/cdp-hooks";
 import { Stack } from "expo-router";
 import { COLORS } from "../constants/Colors";
 
-import { hydrateTestSession, hydrateVerifiedPhone, setCurrentSolanaAddress, setCurrentWalletAddress, setSandboxMode, getTestWalletEvm, getTestWalletSol, isTestSessionActive } from "@/utils/sharedState";
+import { hydrateTestSession, hydrateVerifiedPhone, hydrateSandboxMode, setCurrentSolanaAddress, setCurrentWalletAddress, setSandboxMode, getTestWalletEvm, getTestWalletSol, isTestSessionActive } from "@/utils/sharedState";
 import { AuthInitializer } from "@/components/AuthInitializer";
 import { AuthGate } from "@/components/AuthGate";
 import { useEffect } from "react";
@@ -32,6 +32,9 @@ console.log('RootLayout mounted, CDP config:', cdpConfig);
 
 export default function RootLayout() {
   useEffect(() => {
+    // Hydrate sandbox mode preference
+    hydrateSandboxMode().catch(() => {});
+
     // Hydrate phone verification
     hydrateVerifiedPhone().catch(() => {});
 

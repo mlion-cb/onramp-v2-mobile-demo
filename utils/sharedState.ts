@@ -120,12 +120,35 @@ export const markPhoneVerifyCanceled = () => { phoneVerifyCanceled = true; };
 export const getPhoneVerifyWasCanceled = () => phoneVerifyCanceled;
 export const clearPhoneVerifyWasCanceled = () => { phoneVerifyCanceled = false; };
 
+const SANDBOX_MODE_KEY = '@sandbox_mode';
 let sandboxMode: boolean = true;
 
 export const getSandboxMode = () => sandboxMode;
-export const setSandboxMode = (enabled: boolean) => {
+export const setSandboxMode = async (enabled: boolean) => {
   sandboxMode = enabled;
   console.log('Sandbox mode:', enabled ? 'ENABLED' : 'DISABLED');
+
+  // Persist to storage
+  try {
+    await AsyncStorage.setItem(SANDBOX_MODE_KEY, JSON.stringify(enabled));
+  } catch (error) {
+    console.error('Failed to save sandbox mode:', error);
+  }
+};
+
+// Hydrate sandbox mode from storage on app start
+export const hydrateSandboxMode = async () => {
+  try {
+    const stored = await AsyncStorage.getItem(SANDBOX_MODE_KEY);
+    if (stored !== null) {
+      sandboxMode = JSON.parse(stored);
+      console.log('✅ Sandbox mode restored:', sandboxMode ? 'ENABLED' : 'DISABLED');
+    } else {
+      console.log('ℹ️ No saved sandbox preference, using default: ENABLED');
+    }
+  } catch (error) {
+    console.error('Failed to hydrate sandbox mode:', error);
+  }
 };
 
 // ============================================================================
