@@ -39,13 +39,24 @@ const config: ExpoConfig = {
       'expo-router',
       'expo-secure-store',
       ['expo-splash-screen', { image: './assets/images/splash-icon.png', imageWidth: 200, resizeMode: 'contain', backgroundColor: '#ffffff' }],
-      ['expo-build-properties', { ios: { deploymentTarget: '15.1' } }]
+      ['expo-build-properties', { ios: { deploymentTarget: '15.1' } }],
+      ['expo-notifications', {
+        icon: './assets/images/icon.png',
+        color: '#0052FF',
+        sounds: ['default']
+      }]
     ],
 
     experiments: { typedRoutes: true },
 
     // Good hygiene if you later use EAS Update
-    runtimeVersion: { policy: 'sdkVersion' }
+    runtimeVersion: { policy: 'sdkVersion' },
+
+    extra: {
+      eas: {
+        projectId: '80449c5b-e4be-4e48-8a8b-b84ce14f7cf6' // Your EAS project ID
+      }
+    }
 };
 
 export default config;

@@ -157,6 +157,7 @@ export function useOnramp() {
         phoneNumberVerifiedAt: new Date(phoneAt!).toISOString(),
         partnerUserRef: partnerUserRef,
         agreementAcceptedAt: new Date().toISOString(),
+        webhookUrl: `${process.env.EXPO_PUBLIC_BASE_URL}/webhooks/onramp`, // Webhook for push notifications
         isQuote: false
       });
 
@@ -191,6 +192,11 @@ export function useOnramp() {
         setSubdivision('CA');
       }
 
+      // Generate unique user reference for transaction tracking (same as Apple Pay)
+      const sandboxPrefix = getSandboxMode() ? "sandbox-" : "";
+      const partnerUserRef = `${sandboxPrefix}user-${formData.address}`;
+      setCurrentPartnerUserRef(partnerUserRef);
+
       // Auth handled by authenticatedFetch
       const res = await createOnrampSession({
         purchaseCurrency: assetSymbol,
@@ -200,13 +206,20 @@ export function useOnramp() {
         paymentCurrency: formData.paymentCurrency,
         country,
         subdivision,
+        webhookUrl: `${process.env.EXPO_PUBLIC_BASE_URL}/webhooks/onramp`, // Webhook for push notifications
       });
-  
+
       let url = res?.session?.onrampUrl;
       if (getSandboxMode() && url) {
         url = url.replace('pay.coinbase.com', 'pay-sandbox.coinbase.com');
       }
-      
+
+      // Add partnerUserId as URL parameter (temporary workaround until supported as body param)
+      if (url) {
+        const separator = url.includes('?') ? '&' : '?';
+        url = `${url}${separator}partnerUserId=${encodeURIComponent(partnerUserRef)}`;
+      }
+
       if (!url) throw new Error('No onrampUrl returned');
       return url;
     } finally {

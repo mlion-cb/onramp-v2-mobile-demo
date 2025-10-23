@@ -5,6 +5,7 @@ import { generateJwt } from '@coinbase/cdp-sdk/auth';
 import twilio from 'twilio';
 import { resolveClientIp } from './ip.js';
 import { validateAccessToken } from './validateToken.js';
+import { verifyWebhookSignature, verifyLegacySignature } from './verifyWebhookSignature.js';
 
 let twilioClient: ReturnType<typeof import('twilio')> | null = null;
 function getTwilio() {
@@ -18,10 +19,14 @@ function getTwilio() {
 }
 
 const app = express();
-const PORT = Number(process.env.PORT || 3001);
+const PORT = Number(process.env.PORT || 3000);
 
 // On Vercel, trust proxy to read x-forwarded-for
-app.set('trust proxy', true); 
+app.set('trust proxy', true);
+
+// For webhook signature verification, we need raw body
+// Use express.raw() for webhook routes before JSON parsing
+app.use('/webhooks/onramp', express.raw({ type: 'application/json' }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -43,10 +48,10 @@ app.get("/health", (_req, res) => {
 });
 
 // 🔒 GLOBAL AUTHENTICATION MIDDLEWARE
-// All routes except /health require valid CDP access token
+// All routes except /health and /webhooks require valid CDP access token
 app.use((req, res, next) => {
-  // Skip authentication for health check
-  if (req.path === '/health') {
+  // Skip authentication for health check and webhooks
+  if (req.path === '/health' || req.path.startsWith('/webhooks')) {
     return next();
   }
 
@@ -184,6 +189,525 @@ app.post('/auth/sms/verify', async (req, res) => {
   } catch (e:any) {
     console.error('❌ [TWILIO] SMS verify error:', e.message);
     return res.status(500).json({ error: e.message || 'twilio verify error' });
+  }
+});
+
+/**
+ * EVM Token Balance Endpoint
+ * GET /balances/evm?address=0x...&network=base
+ *
+ * Supported networks: base, ethereum (mainnet only)
+ * Returns token balances with USD prices from Coinbase Price API
+ */
+app.get('/balances/evm', async (req, res) => {
+  try {
+    const { address, network = 'base' } = req.query;
+
+    if (!address || typeof address !== 'string') {
+      return res.status(400).json({ error: 'address query parameter required' });
+    }
+
+    if (!address.match(/^0x[a-fA-F0-9]{40}$/)) {
+      return res.status(400).json({ error: 'Invalid EVM address format' });
+    }
+
+    const validNetworks = ['base', 'ethereum'];
+    if (!validNetworks.includes(network as string)) {
+      return res.status(400).json({ error: `Invalid network. Supported: ${validNetworks.join(', ')}` });
+    }
+
+    console.log(`💰 [BALANCES] Fetching EVM balances - Address: ${address}, Network: ${network}`);
+
+    const balancesPath = `/platform/v2/evm/token-balances/${network}/${address}`;
+    const balancesUrl = `https://api.cdp.coinbase.com${balancesPath}`;
+
+    console.log(`🔗 [BALANCES] Full URL: ${balancesUrl}`);
+
+    const authToken = await generateJwt({
+      apiKeyId: process.env.CDP_API_KEY_ID!,
+      apiKeySecret: process.env.CDP_API_KEY_SECRET!,
+      requestMethod: 'GET',
+      requestHost: 'api.cdp.coinbase.com',
+      requestPath: balancesPath,
+      expiresIn: 120
+    });
+
+    const balancesResponse = await fetch(balancesUrl, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+
+    console.log(`📡 [BALANCES] Response status: ${balancesResponse.status} ${balancesResponse.statusText}`);
+
+    if (!balancesResponse.ok) {
+      const errorText = await balancesResponse.text();
+      console.error('❌ [BALANCES] CDP API error response:', errorText);
+
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { message: errorText };
+      }
+
+      console.error('❌ [BALANCES] CDP API error details:', errorData);
+      return res.status(balancesResponse.status).json({
+        error: 'Failed to fetch balances from CDP',
+        details: errorData
+      });
+    }
+
+    const balancesData = await balancesResponse.json();
+    const balances = balancesData.balances || [];
+
+    console.log(`✅ [BALANCES] Fetched ${balances.length} token balances`);
+
+    // Filter zero balances and enrich with USD prices
+    const enrichedBalances = await Promise.all(
+      balances
+        .filter((b: any) => parseFloat(b.amount?.amount || '0') > 0)
+        .map(async (balance: any) => {
+          const symbol = balance.token?.symbol || 'UNKNOWN';
+          let usdPrice = null;
+          let usdValue = null;
+
+          if (symbol && symbol !== 'UNKNOWN') {
+            try {
+              const priceUrl = `https://api.coinbase.com/v2/prices/${symbol}-USD/spot`;
+              console.log(`💵 [PRICE] Fetching USD price for ${symbol}: ${priceUrl}`);
+
+              const priceResponse = await fetch(priceUrl);
+
+              if (priceResponse.ok) {
+                const priceData = await priceResponse.json();
+                usdPrice = parseFloat(priceData.data?.amount || '0');
+
+                const tokenAmount = parseFloat(balance.amount?.amount || '0');
+                const decimals = parseInt(balance.amount?.decimals || '0');
+                const actualAmount = tokenAmount / Math.pow(10, decimals);
+                usdValue = actualAmount * usdPrice;
+
+                console.log(`✅ [PRICE] ${symbol} = $${usdPrice} | Balance: ${actualAmount.toFixed(6)} ${symbol} = $${usdValue.toFixed(2)}`);
+              } else {
+                console.warn(`⚠️ [PRICE] Price API returned ${priceResponse.status} for ${symbol}`);
+              }
+            } catch (e) {
+              console.warn(`⚠️ [PRICE] Could not fetch price for ${symbol}:`, e instanceof Error ? e.message : e);
+            }
+          }
+
+          return {
+            token: balance.token,
+            amount: balance.amount,
+            usdPrice,
+            usdValue
+          };
+        })
+    );
+
+    console.log(`💵 [BALANCES] Enriched ${enrichedBalances.length} balances with USD prices`);
+
+    res.json({
+      address,
+      network,
+      balances: enrichedBalances,
+      totalBalances: enrichedBalances.length
+    });
+
+  } catch (error) {
+    console.error('❌ [BALANCES] Error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch token balances',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * Solana Token Balance Endpoint
+ * GET /balances/solana?address=...
+ *
+ * Returns SPL token balances with USD prices from Coinbase Price API
+ */
+app.get('/balances/solana', async (req, res) => {
+  try {
+    const { address } = req.query;
+    const network = 'solana';
+
+    if (!address || typeof address !== 'string') {
+      return res.status(400).json({ error: 'address query parameter required' });
+    }
+
+    // Basic Solana address validation (base58, 32-44 chars)
+    if (!address.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)) {
+      return res.status(400).json({ error: 'Invalid Solana address format' });
+    }
+
+    console.log(`💰 [BALANCES] Fetching Solana balances - Address: ${address}`);
+
+    const balancesPath = `/platform/v2/solana/token-balances/${network}/${address}`;
+    const balancesUrl = `https://api.cdp.coinbase.com${balancesPath}`;
+
+    console.log(`🔗 [BALANCES] Full URL: ${balancesUrl}`);
+
+    const authToken = await generateJwt({
+      apiKeyId: process.env.CDP_API_KEY_ID!,
+      apiKeySecret: process.env.CDP_API_KEY_SECRET!,
+      requestMethod: 'GET',
+      requestHost: 'api.cdp.coinbase.com',
+      requestPath: balancesPath,
+      expiresIn: 120
+    });
+
+    const balancesResponse = await fetch(balancesUrl, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+
+    console.log(`📡 [BALANCES] Response status: ${balancesResponse.status} ${balancesResponse.statusText}`);
+
+    if (!balancesResponse.ok) {
+      const errorText = await balancesResponse.text();
+      console.error('❌ [BALANCES] CDP API error response:', errorText);
+
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { message: errorText };
+      }
+
+      console.error('❌ [BALANCES] CDP API error details:', errorData);
+      return res.status(balancesResponse.status).json({
+        error: 'Failed to fetch Solana balances from CDP',
+        details: errorData
+      });
+    }
+
+    const balancesData = await balancesResponse.json();
+    const balances = balancesData.balances || [];
+
+    console.log(`✅ [BALANCES] Fetched ${balances.length} Solana token balances`);
+
+    // Filter zero balances and enrich with USD prices
+    const enrichedBalances = await Promise.all(
+      balances
+        .filter((b: any) => parseFloat(b.amount?.amount || '0') > 0)
+        .map(async (balance: any) => {
+          const symbol = balance.token?.symbol || 'UNKNOWN';
+          let usdPrice = null;
+          let usdValue = null;
+
+          if (symbol && symbol !== 'UNKNOWN') {
+            try {
+              const priceUrl = `https://api.coinbase.com/v2/prices/${symbol}-USD/spot`;
+              console.log(`💵 [PRICE] Fetching USD price for ${symbol}: ${priceUrl}`);
+
+              const priceResponse = await fetch(priceUrl);
+
+              if (priceResponse.ok) {
+                const priceData = await priceResponse.json();
+                usdPrice = parseFloat(priceData.data?.amount || '0');
+
+                const tokenAmount = parseFloat(balance.amount?.amount || '0');
+                const decimals = parseInt(balance.amount?.decimals || '0');
+                const actualAmount = tokenAmount / Math.pow(10, decimals);
+                usdValue = actualAmount * usdPrice;
+
+                console.log(`✅ [PRICE] ${symbol} = $${usdPrice} | Balance: ${actualAmount.toFixed(6)} ${symbol} = $${usdValue.toFixed(2)}`);
+              } else {
+                console.warn(`⚠️ [PRICE] Price API returned ${priceResponse.status} for ${symbol}`);
+              }
+            } catch (e) {
+              console.warn(`⚠️ [PRICE] Could not fetch price for ${symbol}:`, e instanceof Error ? e.message : e);
+            }
+          }
+
+          return {
+            token: balance.token,
+            amount: balance.amount,
+            usdPrice,
+            usdValue
+          };
+        })
+    );
+
+    console.log(`💵 [BALANCES] Enriched ${enrichedBalances.length} Solana balances with USD prices`);
+
+    res.json({
+      address,
+      network,
+      balances: enrichedBalances,
+      totalBalances: enrichedBalances.length
+    });
+
+  } catch (error) {
+    console.error('❌ [BALANCES] Error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch Solana token balances',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * Push Token Storage
+ * POST /push-tokens
+ *
+ * Stores user's Expo push token for sending notifications
+ * Called when user opens app and registers for notifications
+ */
+const pushTokenStore = new Map<string, { token: string; platform: string; updatedAt: number }>();
+
+app.post('/push-tokens', async (req, res) => {
+  try {
+    const { userId, pushToken, platform } = req.body;
+
+    if (!userId || !pushToken) {
+      return res.status(400).json({ error: 'userId and pushToken are required' });
+    }
+
+    pushTokenStore.set(userId, {
+      token: pushToken,
+      platform: platform || 'unknown',
+      updatedAt: Date.now(),
+    });
+
+    console.log('✅ [PUSH] Token stored for user:', userId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ [PUSH] Error storing push token:', error);
+    res.status(500).json({ error: 'Failed to store push token' });
+  }
+});
+
+/**
+ * Onramp Webhook Endpoint
+ * POST /webhooks/onramp
+ *
+ * Receives transaction status updates from Coinbase
+ * Events: onramp.transaction.created, onramp.transaction.updated, onramp.transaction.success, onramp.transaction.failed
+ *
+ * Security: Verifies webhook signature using CDP API key
+ * Use case: Send push notifications when transactions complete
+ *
+ * Note: This endpoint is PUBLIC (no auth middleware) because Coinbase servers call it
+ */
+app.post('/webhooks/onramp', async (req, res) => {
+  try {
+    // Get raw body (from express.raw middleware)
+    const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : JSON.stringify(req.body);
+
+    // Parse JSON from raw body
+    const webhookData = Buffer.isBuffer(req.body) ? JSON.parse(rawBody) : req.body;
+
+    console.log('🔔 [WEBHOOK] Received onramp webhook', {
+      eventType: webhookData.eventType || webhookData.event,
+      hasHook0Signature: !!req.headers['x-hook0-signature'],
+      hasCoinbaseSignature: !!req.headers['x-coinbase-signature']
+    });
+
+    // Verify webhook signature (security check)
+    const webhookSecret = process.env.WEBHOOK_SECRET;
+
+    if (webhookSecret) {
+      // Try X-Hook0-Signature (new format)
+      const hook0Signature = req.headers['x-hook0-signature'] as string;
+      if (hook0Signature) {
+        const isValid = verifyWebhookSignature(hook0Signature, req.headers, rawBody, webhookSecret);
+        if (!isValid) {
+          console.error('❌ [WEBHOOK] Invalid X-Hook0-Signature');
+          return res.status(401).json({ error: 'Invalid signature' });
+        }
+        console.log('✅ [WEBHOOK] X-Hook0-Signature verified');
+      }
+      // Fallback: Try x-coinbase-signature (legacy format)
+      else {
+        const coinbaseSignature = req.headers['x-coinbase-signature'] as string;
+        const timestamp = req.headers['x-coinbase-timestamp'] as string;
+
+        if (coinbaseSignature && timestamp) {
+          const isValid = verifyLegacySignature(coinbaseSignature, timestamp, rawBody, webhookSecret);
+          if (!isValid) {
+            console.error('❌ [WEBHOOK] Invalid x-coinbase-signature');
+            return res.status(401).json({ error: 'Invalid signature' });
+          }
+          console.log('✅ [WEBHOOK] x-coinbase-signature verified');
+        } else {
+          console.warn('⚠️ [WEBHOOK] No signature headers found - rejecting webhook');
+          return res.status(401).json({ error: 'Missing signature headers' });
+        }
+      }
+    } else {
+      console.warn('⚠️ [WEBHOOK] WEBHOOK_SECRET not set - skipping verification (INSECURE!)');
+    }
+
+    // Extract event type (handle both formats)
+    const eventType = webhookData.eventType || webhookData.event;
+
+    // Extract transaction ID (different field names)
+    const txId = webhookData.transactionId || webhookData.orderId || webhookData.data?.transaction?.id;
+
+    // Handle different webhook events
+    switch (eventType) {
+      case 'onramp.transaction.created':
+        console.log('📝 [WEBHOOK] Transaction created:', txId);
+        // Transaction initiated - could send "processing" notification
+        break;
+
+      case 'onramp.transaction.updated':
+        console.log('🔄 [WEBHOOK] Transaction updated:', txId);
+        // Transaction status changed - could track intermediate states
+        break;
+
+      case 'onramp.transaction.success':
+      case 'onramp.transaction.completed': // Support both event names
+        console.log('✅ [WEBHOOK] Transaction completed:', txId);
+
+        // Extract fields (handle both Apple Pay and Widget formats)
+        // Apple Pay: { purchaseAmount: "100.000000", purchaseCurrency: "USDC", destinationNetwork: "base" }
+        // Widget: { purchaseAmount: { value: "4.81", currency: "USDC" }, purchaseCurrency: "USDC", purchaseNetwork: "ethereum" }
+
+        const amount = typeof webhookData.purchaseAmount === 'object'
+          ? webhookData.purchaseAmount?.value
+          : webhookData.purchaseAmount;
+
+        const currency = webhookData.purchaseCurrency;
+
+        const network = webhookData.destinationNetwork || webhookData.purchaseNetwork;
+
+        const partnerUserRef = webhookData.partnerUserRef;
+
+        console.log('💰 [WEBHOOK] User received:', {
+          amount,
+          currency,
+          network,
+          address: webhookData.destinationAddress || webhookData.walletAddress,
+          partnerUserRef
+        });
+
+        // Send push notification via Expo Push API (user-specific)
+        try {
+          if (!partnerUserRef) {
+            console.log('⚠️ [WEBHOOK] No partnerUserRef in transaction - cannot send notification');
+            break;
+          }
+
+          // Find the specific user's push token using partnerUserRef
+          const userTokenData = pushTokenStore.get(partnerUserRef);
+
+          if (!userTokenData) {
+            console.log('⚠️ [WEBHOOK] No push token registered for user:', partnerUserRef);
+            break;
+          }
+
+          console.log('📲 [WEBHOOK] Sending notification to user:', partnerUserRef);
+
+          const message = {
+            to: userTokenData.token,
+            sound: 'default',
+            title: '🎉 Crypto Purchase Complete!',
+            body: `Your ${amount} ${currency} has been delivered to your ${network} wallet!`,
+            data: {
+              transactionId: txId,
+              type: 'onramp_complete',
+              partnerUserRef
+            },
+          };
+
+          const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(message),
+          });
+
+          const pushResult = await pushResponse.json();
+          console.log('✅ [WEBHOOK] Push notification sent to user:', partnerUserRef, pushResult);
+        } catch (pushError) {
+          console.error('❌ [WEBHOOK] Failed to send push notification:', pushError);
+        }
+        break;
+
+      case 'onramp.transaction.failed':
+        console.log('❌ [WEBHOOK] Transaction failed:', txId);
+
+        // Extract failure fields (handle both formats)
+        const failedAmount = typeof webhookData.paymentAmount === 'object'
+          ? webhookData.paymentAmount?.value
+          : webhookData.paymentAmount;
+
+        const failedCurrency = typeof webhookData.paymentAmount === 'object'
+          ? webhookData.paymentAmount?.currency
+          : webhookData.paymentCurrency;
+
+        const failureReason = webhookData.failureReason || 'Unknown error';
+        const failedPartnerUserRef = webhookData.partnerUserRef;
+
+        console.log('⚠️ [WEBHOOK] Failure details:', {
+          amount: failedAmount,
+          currency: failedCurrency,
+          reason: failureReason,
+          partnerUserRef: failedPartnerUserRef
+        });
+
+        // Send push notification for failed transaction (user-specific)
+        try {
+          if (!failedPartnerUserRef) {
+            console.log('⚠️ [WEBHOOK] No partnerUserRef in failed transaction - cannot send notification');
+            break;
+          }
+
+          // Find the specific user's push token using partnerUserRef
+          const failedUserTokenData = pushTokenStore.get(failedPartnerUserRef);
+
+          if (!failedUserTokenData) {
+            console.log('⚠️ [WEBHOOK] No push token registered for user:', failedPartnerUserRef);
+            break;
+          }
+
+          console.log('📲 [WEBHOOK] Sending failure notification to user:', failedPartnerUserRef);
+
+          const failureMessage = {
+            to: failedUserTokenData.token,
+            sound: 'default',
+            title: '❌ Transaction Failed',
+            body: `Your ${failedAmount} ${failedCurrency} purchase failed: ${failureReason}. Please try again.`,
+            data: {
+              transactionId: txId,
+              type: 'onramp_failed',
+              partnerUserRef: failedPartnerUserRef
+            },
+          };
+
+          const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(failureMessage),
+          });
+
+          const pushResult = await pushResponse.json();
+          console.log('✅ [WEBHOOK] Failure notification sent to user:', failedPartnerUserRef, pushResult);
+        } catch (pushError) {
+          console.error('❌ [WEBHOOK] Failed to send failure push notification:', pushError);
+        }
+        break;
+
+      default:
+        console.log('ℹ️ [WEBHOOK] Unknown event type:', event);
+    }
+
+    // Always return 200 to acknowledge receipt
+    // Coinbase will retry if we don't respond with 2xx
+    res.status(200).json({ received: true });
+
+  } catch (error) {
+    console.error('❌ [WEBHOOK] Error processing webhook:', error);
+    // Still return 200 to prevent retries on parsing errors
+    res.status(200).json({ received: true, error: 'Processing error' });
   }
 });
 

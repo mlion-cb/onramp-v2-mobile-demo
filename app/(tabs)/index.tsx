@@ -324,15 +324,17 @@ export default function Index() {
     paymentCurrencies
   } = useOnramp();
 
-  // Fetch options on component mount
+  // Fetch options on component mount (only when signed in)
   useFocusEffect(
     useCallback(() => {
-      fetchOptions(); // only refetch options on focus
+      if (effectiveIsSignedIn) {
+        fetchOptions(); // only refetch options on focus when logged in
+      }
       if (getPhoneVerifyWasCanceled()) {
         setIsProcessingPayment(false); // reset slider
         clearPhoneVerifyWasCanceled();
       }
-    }, [fetchOptions, setIsProcessingPayment])
+    }, [fetchOptions, setIsProcessingPayment, effectiveIsSignedIn])
   );
 
   // 1) Resume after returning to this tab
