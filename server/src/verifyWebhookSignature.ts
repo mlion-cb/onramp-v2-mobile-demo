@@ -28,11 +28,13 @@ function parseSignatureHeader(signatureHeader: string): SignatureComponents | nu
 
     for (const part of parts) {
       const [key, value] = part.split('=');
+      if (!value) continue; // Skip if value is undefined
+
       if (key === 't') {
         components.timestamp = value;
       } else if (key === 'h') {
         // Header names are space-separated, not colon-separated
-        components.headerNames = value ? value.split(' ') : [];
+        components.headerNames = value.split(' ');
       } else if (key === 'v1') {
         // Prefer v1 signature (newer format with period delimiters)
         components.signature = value;
