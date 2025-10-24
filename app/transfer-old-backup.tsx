@@ -9,14 +9,12 @@
  * - USD value preview
  * - Gasless transfers on Base via Paymaster
  * - Transaction confirmation and status
- *
- * IMPORTANT: Both Base and Ethereum use Smart Account (balances stored there)
  */
 
 import { CoinbaseAlert } from '@/components/ui/CoinbaseAlerts';
 import { COLORS } from '@/constants/Colors';
 import { isTestSessionActive } from '@/utils/sharedState';
-import { useCurrentUser, useSendSolanaTransaction, useSendUserOperation, useSolanaAddress } from '@coinbase/cdp-hooks';
+import { useCurrentUser, useEvmAddress, useSendEvmTransaction, useSendSolanaTransaction, useSendUserOperation, useSolanaAddress } from '@coinbase/cdp-hooks';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -54,17 +52,24 @@ export default function TransferScreen() {
   const [alertMessage, setAlertMessage] = useState('');
   const [alertType, setAlertType] = useState<'success' | 'error' | 'info'>('info');
 
+  const { sendEvmTransaction } = useSendEvmTransaction();
   const { sendSolanaTransaction } = useSendSolanaTransaction();
   const { sendUserOperation } = useSendUserOperation();
+  const { evmAddress } = useEvmAddress();
   const { solanaAddress } = useSolanaAddress();
   const { currentUser } = useCurrentUser();
 
-  // Get smart account address (where balances are stored for both Base and Ethereum)
+  // Get smart account address for Base (needed for sendUserOperation with Paymaster)
   const smartAccountAddress = currentUser?.evmSmartAccounts?.[0] || null;
 
+  // Get EOA address for Ethereum (needed for sendEvmTransaction)
+  const eoaAddress = currentUser?.evmAccounts?.[0] || null;
+
   console.log('🔍 [TRANSFER] Account addresses:', {
+    evmAddress,
     solanaAddress,
     smartAccountAddress,
+    eoaAddress
   });
 
   // Load token data from params (only on mount)
@@ -88,7 +93,7 @@ export default function TransferScreen() {
     if (params.network) {
       setNetwork(params.network as string);
     }
-  }, [params.token, params.network]);
+  }, [params.token, params.network]); // Only depend on specific param values, not the entire params object
 
   // Validate address format
   const validateAddress = (address: string) => {
@@ -177,6 +182,7 @@ export default function TransferScreen() {
       // Handle TestFlight demo mode
       if (isTestSessionActive()) {
         console.log('🧪 TestFlight mode - simulating transfer');
+        // Simulate network delay
         await new Promise(resolve => setTimeout(resolve, 1500));
 
         const mockTxHash = `0x${Math.random().toString(16).substring(2, 66)}`;
@@ -190,8 +196,10 @@ export default function TransferScreen() {
       }
 
       if (network === 'solana') {
+        // Solana transfer
         await handleSolanaTransfer();
       } else {
+        // EVM transfer (Base or Ethereum)
         await handleEvmTransfer();
       }
     } catch (error) {
@@ -205,7 +213,7 @@ export default function TransferScreen() {
   const handleEvmTransfer = async () => {
     if (!selectedToken) return;
 
-    // CRITICAL: Both Base and Ethereum use Smart Account (balances stored there)
+    // CRITICAL: Both Base and Ethereum use Smart Account
     if (!smartAccountAddress) {
       showAlert('Error', 'Smart account not found. Cannot transfer funds.', 'error');
       return;
@@ -225,12 +233,12 @@ export default function TransferScreen() {
     });
 
     try {
-      // Use sendUserOperation for both Base and Ethereum (smart account transfers)
+      // Use sendUserOperation for both Base and Ethereum (smart accounts)
       const isNativeTransfer = !tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000';
 
       if (isNativeTransfer) {
         // Native ETH transfer
-        console.log('💸 [TRANSFER] Sending native ETH from smart account');
+        console.log('💸 [TRANSFER] Sending native ETH');
         const result = await sendUserOperation({
           evmSmartAccount: smartAccountAddress as `0x${string}`,
           network: network as any,
@@ -238,51 +246,120 @@ export default function TransferScreen() {
             to: recipientAddress as `0x${string}`,
             value: amountInSmallestUnit,
           }],
-          useCdpPaymaster: network === 'base' // Paymaster only on Base
+          useCdpPaymaster: network === 'base' // Only use paymaster on Base
         });
+          const result = await sendUserOperation({
+            evmSmartAccount: smartAccountAddress as `0x${string}`,
+            network: network as any,
+            calls: [{
+              to: recipientAddress as `0x${string}`,
+              value: amountInSmallestUnit,
+            }],
+            useCdpPaymaster: true
+          });
 
-        setTxHash(result.userOperationHash);
-        showAlert(
-          'Transfer Complete! ✨',
-          network === 'base'
-            ? `Gasless transfer via Coinbase Paymaster\n\nSent ${amount} ${selectedToken.token?.symbol} to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`
-            : `Sent ${amount} ${selectedToken.token?.symbol} to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`,
-          'success'
-        );
+          setTxHash(result.userOperationHash);
+          showAlert(
+            'Transfer Complete! ✨',
+            `Gasless transfer via Coinbase Paymaster\n\nSent ${amount} ${selectedToken.token?.symbol} to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`,
+            'success'
+          );
+        } else {
+          // For ERC-20 token transfers on Base
+          // ERC-20 transfer function signature: transfer(address,uint256)
+          const transferFunctionSelector = '0xa9059cbb';
+
+          // Encode recipient address (32 bytes, padded)
+          const encodedRecipient = recipientAddress.slice(2).padStart(64, '0');
+
+          // Encode amount (32 bytes, padded)
+          const encodedAmount = amountInSmallestUnit.toString(16).padStart(64, '0');
+
+          // Combine into calldata
+          const calldata = `${transferFunctionSelector}${encodedRecipient}${encodedAmount}`;
+
+          const result = await sendUserOperation({
+            evmSmartAccount: smartAccountAddress as `0x${string}`,
+            network: network as any,
+            calls: [{
+              to: tokenAddress as `0x${string}`,
+              value: 0n,
+              data: calldata as `0x${string}`,
+            }],
+            useCdpPaymaster: true
+          });
+
+          setTxHash(result.userOperationHash);
+          showAlert(
+            'Transfer Complete! ✨',
+            `Gasless transfer via Coinbase Paymaster\n\nSent ${amount} ${selectedToken.token?.symbol} to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`,
+            'success'
+          );
+        }
       } else {
-        // ERC-20 token transfer
-        console.log('💸 [TRANSFER] Sending ERC-20 token from smart account');
-        // ERC-20 transfer function signature: transfer(address,uint256)
-        const transferFunctionSelector = '0xa9059cbb';
+        // Use regular EVM transactions for Ethereum
+        // Use smart account if available (where balances are), fallback to EOA
+        const senderAddress = smartAccountAddress || eoaAddress;
 
-        // Encode recipient address (32 bytes, padded)
-        const encodedRecipient = recipientAddress.slice(2).padStart(64, '0');
+        if (!senderAddress) {
+          showAlert('Error', 'EVM account not found. Please create an Ethereum wallet first.', 'error');
+          return;
+        }
 
-        // Encode amount (32 bytes, padded)
-        const encodedAmount = amountInSmallestUnit.toString(16).padStart(64, '0');
+        const chainId = 1; // Ethereum mainnet
 
-        // Combine into calldata
-        const calldata = `${transferFunctionSelector}${encodedRecipient}${encodedAmount}`;
+        // For native ETH transfers on Ethereum
+        if (!tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000') {
+          const result = await sendEvmTransaction({
+            evmAccount: senderAddress as `0x${string}`,
+            network: network as any,
+            transaction: {
+              to: recipientAddress as `0x${string}`,
+              value: amountInSmallestUnit,
+              chainId,
+              type: 'eip1559'
+            }
+          });
 
-        const result = await sendUserOperation({
-          evmSmartAccount: smartAccountAddress as `0x${string}`,
-          network: network as any,
-          calls: [{
-            to: tokenAddress as `0x${string}`,
-            value: 0n,
-            data: calldata as `0x${string}`,
-          }],
-          useCdpPaymaster: network === 'base' // Paymaster only on Base
-        });
+          setTxHash(result.transactionHash);
+          showAlert(
+            'Transfer Complete!',
+            `Sent ${amount} ${selectedToken.token?.symbol} to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`,
+            'success'
+          );
+        } else {
+          // For ERC-20 token transfers on Ethereum
+          // ERC-20 transfer function signature: transfer(address,uint256)
+          const transferFunctionSelector = '0xa9059cbb';
 
-        setTxHash(result.userOperationHash);
-        showAlert(
-          'Transfer Complete! ✨',
-          network === 'base'
-            ? `Gasless transfer via Coinbase Paymaster\n\nSent ${amount} ${selectedToken.token?.symbol} to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`
-            : `Sent ${amount} ${selectedToken.token?.symbol} to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`,
-          'success'
-        );
+          // Encode recipient address (32 bytes, padded)
+          const encodedRecipient = recipientAddress.slice(2).padStart(64, '0');
+
+          // Encode amount (32 bytes, padded)
+          const encodedAmount = amountInSmallestUnit.toString(16).padStart(64, '0');
+
+          // Combine into calldata
+          const calldata = `${transferFunctionSelector}${encodedRecipient}${encodedAmount}`;
+
+          const result = await sendEvmTransaction({
+            evmAccount: senderAddress as `0x${string}`,
+            network: network as any,
+            transaction: {
+              to: tokenAddress as `0x${string}`,
+              value: 0n,
+              data: calldata as `0x${string}`,
+              chainId,
+              type: 'eip1559'
+            }
+          });
+
+          setTxHash(result.transactionHash);
+          showAlert(
+            'Transfer Complete!',
+            `Sent ${amount} ${selectedToken.token?.symbol} to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`,
+            'success'
+          );
+        }
       }
     } catch (error) {
       console.error('EVM transfer error:', error);
@@ -298,9 +375,26 @@ export default function TransferScreen() {
       const decimals = parseInt(selectedToken.amount?.decimals || '9');
       const amountLamports = Math.floor(amountFloat * Math.pow(10, decimals));
 
+      // Check if this is native SOL (no mint address means native SOL)
+      const isNativeSOL = !selectedToken.token?.mintAddress;
+
+      console.log('🔍 [SOLANA] Token check:', {
+        symbol: selectedToken.token?.symbol,
+        mintAddress: selectedToken.token?.mintAddress,
+        isNativeSOL
+      });
+
+      if (!isNativeSOL) {
+        // SPL Token transfer - show helpful message
+        showAlert(
+          'SPL Tokens Not Supported',
+          'This app currently only supports native SOL transfers.\n\nTo transfer SPL tokens (USDC, EURC, etc.), please export your private key from the Profile tab and use a wallet like Phantom or Solflare.',
+          'info'
+        );
+        return;
+      }
+
       // Native SOL transfer using Solana web3.js
-      // Note: This only works for native SOL. For SPL tokens (USDC, EURC, etc.),
-      // users should export their private key and use a full wallet like Phantom.
       console.log('🔄 [SOLANA] Building transfer transaction:', {
         from: solanaAddress,
         to: recipientAddress,
@@ -557,6 +651,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: TEXT_SECONDARY,
     lineHeight: 16,
+  },
+  selector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: DARK_BG,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 12,
+    padding: 16,
+  },
+  selectorText: {
+    fontSize: 16,
+    color: TEXT_PRIMARY,
   },
   input: {
     backgroundColor: DARK_BG,
