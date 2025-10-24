@@ -24,23 +24,34 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
   const { getAccessToken } = useGetAccessToken();
   const { currentUser } = useCurrentUser();
 
+  console.log('🔍 [AUTH INITIALIZER] Component rendered, currentUser:', {
+    hasUser: !!currentUser,
+    userId: currentUser?.userId
+  });
+
   useEffect(() => {
     // Initialize the global token getter once
     initializeAccessTokenGetter(getAccessToken);
+    console.log('✅ [AUTH INITIALIZER] Access token getter initialized');
   }, [getAccessToken]);
 
   // Register for push notifications when user logs in
   useEffect(() => {
+    console.log('🔍 [PUSH] useEffect triggered, currentUser.userId:', currentUser?.userId);
+
     if (currentUser?.userId) {
       // Use userId as partnerUserRef (matches transaction format)
       const partnerUserRef = currentUser.userId;
 
+      console.log('📱 [APP] Registering push notifications for user:', partnerUserRef);
+
       registerForPushNotifications().then(async (pushToken) => {
         if (pushToken) {
-          console.log('✅ [APP] Push token registered for user:', partnerUserRef);
+          console.log('✅ [APP] Push token obtained, sending to server:', partnerUserRef);
           await sendPushTokenToServer(pushToken, partnerUserRef, getAccessToken);
+          console.log('✅ [APP] Push token successfully sent to server');
         } else {
-          console.log('ℹ️ [APP] No push token (likely simulator), will use polling instead');
+          console.log('ℹ️ [APP] No push token (likely simulator or permission denied), will use polling instead');
         }
       }).catch((error) => {
         console.error('❌ [APP] Failed to register push notifications:', error);
@@ -55,8 +66,10 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
         console.log('⏹️ [APP] Stopping notification polling');
         stopNotificationPolling();
       };
+    } else {
+      console.log('⚠️ [APP] No currentUser.userId, skipping push notification setup');
     }
-  }, [currentUser?.userId]);
+  }, [currentUser?.userId, getAccessToken]);
 
   return <>{children}</>;
 }

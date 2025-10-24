@@ -65,11 +65,26 @@ export default function TransferScreen() {
   // Get EOA address for Ethereum (needed for sendEvmTransaction)
   const eoaAddress = currentUser?.evmAccounts?.[0] || null;
 
+  console.log('🔍 [TRANSFER] Account addresses:', {
+    evmAddress,
+    solanaAddress,
+    smartAccountAddress,
+    eoaAddress
+  });
+
   // Load token data from params (only on mount)
   useEffect(() => {
     if (params.token) {
       try {
         const tokenData = JSON.parse(params.token as string);
+        console.log('🔍 [TRANSFER] Loaded token data:', {
+          symbol: tokenData.token?.symbol,
+          contractAddress: tokenData.token?.contractAddress,
+          mintAddress: tokenData.token?.mintAddress,
+          amount: tokenData.amount?.amount,
+          decimals: tokenData.amount?.decimals,
+          network: params.network
+        });
         setSelectedToken(tokenData);
       } catch (e) {
         console.error('Error parsing token data:', e);
@@ -196,11 +211,21 @@ export default function TransferScreen() {
   };
 
   const handleEvmTransfer = async () => {
-    if (!evmAddress || !selectedToken) return;
+    if (!selectedToken) return;
 
     const tokenAddress = selectedToken.token?.contractAddress;
     const decimals = parseInt(selectedToken.amount?.decimals || '0');
     const amountInSmallestUnit = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, decimals)));
+
+    console.log('🔍 [EVM TRANSFER] Starting transfer:', {
+      network,
+      tokenAddress,
+      amount,
+      decimals,
+      smartAccountAddress,
+      eoaAddress,
+      evmAddress
+    });
 
     try {
       // Use Paymaster for Base network (gasless transactions)
@@ -341,6 +366,12 @@ export default function TransferScreen() {
 
       // Check if this is native SOL (no mint address means native SOL)
       const isNativeSOL = !selectedToken.token?.mintAddress;
+
+      console.log('🔍 [SOLANA] Token check:', {
+        symbol: selectedToken.token?.symbol,
+        mintAddress: selectedToken.token?.mintAddress,
+        isNativeSOL
+      });
 
       if (!isNativeSOL) {
         // SPL Token transfer - show helpful message
