@@ -68,10 +68,10 @@ export async function validateAccessToken(
     // Validate with CDP API
     const jwtToken = await generateJwt({
       apiKeyId: process.env.CDP_API_KEY_ID!,
-      apiKeyPrivate: process.env.CDP_API_KEY_PRIVATE!,
-      method: 'POST',
-      uri: '/platform/v2/end-users/auth/validate-token',
-      host: 'api.cdp.coinbase.com'
+      apiKeySecret: process.env.CDP_API_KEY_SECRET!,
+      requestMethod: 'POST',
+      requestHost: 'api.cdp.coinbase.com',
+      requestPath: '/platform/v2/end-users/auth/validate-token',
     });
 
     const response = await fetch(
