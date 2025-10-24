@@ -136,6 +136,22 @@ export function useOnramp() {
       const partnerUserRef = `${sandboxPrefix}${userId}`;
       setCurrentPartnerUserRef(partnerUserRef);
 
+      // IMPORTANT: Register push token before transaction (ensures webhook can send notification)
+      try {
+        const { registerForPushNotifications, sendPushTokenToServer } = await import('@/utils/pushNotifications');
+        const { getAccessTokenGlobal } = await import('@/utils/getAccessTokenGlobal');
+
+        console.log('📱 [TRANSACTION] Pre-registering push token for:', partnerUserRef);
+        const pushToken = await registerForPushNotifications();
+        if (pushToken) {
+          await sendPushTokenToServer(pushToken, partnerUserRef, getAccessTokenGlobal);
+          console.log('✅ [TRANSACTION] Push token registered successfully');
+        }
+      } catch (pushError) {
+        console.warn('⚠️ [TRANSACTION] Failed to register push token:', pushError);
+        // Don't block transaction if push token fails
+      }
+
       let phone = getVerifiedPhone();
       let phoneAt = getVerifiedPhoneAt();
       if (getSandboxMode() && (!phone || !isPhoneFresh60d())) {
@@ -199,6 +215,22 @@ export function useOnramp() {
       const userId = currentUser?.userId || 'unknown-user';
       const partnerUserRef = userId;
       setCurrentPartnerUserRef(partnerUserRef);
+
+      // IMPORTANT: Register push token before transaction (ensures webhook can send notification)
+      try {
+        const { registerForPushNotifications, sendPushTokenToServer } = await import('@/utils/pushNotifications');
+        const { getAccessTokenGlobal } = await import('@/utils/getAccessTokenGlobal');
+
+        console.log('📱 [TRANSACTION] Pre-registering push token for:', partnerUserRef);
+        const pushToken = await registerForPushNotifications();
+        if (pushToken) {
+          await sendPushTokenToServer(pushToken, partnerUserRef, getAccessTokenGlobal);
+          console.log('✅ [TRANSACTION] Push token registered successfully');
+        }
+      } catch (pushError) {
+        console.warn('⚠️ [TRANSACTION] Failed to register push token:', pushError);
+        // Don't block transaction if push token fails
+      }
 
       // Auth handled by authenticatedFetch
       const res = await createOnrampSession({
