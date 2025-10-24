@@ -38,6 +38,8 @@ const config: ExpoConfig = {
     plugins: [
       'expo-router',
       'expo-secure-store',
+      '@react-native-async-storage/async-storage',
+      'react-native-quick-crypto',
       ['expo-splash-screen', { image: './assets/images/splash-icon.png', imageWidth: 200, resizeMode: 'contain', backgroundColor: '#ffffff' }],
       ['expo-build-properties', { ios: { deploymentTarget: '15.1' } }],
       ['expo-notifications', {
