@@ -38,7 +38,6 @@ const config: ExpoConfig = {
     plugins: [
       'expo-router',
       'expo-secure-store',
-      'react-native-quick-crypto',
       ['expo-splash-screen', { image: './assets/images/splash-icon.png', imageWidth: 200, resizeMode: 'contain', backgroundColor: '#ffffff' }],
       ['expo-build-properties', { ios: { deploymentTarget: '15.1' } }],
       ['expo-notifications', {
@@ -55,7 +54,7 @@ const config: ExpoConfig = {
 
     extra: {
       eas: {
-        projectId: '80449c5b-e4be-4e48-8a8b-b84ce14f7cf6' // Your EAS project ID
+        projectId: '981ff535-f8bf-4fac-97ef-1cdbc9038e85'
       }
     }
 };

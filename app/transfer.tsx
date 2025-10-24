@@ -11,7 +11,12 @@
  * - Transaction confirmation and status
  */
 
+import { CoinbaseAlert } from '@/components/ui/CoinbaseAlerts';
 import { COLORS } from '@/constants/Colors';
+import { isTestSessionActive } from '@/utils/sharedState';
+import { useCurrentUser, useEvmAddress, useSendEvmTransaction, useSendSolanaTransaction, useSendUserOperation, useSolanaAddress } from '@coinbase/cdp-hooks';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -26,10 +31,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { useSendEvmTransaction, useSendSolanaTransaction, useSendUserOperation, useEvmAddress, useSolanaAddress, useCurrentUser } from '@coinbase/cdp-hooks';
-import { CoinbaseAlert } from '@/components/ui/CoinbaseAlerts';
-import { isTestSessionActive } from '@/utils/sharedState';
 
 const { DARK_BG, CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BLUE, WHITE, BORDER } = COLORS;
 
@@ -260,8 +261,11 @@ export default function TransferScreen() {
           );
         }
       } else {
-        // Use regular EVM transactions for Ethereum (NOT gasless)
-        if (!eoaAddress) {
+        // Use regular EVM transactions for Ethereum
+        // Use smart account if available (where balances are), fallback to EOA
+        const senderAddress = smartAccountAddress || eoaAddress;
+
+        if (!senderAddress) {
           showAlert('Error', 'EVM account not found. Please create an Ethereum wallet first.', 'error');
           return;
         }
@@ -271,7 +275,7 @@ export default function TransferScreen() {
         // For native ETH transfers on Ethereum
         if (!tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000') {
           const result = await sendEvmTransaction({
-            evmAccount: eoaAddress as `0x${string}`,
+            evmAccount: senderAddress as `0x${string}`,
             network: network as any,
             transaction: {
               to: recipientAddress as `0x${string}`,
@@ -302,7 +306,7 @@ export default function TransferScreen() {
           const calldata = `${transferFunctionSelector}${encodedRecipient}${encodedAmount}`;
 
           const result = await sendEvmTransaction({
-            evmAccount: eoaAddress as `0x${string}`,
+            evmAccount: senderAddress as `0x${string}`,
             network: network as any,
             transaction: {
               to: tokenAddress as `0x${string}`,
@@ -330,9 +334,67 @@ export default function TransferScreen() {
   const handleSolanaTransfer = async () => {
     if (!solanaAddress || !selectedToken) return;
 
-    // TODO: Implement proper Solana SPL token transfer
-    // This requires creating a Solana transfer instruction
-    showAlert('Coming Soon', 'Solana transfers will be implemented with proper SPL token support', 'info');
+    try {
+      const amountFloat = parseFloat(amount);
+      const decimals = parseInt(selectedToken.amount?.decimals || '9');
+      const amountLamports = Math.floor(amountFloat * Math.pow(10, decimals));
+
+      // Check if this is native SOL (no mint address means native SOL)
+      const isNativeSOL = !selectedToken.token?.mintAddress;
+
+      if (!isNativeSOL) {
+        // SPL Token transfer - show helpful message
+        showAlert(
+          'SPL Tokens Not Supported',
+          'This app currently only supports native SOL transfers.\n\nTo transfer SPL tokens (USDC, EURC, etc.), please export your private key from the Profile tab and use a wallet like Phantom or Solflare.',
+          'info'
+        );
+        return;
+      }
+
+      // Native SOL transfer using Solana web3.js
+      console.log('🔄 [SOLANA] Building transfer transaction:', {
+        from: solanaAddress,
+        to: recipientAddress,
+        lamports: amountLamports
+      });
+
+      // Create Solana transaction with System Program transfer instruction
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: new PublicKey(solanaAddress),
+          toPubkey: new PublicKey(recipientAddress),
+          lamports: amountLamports
+        })
+      );
+
+      // Serialize transaction to base64
+      const serializedTransaction = transaction.serialize({
+        requireAllSignatures: false,
+        verifySignatures: false
+      }).toString('base64');
+
+      console.log('📤 [SOLANA] Sending transaction...');
+
+      // Send transaction using CDP hook
+      const result = await sendSolanaTransaction({
+        solanaAccount: solanaAddress,
+        network: 'solana-mainnet' as any,
+        transaction: serializedTransaction
+      });
+
+      console.log('✅ [SOLANA] Transaction successful:', result.transactionSignature);
+
+      setTxHash(result.transactionSignature);
+      showAlert(
+        'Transfer Complete! ✨',
+        `Sent ${amount} SOL to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}\n\nSignature: ${result.transactionSignature.slice(0, 20)}...`,
+        'success'
+      );
+    } catch (error) {
+      console.error('Solana transfer error:', error);
+      throw error;
+    }
   };
 
   const handleAlertDismiss = () => {
@@ -363,6 +425,23 @@ export default function TransferScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Solana SPL Token Notice */}
+          {network === 'solana' && (
+            <View style={[styles.card, { backgroundColor: '#FFF3CD', borderColor: '#FFC107' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                <Ionicons name="information-circle" size={20} color="#856404" style={{ marginTop: 2 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.helper, { color: '#856404', fontWeight: '600' }]}>
+                    Solana Network Note
+                  </Text>
+                  <Text style={[styles.helper, { color: '#856404', marginTop: 4 }]}>
+                    Only native SOL transfers are supported. To transfer SPL tokens (USDC, USDT, etc.), export your private key from the Profile tab.
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
           {/* Network Info */}
           <View style={styles.card}>
             <Text style={styles.label}>Network</Text>

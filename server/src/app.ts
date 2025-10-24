@@ -31,14 +31,11 @@ app.use('/webhooks/onramp', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Inbound request logging
+// Inbound request logging (webhooks only)
 app.use((req, _res, next) => {
-  console.log('📥 Inbound request', {
-    method: req.method,
-    path: req.path,
-    origin: req.headers.origin,
-    body: req.body ? JSON.stringify(req.body).slice(0, 500) : 'No body'
-  });
+  if (req.path.startsWith('/webhooks')) {
+    console.log('📥 Webhook:', req.path);
+  }
   next();
 });
 
@@ -50,12 +47,12 @@ app.get("/health", (_req, res) => {
 // 🔒 GLOBAL AUTHENTICATION MIDDLEWARE
 // All routes except /health and /webhooks require valid CDP access token
 app.use((req, res, next) => {
-  // Skip authentication for health check and webhooks
+  // Skip authentication for health check and webhooks only
   if (req.path === '/health' || req.path.startsWith('/webhooks')) {
     return next();
   }
 
-  // Apply authentication to all other routes
+  // Apply authentication to all other routes (including /push-tokens and /notifications/poll)
   return validateAccessToken(req, res, next);
 });
 
@@ -459,6 +456,17 @@ app.get('/balances/solana', async (req, res) => {
  */
 const pushTokenStore = new Map<string, { token: string; platform: string; updatedAt: number }>();
 
+// Store pending notifications for polling (simulator support)
+interface PendingNotification {
+  id: string;
+  userId: string;
+  title: string;
+  body: string;
+  data: any;
+  createdAt: number;
+}
+const pendingNotifications = new Map<string, PendingNotification[]>();
+
 app.post('/push-tokens', async (req, res) => {
   try {
     const { userId, pushToken, platform } = req.body;
@@ -467,17 +475,57 @@ app.post('/push-tokens', async (req, res) => {
       return res.status(400).json({ error: 'userId and pushToken are required' });
     }
 
+    // Security: Verify the authenticated user matches the userId they're trying to register
+    if (req.userId !== userId) {
+      console.error('❌ [PUSH] Unauthorized token registration attempt');
+      return res.status(403).json({ error: 'Forbidden: Cannot register push token for another user' });
+    }
+
     pushTokenStore.set(userId, {
       token: pushToken,
       platform: platform || 'unknown',
       updatedAt: Date.now(),
     });
 
-    console.log('✅ [PUSH] Token stored for user:', userId);
+    console.log('✅ [PUSH] Token registered for user:', userId);
     res.json({ success: true });
   } catch (error) {
-    console.error('❌ [PUSH] Error storing push token:', error);
+    console.error('❌ [PUSH] Error:', error);
     res.status(500).json({ error: 'Failed to store push token' });
+  }
+});
+
+/**
+ * Poll for pending notifications (simulator support)
+ * GET /notifications/poll?userId=USER_ID
+ */
+app.get('/notifications/poll', (req, res) => {
+  try {
+    const userId = req.query.userId as string;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    // Security: Verify the authenticated user matches the userId they're polling for
+    if (req.userId !== userId) {
+      console.error('❌ [POLL] Unauthorized poll attempt');
+      return res.status(403).json({ error: 'Forbidden: Cannot poll notifications for another user' });
+    }
+
+    // Get pending notifications for this user
+    const userNotifications = pendingNotifications.get(userId) || [];
+
+    // Clear the notifications after fetching
+    if (userNotifications.length > 0) {
+      pendingNotifications.delete(userId);
+      console.log(`🔔 [POLL] Delivered ${userNotifications.length} notification(s)`);
+    }
+
+    res.json({ notifications: userNotifications });
+  } catch (error) {
+    console.error('❌ [POLL] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
   }
 });
 
@@ -501,11 +549,8 @@ app.post('/webhooks/onramp', async (req, res) => {
     // Parse JSON from raw body
     const webhookData = Buffer.isBuffer(req.body) ? JSON.parse(rawBody) : req.body;
 
-    console.log('🔔 [WEBHOOK] Received onramp webhook', {
-      eventType: webhookData.eventType || webhookData.event,
-      hasHook0Signature: !!req.headers['x-hook0-signature'],
-      hasCoinbaseSignature: !!req.headers['x-coinbase-signature']
-    });
+    const eventType = webhookData.eventType || webhookData.event;
+    console.log('🔔 [WEBHOOK] Received:', eventType);
 
     // Verify webhook signature (security check)
     const webhookSecret = process.env.WEBHOOK_SECRET;
@@ -513,13 +558,14 @@ app.post('/webhooks/onramp', async (req, res) => {
     if (webhookSecret) {
       // Try X-Hook0-Signature (new format)
       const hook0Signature = req.headers['x-hook0-signature'] as string;
+
       if (hook0Signature) {
         const isValid = verifyWebhookSignature(hook0Signature, req.headers, rawBody, webhookSecret);
         if (!isValid) {
-          console.error('❌ [WEBHOOK] Invalid X-Hook0-Signature');
+          console.error('❌ [WEBHOOK] Invalid signature');
           return res.status(401).json({ error: 'Invalid signature' });
         }
-        console.log('✅ [WEBHOOK] X-Hook0-Signature verified');
+        console.log('✅ [WEBHOOK] Signature verified');
       }
       // Fallback: Try x-coinbase-signature (legacy format)
       else {
@@ -541,9 +587,6 @@ app.post('/webhooks/onramp', async (req, res) => {
     } else {
       console.warn('⚠️ [WEBHOOK] WEBHOOK_SECRET not set - skipping verification (INSECURE!)');
     }
-
-    // Extract event type (handle both formats)
-    const eventType = webhookData.eventType || webhookData.event;
 
     // Extract transaction ID (different field names)
     const txId = webhookData.transactionId || webhookData.orderId || webhookData.data?.transaction?.id;
@@ -597,22 +640,40 @@ app.post('/webhooks/onramp', async (req, res) => {
           const userTokenData = pushTokenStore.get(partnerUserRef);
 
           if (!userTokenData) {
-            console.log('⚠️ [WEBHOOK] No push token registered for user:', partnerUserRef);
+            console.log('⚠️ [WEBHOOK] No push token registered');
             break;
           }
 
-          console.log('📲 [WEBHOOK] Sending notification to user:', partnerUserRef);
+          const title = '🎉 Crypto Purchase Complete!';
+          const body = `Your ${amount} ${currency} has been delivered to your ${network} wallet!`;
+          const notificationData = {
+            transactionId: txId,
+            type: 'onramp_complete',
+            partnerUserRef
+          };
+
+          // Store notification for polling (simulator support)
+          const notification: PendingNotification = {
+            id: `${Date.now()}-${Math.random()}`,
+            userId: partnerUserRef,
+            title,
+            body,
+            data: notificationData,
+            createdAt: Date.now()
+          };
+
+          const userPendingNotifs = pendingNotifications.get(partnerUserRef) || [];
+          userPendingNotifs.push(notification);
+          pendingNotifications.set(partnerUserRef, userPendingNotifs);
+
+          // Also try to send real push notification (for physical devices)
 
           const message = {
             to: userTokenData.token,
             sound: 'default',
-            title: '🎉 Crypto Purchase Complete!',
-            body: `Your ${amount} ${currency} has been delivered to your ${network} wallet!`,
-            data: {
-              transactionId: txId,
-              type: 'onramp_complete',
-              partnerUserRef
-            },
+            title,
+            body,
+            data: notificationData,
           };
 
           const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -624,7 +685,7 @@ app.post('/webhooks/onramp', async (req, res) => {
           });
 
           const pushResult = await pushResponse.json();
-          console.log('✅ [WEBHOOK] Push notification sent to user:', partnerUserRef, pushResult);
+          console.log('✅ [WEBHOOK] Notification sent for transaction:', txId);
         } catch (pushError) {
           console.error('❌ [WEBHOOK] Failed to send push notification:', pushError);
         }
@@ -663,22 +724,40 @@ app.post('/webhooks/onramp', async (req, res) => {
           const failedUserTokenData = pushTokenStore.get(failedPartnerUserRef);
 
           if (!failedUserTokenData) {
-            console.log('⚠️ [WEBHOOK] No push token registered for user:', failedPartnerUserRef);
+            console.log('⚠️ [WEBHOOK] No push token registered');
             break;
           }
 
-          console.log('📲 [WEBHOOK] Sending failure notification to user:', failedPartnerUserRef);
+          const failTitle = '❌ Transaction Failed';
+          const failBody = `Your purchase failed: ${failureReason}. Please try again.`;
+          const failData = {
+            transactionId: txId,
+            type: 'onramp_failed',
+            partnerUserRef: failedPartnerUserRef
+          };
+
+          // Store notification for polling (simulator support)
+          const failNotification: PendingNotification = {
+            id: `${Date.now()}-${Math.random()}`,
+            userId: failedPartnerUserRef,
+            title: failTitle,
+            body: failBody,
+            data: failData,
+            createdAt: Date.now()
+          };
+
+          const failUserPendingNotifs = pendingNotifications.get(failedPartnerUserRef) || [];
+          failUserPendingNotifs.push(failNotification);
+          pendingNotifications.set(failedPartnerUserRef, failUserPendingNotifs);
+
+          // Also try to send real push notification (for physical devices)
 
           const failureMessage = {
             to: failedUserTokenData.token,
             sound: 'default',
-            title: '❌ Transaction Failed',
-            body: `Your ${failedAmount} ${failedCurrency} purchase failed: ${failureReason}. Please try again.`,
-            data: {
-              transactionId: txId,
-              type: 'onramp_failed',
-              partnerUserRef: failedPartnerUserRef
-            },
+            title: failTitle,
+            body: failBody,
+            data: failData,
           };
 
           const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -690,7 +769,7 @@ app.post('/webhooks/onramp', async (req, res) => {
           });
 
           const pushResult = await pushResponse.json();
-          console.log('✅ [WEBHOOK] Failure notification sent to user:', failedPartnerUserRef, pushResult);
+          console.log('✅ [WEBHOOK] Failure notification sent for transaction:', txId);
         } catch (pushError) {
           console.error('❌ [WEBHOOK] Failed to send failure push notification:', pushError);
         }

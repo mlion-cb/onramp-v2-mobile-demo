@@ -130,8 +130,10 @@ export function useOnramp() {
       const userEmail = currentUser?.authenticationMethods.email?.email || 'noemail@test.com';
 
       // Generate unique user reference for transaction tracking
+      // Apple Pay: Use userId with sandbox prefix for sandbox environment
       const sandboxPrefix = getSandboxMode() ? "sandbox-" : "";
-      const partnerUserRef = `${sandboxPrefix}user-${formData.address}`;      
+      const userId = currentUser?.userId || 'unknown-user';
+      const partnerUserRef = `${sandboxPrefix}${userId}`;
       setCurrentPartnerUserRef(partnerUserRef);
 
       let phone = getVerifiedPhone();
@@ -192,9 +194,10 @@ export function useOnramp() {
         setSubdivision('CA');
       }
 
-      // Generate unique user reference for transaction tracking (same as Apple Pay)
-      const sandboxPrefix = getSandboxMode() ? "sandbox-" : "";
-      const partnerUserRef = `${sandboxPrefix}user-${formData.address}`;
+      // Generate unique user reference for transaction tracking
+      // Widget: Use userId directly (no sandbox prefix needed)
+      const userId = currentUser?.userId || 'unknown-user';
+      const partnerUserRef = userId;
       setCurrentPartnerUserRef(partnerUserRef);
 
       // Auth handled by authenticatedFetch
