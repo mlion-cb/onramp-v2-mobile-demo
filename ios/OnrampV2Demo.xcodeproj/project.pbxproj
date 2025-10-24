@@ -372,6 +372,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				VERSIONING_SYSTEM = "apple-generic";
+				WEBHOOK_SECRET = "7614aa6f-ef52-4e4c-8944-8fdae6f31828";
 			};
 			name = Debug;
 		};
@@ -406,6 +407,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				VERSIONING_SYSTEM = "apple-generic";
+				WEBHOOK_SECRET = "7614aa6f-ef52-4e4c-8944-8fdae6f31828";
 			};
 			name = Release;
 		};
