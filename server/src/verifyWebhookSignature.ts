@@ -81,7 +81,10 @@ function constructSignedPayload(
     if (headerValue) {
       // Handle array or string
       const value = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-      headerValues.push(value);
+      // Only push if value is a string (not undefined)
+      if (typeof value === 'string') {
+        headerValues.push(value);
+      }
     }
   }
   parts.push(headerValues.join('.'));
