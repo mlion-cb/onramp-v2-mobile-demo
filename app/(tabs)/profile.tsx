@@ -438,6 +438,8 @@ export default function WalletScreen() {
       setCurrentWalletAddress(null);
       setManualWalletAddress(null);
       await setVerifiedPhone(null);
+      // Reset sandbox mode to default (ON) for next login
+      await setSandboxMode(true);
       // Navigate to login screen
       router.replace('/auth/login');
     }
