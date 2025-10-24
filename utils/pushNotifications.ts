@@ -132,7 +132,7 @@ export async function showLocalNotification(title: string, body: string, data?: 
  * Poll server for pending notifications (simulator support)
  * This allows notifications to work on simulator by polling the server
  */
-let pollingInterval: NodeJS.Timeout | null = null;
+let pollingInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startNotificationPolling(userId: string, getAccessToken: () => Promise<string>): void {
   // Stop any existing polling
