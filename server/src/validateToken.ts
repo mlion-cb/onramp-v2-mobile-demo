@@ -33,23 +33,7 @@ export async function validateAccessToken(
       return next();
     }
 
-    // Check which endpoint is being called
-    const targetUrl = req.body?.url || '';
-
-    // ONLY allow these public endpoints without authentication
-    const publicEndpoints = [
-      '/v1/buy/config',       // Buy configuration (countries, assets, networks) - ONLY
-      '/v2/onramp/options'    // Payment options and currencies - ONLY
-    ];
-
-    // Check if this is a public endpoint
-    const isPublicEndpoint = publicEndpoints.some(endpoint => targetUrl.includes(endpoint));
-
-    if (isPublicEndpoint) {
-      return next();
-    }
-
-    // Protected endpoints - require authentication
+    // All /server/api calls require authentication
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       console.error('❌ [AUTH] Missing or invalid Authorization header');
       return res.status(401).json({
@@ -83,7 +67,7 @@ export async function validateAccessToken(
           'Authorization': `Bearer ${jwtToken}`
         },
         body: JSON.stringify({
-          endUserAccessToken: token
+          accessToken: token
         })
       }
     );
