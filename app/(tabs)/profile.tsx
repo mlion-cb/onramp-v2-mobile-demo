@@ -644,14 +644,46 @@ export default function WalletScreen() {
                   </View>
 
                   <View style={styles.subBox}>
-                    <Text style={styles.subHint}>EVM wallet address</Text>
-                    <Text selectable style={styles.subValue}>{primaryAddress}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.subHint}>EVM wallet address</Text>
+                      <Text selectable style={styles.subValue}>{primaryAddress}</Text>
+                    </View>
+                    <Pressable
+                      onPress={async () => {
+                        await Clipboard.setStringAsync(primaryAddress || '');
+                        setAlertState({
+                          visible: true,
+                          title: "Address copied",
+                          message: "EVM wallet address copied to clipboard",
+                          type: "info",
+                        });
+                      }}
+                      style={styles.copyButton}
+                    >
+                      <Ionicons name="copy-outline" size={20} color={BLUE} />
+                    </Pressable>
                   </View>
 
                   {solanaAddress && (
                     <View style={styles.subBox}>
-                      <Text style={styles.subHint}>Solana wallet address</Text>
-                      <Text selectable style={styles.subValue}>{solanaAddress}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.subHint}>Solana wallet address</Text>
+                        <Text selectable style={styles.subValue}>{solanaAddress}</Text>
+                      </View>
+                      <Pressable
+                        onPress={async () => {
+                          await Clipboard.setStringAsync(solanaAddress || '');
+                          setAlertState({
+                            visible: true,
+                            title: "Address copied",
+                            message: "Solana wallet address copied to clipboard",
+                            type: "info",
+                          });
+                        }}
+                        style={styles.copyButton}
+                      >
+                        <Ionicons name="copy-outline" size={20} color={BLUE} />
+                      </Pressable>
                     </View>
                   )}
 
@@ -755,8 +787,21 @@ export default function WalletScreen() {
                                   <Text style={styles.tokenUsd}>Price N/A</Text>
                                 )}
                                 <Pressable
-                                  style={[styles.button, { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12 }]}
+                                  style={[
+                                    styles.button,
+                                    { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12 },
+                                    isExpoGo && styles.buttonDisabled
+                                  ]}
                                   onPress={() => {
+                                    if (isExpoGo) {
+                                      setAlertState({
+                                        visible: true,
+                                        title: "Transfer not available",
+                                        message: "Crypto transfers are not available in Expo Go due to missing crypto.subtle package. Please use TestFlight or a development build.",
+                                        type: "info",
+                                      });
+                                      return;
+                                    }
                                     // Navigate to transfer page with token data
                                     router.push({
                                       pathname: '/transfer',
@@ -766,8 +811,11 @@ export default function WalletScreen() {
                                       }
                                     });
                                   }}
+                                  disabled={isExpoGo}
                                 >
-                                  <Text style={[styles.buttonText, { fontSize: 12 }]}>Transfer</Text>
+                                  <Text style={[styles.buttonText, { fontSize: 12 }]}>
+                                    {isExpoGo ? "Transfer unavailable (Expo Go)" : "Transfer"}
+                                  </Text>
                                 </Pressable>
                               </View>
                             </View>
@@ -1118,10 +1166,15 @@ const styles = StyleSheet.create({
   },
   subBox: {
     backgroundColor: CARD_BG,
-
     padding: 12,
     gap: 6,
     marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  copyButton: {
+    padding: 8,
+    marginLeft: 8,
   },
   subValue: {
     color: TEXT_PRIMARY,

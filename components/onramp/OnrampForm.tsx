@@ -10,7 +10,7 @@
  *
  * Assets and Networks have a many-to-many relationship:
  * - USDC available on: Base, Ethereum, Polygon, Solana, etc.
- * - Base supports: USDC, USDT, ETH
+ * - Base supports: USDC, ETH
  *
  * Form behavior:
  * 1. Select "Base" network → filters assets to only those available on Base

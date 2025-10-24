@@ -31,9 +31,16 @@ function parseSignatureHeader(signatureHeader: string): SignatureComponents | nu
       if (key === 't') {
         components.timestamp = value;
       } else if (key === 'h') {
-        components.headerNames = value ? value.split(':') : [];
+        // Header names are space-separated, not colon-separated
+        components.headerNames = value ? value.split(' ') : [];
       } else if (key === 'v1') {
+        // Prefer v1 signature (newer format with period delimiters)
         components.signature = value;
+      } else if (key === 'v0') {
+        // Use v0 only if v1 wasn't found (older format)
+        if (!components.signature) {
+          components.signature = value;
+        }
       }
     }
 
@@ -50,7 +57,8 @@ function parseSignatureHeader(signatureHeader: string): SignatureComponents | nu
 
 /**
  * Construct the signed payload string
- * Format: timestamp + header_values + raw_body
+ * Format: timestamp.headerNames.headerValues.rawBody
+ * Example: "1234567890.content-type x-event-id.application/json abc123.{\"data\":\"value\"}"
  */
 function constructSignedPayload(
   timestamp: string,
@@ -58,21 +66,29 @@ function constructSignedPayload(
   headers: Record<string, string | string[] | undefined>,
   rawBody: string
 ): string {
-  // Start with timestamp
-  let payload = timestamp;
+  // 1. Timestamp
+  const parts = [timestamp];
 
-  // Append header values in order
+  // 2. Header names (space-separated)
+  parts.push(headerNames.join(' '));
+
+  // 3. Header values (period-separated)
+  const headerValues: string[] = [];
   for (const headerName of headerNames) {
     const headerValue = headers[headerName.toLowerCase()];
     if (headerValue) {
       // Handle array or string
       const value = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-      payload += value;
+      headerValues.push(value);
     }
   }
+  parts.push(headerValues.join('.'));
 
-  // Append raw body
-  payload += rawBody;
+  // 4. Raw body
+  parts.push(rawBody);
+
+  // Join all parts with periods
+  const payload = parts.join('.');
 
   return payload;
 }

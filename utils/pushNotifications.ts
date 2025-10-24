@@ -29,10 +29,10 @@ Notifications.setNotificationHandler({
  */
 export async function registerForPushNotifications(): Promise<string | null> {
   try {
-    // Check if running on physical device
+    // Note: Push tokens work in simulator, but notifications won't be delivered
+    // This is fine for testing the webhook flow
     if (!Constants.isDevice) {
-      console.log('⚠️ [PUSH] Push notifications only work on physical devices');
-      return null;
+      console.log('ℹ️ [PUSH] Running in simulator - token will work but notifications won\'t show');
     }
 
     // Request permissions
@@ -86,12 +86,15 @@ export async function registerForPushNotifications(): Promise<string | null> {
 /**
  * Send push token to server for webhook notifications
  */
-export async function sendPushTokenToServer(pushToken: string, userId: string): Promise<void> {
+export async function sendPushTokenToServer(pushToken: string, userId: string, getAccessToken: () => Promise<string>): Promise<void> {
   try {
+    const accessToken = await getAccessToken();
+
     const response = await fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
         userId,
@@ -113,13 +116,67 @@ export async function sendPushTokenToServer(pushToken: string, userId: string): 
 /**
  * Show local notification (for testing)
  */
-export async function showLocalNotification(title: string, body: string): Promise<void> {
+export async function showLocalNotification(title: string, body: string, data?: any): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: {
       title,
       body,
       sound: true,
+      data,
     },
     trigger: null, // Show immediately
   });
+}
+
+/**
+ * Poll server for pending notifications (simulator support)
+ * This allows notifications to work on simulator by polling the server
+ */
+let pollingInterval: NodeJS.Timeout | null = null;
+
+export function startNotificationPolling(userId: string, getAccessToken: () => Promise<string>): void {
+  // Stop any existing polling
+  stopNotificationPolling();
+
+  // Poll every 5 seconds
+  pollingInterval = setInterval(async () => {
+    try {
+      const accessToken = await getAccessToken();
+
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_BASE_URL}/notifications/poll?userId=${userId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        console.error('❌ [POLL] Failed to poll notifications:', response.status);
+        return;
+      }
+
+      const data = await response.json();
+      const notifications = data.notifications || [];
+
+      // Show each notification as a local notification
+      for (const notification of notifications) {
+        console.log('🔔 [POLL] Received notification:', notification.title);
+        await showLocalNotification(notification.title, notification.body, notification.data);
+      }
+    } catch (error) {
+      console.error('❌ [POLL] Error polling notifications:', error);
+    }
+  }, 5000); // Poll every 5 seconds
+
+  console.log('✅ [POLL] Started polling for user:', userId);
+}
+
+export function stopNotificationPolling(): void {
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+    pollingInterval = null;
+    console.log('⏹️ [POLL] Stopped polling');
+  }
 }
