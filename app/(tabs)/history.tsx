@@ -13,6 +13,7 @@ import {
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
 import { fetchTransactionHistory } from "../../utils/fetchTransactionHistory";
+import { useCurrentUser } from "@coinbase/cdp-hooks";
 
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
@@ -33,6 +34,7 @@ type Transaction = {
 };
 
 export default function History() {
+  const { currentUser } = useCurrentUser();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUserRef, setCurrentUserRef] = useState<string | null>(null);
@@ -52,20 +54,16 @@ export default function History() {
   });
 
   const loadTransactions = useCallback(async (pageKey?: string, isNewPage: boolean = false) => {
-    const userRef = getCurrentPartnerUserRef();
-    if (!userRef) {
-      setAlertState({
-        visible: true,
-        title: "No User Reference",
-        message: "Complete an onramp transaction first to see history",
-        type: 'info'
-      });
+    // Use CDP userId directly (no need to wait for transaction)
+    const userId = currentUser?.userId;
+    if (!userId) {
+      console.log('No user ID available yet');
       return;
     }
 
     try {
       setLoading(true);
-      const result = await fetchTransactionHistory(userRef, pageKey, 50);
+      const result = await fetchTransactionHistory(userId, pageKey, 50);
       setTransactions(result.transactions || []); // Replace for new page
       // setNextPageKey(result.nextPageKey || null);
 
@@ -80,30 +78,30 @@ export default function History() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUser?.userId]);
 
   useFocusEffect(
     useCallback(() => {
-      const userRef = getCurrentPartnerUserRef();
-      console.log('History tab focused, updating userRef to:', userRef);
-      setCurrentUserRef(userRef);
+      const userId = currentUser?.userId;
+      console.log('History tab focused, userId:', userId);
+      setCurrentUserRef(userId || null);
 
       // Auto-load transactions when tab becomes active
-      if (userRef) {
+      if (userId) {
         loadTransactions();
       }
-    }, [loadTransactions])
+    }, [currentUser?.userId, loadTransactions])
   );
 
   useEffect(() => {
-    const userRef = getCurrentPartnerUserRef();
-    setCurrentUserRef(userRef);
+    const userId = currentUser?.userId;
+    setCurrentUserRef(userId || null);
 
-    // Load transactions when userRef is available
-    if (userRef) {
+    // Load transactions when user is available
+    if (userId) {
       loadTransactions();
     }
-  }, [loadTransactions]);
+  }, [currentUser?.userId, loadTransactions]);
 
   
   const handleRefresh = useCallback(() => {
@@ -206,9 +204,9 @@ export default function History() {
       </View>
 
       <View style={styles.userRefSection}>
-        <Text style={styles.userRefLabel}>Current User Reference:</Text>
+        <Text style={styles.userRefLabel}>User ID:</Text>
         <Text style={styles.userRefValue}>
-          {currentUserRef || "None (complete a transaction first)"}
+          {currentUserRef || "Loading..."}
         </Text>
       </View>
 
@@ -218,8 +216,8 @@ export default function History() {
           <Text style={styles.emptyTitle}>No Transactions Yet</Text>
           <Text style={styles.emptyMessage}>
             {currentUserRef
-              ? "Complete your first onramp transaction to see it here"
-              : "Connect a wallet and complete a transaction to see history"}
+              ? "Your transaction history will appear here after completing an onramp purchase"
+              : "Sign in to view your transaction history"}
           </Text>
         </View>
       ) : (

@@ -32,7 +32,8 @@
  *    - Triggers OnrampForm remount on change (key prop)
  *
  * 5. SANDBOX MODE (sandboxMode)
- *    - NOT PERSISTED (resets on app restart - intentional for safety)
+ *    - Defaults to ON for safety (prevents accidental real transactions)
+ *    - Resets to default ON every app restart
  *    - Test mode: uses mock data, optional verification
  *    - Production mode: real transactions, strict validation
  *
@@ -120,35 +121,20 @@ export const markPhoneVerifyCanceled = () => { phoneVerifyCanceled = true; };
 export const getPhoneVerifyWasCanceled = () => phoneVerifyCanceled;
 export const clearPhoneVerifyWasCanceled = () => { phoneVerifyCanceled = false; };
 
-const SANDBOX_MODE_KEY = '@sandbox_mode';
+// Sandbox mode - always defaults to ON for safety (prevents accidental real transactions)
+// Does NOT persist across app restarts - intentional design
 let sandboxMode: boolean = true;
 
 export const getSandboxMode = () => sandboxMode;
-export const setSandboxMode = async (enabled: boolean) => {
+export const setSandboxMode = (enabled: boolean) => {
   sandboxMode = enabled;
   console.log('Sandbox mode:', enabled ? 'ENABLED' : 'DISABLED');
-
-  // Persist to storage
-  try {
-    await AsyncStorage.setItem(SANDBOX_MODE_KEY, JSON.stringify(enabled));
-  } catch (error) {
-    console.error('Failed to save sandbox mode:', error);
-  }
 };
 
-// Hydrate sandbox mode from storage on app start
+// Initialize sandbox mode - always starts as ON for safety
 export const hydrateSandboxMode = async () => {
-  try {
-    const stored = await AsyncStorage.getItem(SANDBOX_MODE_KEY);
-    if (stored !== null) {
-      sandboxMode = JSON.parse(stored);
-      console.log('✅ Sandbox mode restored:', sandboxMode ? 'ENABLED' : 'DISABLED');
-    } else {
-      console.log('ℹ️ No saved sandbox preference, using default: ENABLED');
-    }
-  } catch (error) {
-    console.error('Failed to hydrate sandbox mode:', error);
-  }
+  sandboxMode = true;
+  console.log('ℹ️ Sandbox mode initialized to default: ENABLED (for safety)');
 };
 
 // ============================================================================

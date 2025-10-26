@@ -46,6 +46,7 @@ export async function validateAccessToken(
     const cached = tokenCache.get(token as string);
     if (cached && cached.expiresAt > Date.now()) {
       req.userId = cached.userId;
+      console.log('✅ [AUTH] Token validated (cached) - Request authenticated');
       return next();
     }
 
@@ -82,7 +83,8 @@ export async function validateAccessToken(
     }
 
     const userData = await response.json();
-    console.log('✅ [AUTH] Token validated for user:', userData.authenticationMethods[0]?.email);
+    const userEmail = userData.authenticationMethods[0]?.email || 'unknown';
+    console.log('✅ [AUTH] Token validated (fresh) for user:', userEmail);
 
     // Cache the result
     tokenCache.set(token as string, {

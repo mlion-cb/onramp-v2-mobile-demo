@@ -19,6 +19,7 @@ import { isTestSessionActive } from '@/utils/sharedState';
 import { useCurrentUser, useSendSolanaTransaction, useSendUserOperation, useSolanaAddress } from '@coinbase/cdp-hooks';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
+import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -162,15 +163,8 @@ export default function TransferScreen() {
       return;
     }
 
-    // Check balance
-    const tokenAmount = parseFloat(selectedToken.amount.amount || '0');
-    const decimals = parseInt(selectedToken.amount.decimals || '0');
-    const actualBalance = tokenAmount / Math.pow(10, decimals);
-
-    if (parseFloat(amount) > actualBalance) {
-      showAlert('Insufficient Balance', `You only have ${actualBalance.toFixed(6)} ${selectedToken.token.symbol}`, 'error');
-      return;
-    }
+    // Note: We don't check balance here - let the blockchain handle it
+    // The smart account will reject if insufficient funds, giving a clearer error
 
     setSending(true);
     try {
@@ -212,13 +206,17 @@ export default function TransferScreen() {
     }
 
     const tokenAddress = selectedToken.token?.contractAddress;
-    const decimals = parseInt(selectedToken.amount?.decimals || '0');
+    const isNativeTransfer = !tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000';
+
+    // CRITICAL: Native ETH always has 18 decimals, regardless of what the API returns
+    const decimals = isNativeTransfer ? 18 : parseInt(selectedToken.amount?.decimals || '0');
     const amountInSmallestUnit = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, decimals)));
 
     console.log('🔍 [EVM TRANSFER] Starting transfer:', {
       network,
       tokenAddress,
       amount,
+      isNativeTransfer,
       decimals,
       smartAccountAddress,
       amountInSmallestUnit: amountInSmallestUnit.toString()
@@ -226,8 +224,6 @@ export default function TransferScreen() {
 
     try {
       // Use sendUserOperation for both Base and Ethereum (smart account transfers)
-      const isNativeTransfer = !tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000';
-
       if (isNativeTransfer) {
         // Native ETH transfer
         console.log('💸 [TRANSFER] Sending native ETH from smart account');
@@ -237,6 +233,7 @@ export default function TransferScreen() {
           calls: [{
             to: recipientAddress as `0x${string}`,
             value: amountInSmallestUnit,
+            data: '0x' // Empty data for native transfer
           }],
           useCdpPaymaster: network === 'base' // Paymaster only on Base
         });
@@ -307,8 +304,18 @@ export default function TransferScreen() {
         lamports: amountLamports
       });
 
+      // Create Solana connection to fetch recent blockhash
+      const { Connection, clusterApiUrl } = await import('@solana/web3.js');
+      const connection = new Connection(clusterApiUrl('mainnet-beta'));
+
+      // Fetch recent blockhash
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+
       // Create Solana transaction with System Program transfer instruction
-      const transaction = new Transaction().add(
+      const transaction = new Transaction({
+        recentBlockhash: blockhash,
+        feePayer: new PublicKey(solanaAddress)
+      }).add(
         SystemProgram.transfer({
           fromPubkey: new PublicKey(solanaAddress),
           toPubkey: new PublicKey(recipientAddress),
@@ -369,7 +376,7 @@ export default function TransferScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          style={styles.content}
+          style={{ flex: 1, backgroundColor: CARD_BG }}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
@@ -425,15 +432,39 @@ export default function TransferScreen() {
           {/* Recipient Address */}
           <View style={styles.card}>
             <Text style={styles.label}>Recipient Address</Text>
-            <TextInput
-              style={[styles.input, addressError && { borderColor: '#FF6B6B' }]}
-              value={recipientAddress}
-              onChangeText={handleAddressChange}
-              placeholder={network === 'solana' ? 'Solana address' : '0x...'}
-              placeholderTextColor={TEXT_SECONDARY}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={[styles.input, { flex: 1 } , addressError && { borderColor: '#FF6B6B' }]}
+                value={recipientAddress}
+                onChangeText={handleAddressChange}
+                placeholder={network === 'solana' ? 'Solana address' : '0x...'}
+                placeholderTextColor={TEXT_SECONDARY}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {recipientAddress ? (
+                <Pressable
+                  style={styles.pasteButton}
+                  onPress={() => {
+                    setRecipientAddress('');
+                    setAddressError(null);
+                  }}
+                >
+                  <Ionicons name="close-circle" size={20} color={TEXT_SECONDARY} />
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={styles.pasteButton}
+                  onPress={async () => {
+                    const text = await Clipboard.getStringAsync();
+                    if (text) handleAddressChange(text);
+                  }}
+                >
+                  <Ionicons name="clipboard-outline" size={20} color={BLUE} />
+                </Pressable>
+              )}
+            </View>
+
             {addressError && (
               <Text style={[styles.helper, { color: '#FF6B6B', marginTop: 8 }]}>
                 {addressError}
@@ -507,7 +538,20 @@ export default function TransferScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: DARK_BG,
+    backgroundColor: CARD_BG, // was DARK_BG
+  },
+  content: {
+    flex: 1,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pasteButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -526,9 +570,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: TEXT_PRIMARY,
-  },
-  content: {
-    flex: 1,
   },
   scrollContent: {
     padding: 20,
