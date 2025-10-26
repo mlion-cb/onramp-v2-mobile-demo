@@ -34,6 +34,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { parseEther, parseUnits } from 'viem';
 
 const { DARK_BG, CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BLUE, WHITE, BORDER } = COLORS;
 
@@ -56,7 +57,7 @@ export default function TransferScreen() {
   const [alertType, setAlertType] = useState<'success' | 'error' | 'info'>('info');
 
   const { sendSolanaTransaction } = useSendSolanaTransaction();
-  const { sendUserOperation } = useSendUserOperation();
+  const { sendUserOperation, status: userOpStatus, data: userOpData, error: userOpError } = useSendUserOperation();
   const { solanaAddress } = useSolanaAddress();
   const { currentUser } = useCurrentUser();
 
@@ -67,6 +68,44 @@ export default function TransferScreen() {
     solanaAddress,
     smartAccountAddress,
   });
+
+  // Watch user operation status and update alerts
+  useEffect(() => {
+    if (userOpStatus === 'pending' && userOpData?.userOpHash) {
+      showAlert(
+        'Transaction Pending ⏳',
+        `User Operation Hash:\n${userOpData.userOpHash}\n\nWaiting for confirmation...`,
+        'info'
+      );
+    } else if (userOpStatus === 'success' && userOpData) {
+      const successInfo = `🔍 TRANSACTION CONFIRMED:
+
+User Operation Hash:
+${userOpData.userOpHash}
+
+${userOpData.transactionHash ? `Transaction Hash:\n${userOpData.transactionHash}\n\n` : ''}Status: ${userOpData.status}
+Network: ${network}
+From: ${smartAccountAddress}
+
+📋 Search on block explorer:
+- Base: basescan.org
+- Ethereum: etherscan.io
+
+Search for Transaction Hash or Smart Account address`;
+
+      showAlert(
+        'Transfer Complete! ✨',
+        successInfo,
+        'success'
+      );
+    } else if (userOpStatus === 'error' && userOpError) {
+      showAlert(
+        'Transfer Failed ❌',
+        `Error: ${userOpError.message}\n\nPlease try again or check your balance.`,
+        'error'
+      );
+    }
+  }, [userOpStatus, userOpData, userOpError]);
 
   // Load token data from params (only on mount)
   useEffect(() => {
@@ -208,16 +247,19 @@ export default function TransferScreen() {
     const tokenAddress = selectedToken.token?.contractAddress;
     const isNativeTransfer = !tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000';
 
-    // CRITICAL: Native ETH always has 18 decimals, regardless of what the API returns
-    const decimals = isNativeTransfer ? 18 : parseInt(selectedToken.amount?.decimals || '0');
-    const amountInSmallestUnit = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, decimals)));
+    // Convert amount to wei (smallest unit)
+    // Native ETH: Use parseEther (always 18 decimals)
+    // ERC-20: Use parseUnits with token-specific decimals
+    const amountInSmallestUnit = isNativeTransfer
+      ? parseEther(amount)
+      : parseUnits(amount, parseInt(selectedToken.amount?.decimals || '0'));
 
     console.log('🔍 [EVM TRANSFER] Starting transfer:', {
       network,
       tokenAddress,
       amount,
       isNativeTransfer,
-      decimals,
+      decimals: isNativeTransfer ? 18 : parseInt(selectedToken.amount?.decimals || '0'),
       smartAccountAddress,
       amountInSmallestUnit: amountInSmallestUnit.toString()
     });
@@ -235,17 +277,14 @@ export default function TransferScreen() {
             value: amountInSmallestUnit,
             data: '0x' // Empty data for native transfer
           }],
-          useCdpPaymaster: network === 'base' // Paymaster only on Base
+          useCdpPaymaster: network === 'base', // Paymaster only on Base
+          paymasterUrl: 'https://api.developer.coinbase.com/rpc/v1/base/6DmPQTz8egifUIDdGm3wl4aoXAdYWw5H'
         });
 
+        console.log('✅ [TRANSFER] User operation submitted:', result);
         setTxHash(result.userOperationHash);
-        showAlert(
-          'Transfer Complete! ✨',
-          network === 'base'
-            ? `Gasless transfer via Coinbase Paymaster\n\nSent ${amount} ${selectedToken.token?.symbol} to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`
-            : `Sent ${amount} ${selectedToken.token?.symbol} to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`,
-          'success'
-        );
+
+        // Status updates handled by useEffect watching userOpStatus
       } else {
         // ERC-20 token transfer
         console.log('💸 [TRANSFER] Sending ERC-20 token from smart account');
@@ -272,14 +311,10 @@ export default function TransferScreen() {
           useCdpPaymaster: network === 'base' // Paymaster only on Base
         });
 
+        console.log('✅ [TRANSFER] User operation submitted:', result);
         setTxHash(result.userOperationHash);
-        showAlert(
-          'Transfer Complete! ✨',
-          network === 'base'
-            ? `Gasless transfer via Coinbase Paymaster\n\nSent ${amount} ${selectedToken.token?.symbol} to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`
-            : `Sent ${amount} ${selectedToken.token?.symbol} to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`,
-          'success'
-        );
+
+        // Status updates handled by useEffect watching userOpStatus
       }
     } catch (error) {
       console.error('EVM transfer error:', error);
@@ -334,7 +369,7 @@ export default function TransferScreen() {
       // Send transaction using CDP hook
       const result = await sendSolanaTransaction({
         solanaAccount: solanaAddress,
-        network: 'solana-mainnet' as any,
+        network: 'solana' as any,
         transaction: serializedTransaction
       });
 
