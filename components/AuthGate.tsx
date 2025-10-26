@@ -8,7 +8,7 @@
  * TestFlight accounts bypass this check automatically.
  */
 
-import { useIsSignedIn } from '@coinbase/cdp-hooks';
+import { useIsSignedIn, useIsInitialized } from '@coinbase/cdp-hooks';
 import { useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
@@ -19,6 +19,7 @@ const { DARK_BG, BLUE } = COLORS;
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { isSignedIn } = useIsSignedIn();
+  const { isInitialized } = useIsInitialized();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
   const testSession = isTestSessionActive();
@@ -35,8 +36,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }, [navigationState?.key]);
 
   useEffect(() => {
-    // Only run navigation logic after the router is ready
-    if (!isReady) return;
+    // Only run navigation logic after the router AND CDP are ready
+    if (!isReady || !isInitialized) return;
 
     const inAuthGroup = segments[0] === 'auth';
 
@@ -68,10 +69,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         }
       }, 0);
     }
-  }, [isReady, isAuthenticated, segments]);
+  }, [isReady, isInitialized, isAuthenticated, segments]);
 
-  // Show loading spinner while navigation is initializing
-  if (!isReady) {
+  // Show loading spinner while navigation or CDP is initializing
+  if (!isReady || !isInitialized) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={BLUE} />

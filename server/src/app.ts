@@ -636,14 +636,7 @@ app.post('/webhooks/onramp', async (req, res) => {
             break;
           }
 
-          // Find the specific user's push token using partnerUserRef
-          const userTokenData = pushTokenStore.get(partnerUserRef);
-
-          if (!userTokenData) {
-            console.log('⚠️ [WEBHOOK] No push token registered');
-            break;
-          }
-
+          // Prepare notification content
           const title = '🎉 Crypto Purchase Complete!';
           const body = `Your ${amount} ${currency} has been delivered to your ${network} wallet!`;
           const notificationData = {
@@ -652,7 +645,7 @@ app.post('/webhooks/onramp', async (req, res) => {
             partnerUserRef
           };
 
-          // Store notification for polling (simulator support)
+          // ALWAYS store notification for polling (works even if push token not found)
           const notification: PendingNotification = {
             id: `${Date.now()}-${Math.random()}`,
             userId: partnerUserRef,
@@ -665,29 +658,39 @@ app.post('/webhooks/onramp', async (req, res) => {
           const userPendingNotifs = pendingNotifications.get(partnerUserRef) || [];
           userPendingNotifs.push(notification);
           pendingNotifications.set(partnerUserRef, userPendingNotifs);
+          console.log('✅ [WEBHOOK] Notification queued for polling');
 
-          // Also try to send real push notification (for physical devices)
+          // Also try to send real push notification (for physical devices with registered tokens)
+          const userTokenData = pushTokenStore.get(partnerUserRef);
 
-          const message = {
-            to: userTokenData.token,
-            sound: 'default',
-            title,
-            body,
-            data: notificationData,
-          };
+          if (userTokenData) {
+            try {
+              const message = {
+                to: userTokenData.token,
+                sound: 'default',
+                title,
+                body,
+                data: notificationData,
+              };
 
-          const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(message),
-          });
+              const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(message),
+              });
 
-          const pushResult = await pushResponse.json();
-          console.log('✅ [WEBHOOK] Notification sent for transaction:', txId);
-        } catch (pushError) {
-          console.error('❌ [WEBHOOK] Failed to send push notification:', pushError);
+              const pushResult = await pushResponse.json();
+              console.log('✅ [WEBHOOK] Push notification sent for transaction:', txId);
+            } catch (pushError) {
+              console.error('❌ [WEBHOOK] Failed to send push notification:', pushError);
+            }
+          } else {
+            console.log('ℹ️ [WEBHOOK] No push token - notification will be delivered via polling');
+          }
+        } catch (error) {
+          console.error('❌ [WEBHOOK] Failed to process notification:', error);
         }
         break;
 
@@ -713,21 +716,14 @@ app.post('/webhooks/onramp', async (req, res) => {
           partnerUserRef: failedPartnerUserRef
         });
 
-        // Send push notification for failed transaction (user-specific)
+        // Send notification for failed transaction (user-specific)
         try {
           if (!failedPartnerUserRef) {
             console.log('⚠️ [WEBHOOK] No partnerUserRef in failed transaction - cannot send notification');
             break;
           }
 
-          // Find the specific user's push token using partnerUserRef
-          const failedUserTokenData = pushTokenStore.get(failedPartnerUserRef);
-
-          if (!failedUserTokenData) {
-            console.log('⚠️ [WEBHOOK] No push token registered');
-            break;
-          }
-
+          // Prepare notification content
           const failTitle = '❌ Transaction Failed';
           const failBody = `Your purchase failed: ${failureReason}. Please try again.`;
           const failData = {
@@ -736,7 +732,7 @@ app.post('/webhooks/onramp', async (req, res) => {
             partnerUserRef: failedPartnerUserRef
           };
 
-          // Store notification for polling (simulator support)
+          // ALWAYS store notification for polling (works even if push token not found)
           const failNotification: PendingNotification = {
             id: `${Date.now()}-${Math.random()}`,
             userId: failedPartnerUserRef,
@@ -749,29 +745,39 @@ app.post('/webhooks/onramp', async (req, res) => {
           const failUserPendingNotifs = pendingNotifications.get(failedPartnerUserRef) || [];
           failUserPendingNotifs.push(failNotification);
           pendingNotifications.set(failedPartnerUserRef, failUserPendingNotifs);
+          console.log('✅ [WEBHOOK] Failure notification queued for polling');
 
-          // Also try to send real push notification (for physical devices)
+          // Also try to send real push notification (for physical devices with registered tokens)
+          const failedUserTokenData = pushTokenStore.get(failedPartnerUserRef);
 
-          const failureMessage = {
-            to: failedUserTokenData.token,
-            sound: 'default',
-            title: failTitle,
-            body: failBody,
-            data: failData,
-          };
+          if (failedUserTokenData) {
+            try {
+              const failureMessage = {
+                to: failedUserTokenData.token,
+                sound: 'default',
+                title: failTitle,
+                body: failBody,
+                data: failData,
+              };
 
-          const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(failureMessage),
-          });
+              const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(failureMessage),
+              });
 
-          const pushResult = await pushResponse.json();
-          console.log('✅ [WEBHOOK] Failure notification sent for transaction:', txId);
-        } catch (pushError) {
-          console.error('❌ [WEBHOOK] Failed to send failure push notification:', pushError);
+              const pushResult = await pushResponse.json();
+              console.log('✅ [WEBHOOK] Failure push notification sent for transaction:', txId);
+            } catch (pushError) {
+              console.error('❌ [WEBHOOK] Failed to send failure push notification:', pushError);
+            }
+          } else {
+            console.log('ℹ️ [WEBHOOK] No push token - failure notification will be delivered via polling');
+          }
+        } catch (error) {
+          console.error('❌ [WEBHOOK] Error processing failure notification:', error);
         }
         break;
 

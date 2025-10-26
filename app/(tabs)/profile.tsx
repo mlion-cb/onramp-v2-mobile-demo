@@ -438,8 +438,7 @@ export default function WalletScreen() {
       setCurrentWalletAddress(null);
       setManualWalletAddress(null);
       await setVerifiedPhone(null);
-      // Reset sandbox mode to default (ON) for next login
-      await setSandboxMode(true);
+      // Sandbox mode will reset to ON automatically on next app start
       // Navigate to login screen
       router.replace('/auth/login');
     }
@@ -1169,10 +1168,8 @@ const styles = StyleSheet.create({
   subBox: {
     backgroundColor: CARD_BG,
     padding: 12,
-    gap: 6,
+    gap: 12,
     marginBottom: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   copyButton: {
     padding: 8,

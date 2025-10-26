@@ -1,12 +1,13 @@
 import { BASE_URL } from "../constants/BASE_URL";
 
 export async function fetchTransactionHistory(
-  partnerUserRef: string, 
-  pageKey?: string, 
+  userId: string,
+  pageKey?: string,
   pageSize: number = 10
 ) {
   try {
-    let fullUrl = `https://api.developer.coinbase.com/onramp/v1/buy/user/${encodeURIComponent(partnerUserRef)}/transactions?pageSize=${pageSize}`;
+    // Format: /buy/user/{userId}/transactions
+    let fullUrl = `https://api.developer.coinbase.com/onramp/v1/buy/user/${encodeURIComponent(userId)}/transactions?pageSize=${pageSize}`;
     if (pageKey) {
       fullUrl += `&pageKey=${encodeURIComponent(pageKey)}`;
     }
