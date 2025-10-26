@@ -838,6 +838,77 @@ export default function WalletScreen() {
                 </Pressable>
               </View>
             )}
+
+            {/* Debug: Smart Account Info - Always visible for debugging transfers */}
+            {currentUser && (
+              <View style={styles.card}>
+                <Text style={styles.rowLabel}>🔍 Debug: Smart Account Info</Text>
+
+                <View style={styles.subBox}>
+                  <Text style={styles.subHint}>EVM Smart Account Address</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={[styles.rowValue, { flex: 1, fontFamily: 'monospace', fontSize: 12 }]} numberOfLines={1}>
+                      {currentUser.evmSmartAccounts?.[0] || 'Not created'}
+                    </Text>
+                    {currentUser.evmSmartAccounts?.[0] && (
+                      <Pressable
+                        onPress={() => Clipboard.setStringAsync(currentUser.evmSmartAccounts?.[0] || '')}
+                        style={styles.copyButton}
+                      >
+                        <Ionicons name="copy-outline" size={16} color={BLUE} />
+                      </Pressable>
+                    )}
+                  </View>
+                  {currentUser.evmSmartAccounts?.[0] && (
+                    <Text style={[styles.helper, { marginTop: 8 }]}>
+                      💡 Search this address on Etherscan or Basescan to see your transfer transactions
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.subBox}>
+                  <Text style={styles.subHint}>Solana Account Address</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={[styles.rowValue, { flex: 1, fontFamily: 'monospace', fontSize: 12 }]} numberOfLines={1}>
+                      {currentUser.solanaAccounts?.[0] || 'Not created'}
+                    </Text>
+                    {currentUser.solanaAccounts?.[0] && (
+                      <Pressable
+                        onPress={() => Clipboard.setStringAsync(currentUser.solanaAccounts?.[0] || '')}
+                        style={styles.copyButton}
+                      >
+                        <Ionicons name="copy-outline" size={16} color={BLUE} />
+                      </Pressable>
+                    )}
+                  </View>
+                  {currentUser.solanaAccounts?.[0] && (
+                    <Text style={[styles.helper, { marginTop: 8 }]}>
+                      💡 Search this address on Solscan to see your Solana transactions
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.subBox}>
+                  <Text style={styles.subHint}>User ID</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={[styles.rowValue, { flex: 1, fontFamily: 'monospace', fontSize: 12 }]} numberOfLines={1}>
+                      {currentUser.userId}
+                    </Text>
+                    <Pressable
+                      onPress={() => Clipboard.setStringAsync(currentUser.userId)}
+                      style={styles.copyButton}
+                    >
+                      <Ionicons name="copy-outline" size={16} color={BLUE} />
+                    </Pressable>
+                  </View>
+                </View>
+
+                <Text style={[styles.helper, { marginTop: 8 }]}>
+                  📋 Use these addresses to track your transactions on block explorers
+                </Text>
+              </View>
+            )}
+
             {/* Sandbox Wallet Card - show when sandbox mode is enabled */}
             {localSandboxEnabled && (
               <View style={styles.card}>

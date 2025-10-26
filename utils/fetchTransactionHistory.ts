@@ -1,4 +1,5 @@
 import { BASE_URL } from "../constants/BASE_URL";
+import { getAccessTokenGlobal } from "./getAccessTokenGlobal";
 
 export async function fetchTransactionHistory(
   userId: string,
@@ -11,22 +12,26 @@ export async function fetchTransactionHistory(
     if (pageKey) {
       fullUrl += `&pageKey=${encodeURIComponent(pageKey)}`;
     }
-    
+
+    // Get access token for authentication
+    const accessToken = getAccessTokenGlobal();
+
     console.log('Transaction history request →', {
-      method: "POST", // Calling local proxy with POST
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: fullUrl,
-        method: "GET" 
-      })
+      url: fullUrl,
+      userId,
+      method: "GET",
+      hasToken: !!accessToken
     });
 
     const response = await fetch(`${BASE_URL}/server/api`, {
       method: "POST", // Calling local proxy with POST
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${accessToken}`,
+      },
       body: JSON.stringify({
         url: fullUrl,
-        method: "GET" 
+        method: "GET"
       })
     });
 
@@ -40,7 +45,12 @@ export async function fetchTransactionHistory(
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      console.error('❌ Transaction history failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: responseText.slice(0, 500)
+      });
+      throw new Error(`HTTP error! status: ${response.status} - ${responseText.slice(0, 200)}`);
     }
 
     const responseJson = await response.json();

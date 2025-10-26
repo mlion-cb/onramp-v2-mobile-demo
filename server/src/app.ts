@@ -516,6 +516,11 @@ app.get('/notifications/poll', (req, res) => {
     // Get pending notifications for this user
     const userNotifications = pendingNotifications.get(userId) || [];
 
+    // Debug logging
+    console.log(`🔍 [POLL] Checking for userId: ${userId}`);
+    console.log(`🔍 [POLL] Found ${userNotifications.length} notification(s)`);
+    console.log(`🔍 [POLL] All pending users in memory:`, Array.from(pendingNotifications.keys()));
+
     // Clear the notifications after fetching
     if (userNotifications.length > 0) {
       pendingNotifications.delete(userId);
@@ -682,7 +687,15 @@ app.post('/webhooks/onramp', async (req, res) => {
               });
 
               const pushResult = await pushResponse.json();
-              console.log('✅ [WEBHOOK] Push notification sent for transaction:', txId);
+              console.log('📤 [WEBHOOK] Push notification response:', JSON.stringify(pushResult));
+
+              // Check if push failed due to credentials
+              if (pushResult.data?.status === 'error') {
+                console.error('❌ [WEBHOOK] Push delivery error:', pushResult.data.message);
+                console.error('💡 [WEBHOOK] Hint: Configure APNs credentials with "eas credentials"');
+              } else {
+                console.log('✅ [WEBHOOK] Push notification sent for transaction:', txId);
+              }
             } catch (pushError) {
               console.error('❌ [WEBHOOK] Failed to send push notification:', pushError);
             }
