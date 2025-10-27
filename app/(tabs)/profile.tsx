@@ -656,9 +656,6 @@ export default function WalletScreen() {
                         >
                           {smartAccountAddress}
                         </Text>
-                        <Text style={[styles.helper, { marginTop: 4 }]}>
-                          💰 Your balances are stored here. All transactions use this address.
-                        </Text>
                       </View>
                       <Pressable
                         onPress={async () => {
@@ -688,9 +685,6 @@ export default function WalletScreen() {
                           ellipsizeMode="middle"
                         >
                           {explicitEOAAddress}
-                        </Text>
-                        <Text style={[styles.helper, { marginTop: 4 }]}>
-                          ℹ️ This is your externally owned account. Transactions use the Smart Account above.
                         </Text>
                       </View>
                       <Pressable
