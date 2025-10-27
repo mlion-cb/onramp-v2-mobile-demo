@@ -686,11 +686,36 @@ app.post('/webhooks/onramp', async (req, res) => {
                 });
 
                 if (result.failed && result.failed.length > 0) {
+                  const failure = result.failed[0];
                   console.error('❌ [WEBHOOK] APNs failures:', result.failed.map((f: any) => ({
                     device: f.device,
                     status: f.status,
                     response: f.response
                   })));
+
+                  // If BadDeviceToken, token might be for wrong environment (sandbox vs production)
+                  // Try sandbox environment as fallback
+                  if (failure.response?.reason === 'BadDeviceToken') {
+                    console.log('🔄 [WEBHOOK] Trying sandbox APNs environment...');
+                    try {
+                      const sandboxProvider = new apn.Provider({
+                        token: {
+                          key: process.env.APNS_KEY!.replace(/\\n/g, '\n'),
+                          keyId: process.env.APNS_KEY_ID!,
+                          teamId: process.env.APNS_TEAM_ID!
+                        },
+                        production: false // Try sandbox
+                      });
+                      const sandboxResult = await sandboxProvider.send(notification, userTokenData.token);
+                      if (sandboxResult.sent && sandboxResult.sent.length > 0) {
+                        console.log('✅ [WEBHOOK] APNs notification sent via SANDBOX environment');
+                      } else {
+                        console.error('❌ [WEBHOOK] Sandbox APNs also failed');
+                      }
+                    } catch (sandboxError) {
+                      console.error('❌ [WEBHOOK] Sandbox APNs error:', sandboxError);
+                    }
+                  }
                 } else {
                   console.log('✅ [WEBHOOK] APNs notification sent successfully');
                 }
