@@ -50,13 +50,15 @@
  *
  * Shows different cards based on state:
  * 1. Network Not Supported (prod, non-EVM/SOL): Orange warning
- * 2. Wallet Required (prod, no address): Red error
- * 3. Address Required (sandbox, no address): Red error
- * 4. Sandbox Mode (sandbox, has address): Blue info
- * 5. Production Mode (prod, signed in): Red warning
+ * 2. Smart Account Required (prod, EVM, no smart account): Red error
+ * 3. Wallet Required (prod, no address): Red error
+ * 4. Address Required (sandbox, no address): Red error
+ * 5. Sandbox Mode (sandbox, has address): Blue info
+ * 6. Production Mode (prod, signed in): Red warning
  *
  * Card priority (first match wins):
  * - Unsupported network (highest priority - blocks all)
+ * - Smart Account missing for EVM networks
  * - Invalid address for current network
  * - Sandbox/Production status info
  *
@@ -141,9 +143,10 @@ export function OnrampForm({
   onAmountChange,
   sandboxMode
 }: OnrampFormProps) {
-  // Import only isSignedIn hook for production card visibility
-  const { useIsSignedIn } = require('@coinbase/cdp-hooks');
+  // Import hooks for production card visibility and Smart Account check
+  const { useIsSignedIn, useCurrentUser } = require('@coinbase/cdp-hooks');
   const { isSignedIn } = useIsSignedIn();
+  const { currentUser } = useCurrentUser();
 
   const [asset, setAsset] = useState("USDC");
   const [network, setNetwork] = useState("Base");
@@ -228,12 +231,19 @@ export function OnrampForm({
 
   // Use prop if provided, otherwise fallback to getSandboxMode()
   const isSandbox = sandboxMode ?? getSandboxMode();
+
+  // Check if Smart Account is available for EVM networks (production only)
+  const smartAccount = currentUser?.evmSmartAccounts?.[0] as string | undefined;
+  const needsSmartAccount = !isSandbox && isEvmNetwork;
+  const hasSmartAccount = !!smartAccount;
+
   const hasValidAddress = isSandbox
     ? !!address && address.trim().length > 0  // In sandbox, just need any non-empty address
     : (isEvmNetwork ? isEvmAddressValid :
        isSolanaNetwork ? isSolanaAddressValid : false); // In production, need valid address for supported networks
 
-  const isFormValid = isAmountValid && !!network && !!asset && hasValidAddress;
+  // For production EVM networks, must have Smart Account
+  const isFormValid = isAmountValid && !!network && !!asset && hasValidAddress && (!needsSmartAccount || hasSmartAccount);
 
   // Debug logging for form validation
   useEffect(() => {
@@ -689,6 +699,16 @@ export function OnrampForm({
           </View>
           <Text style={styles.notificationText}>
             This network is available for Onramp, but Embedded Wallet is not supported at the moment. Select an EVM or Solana network to proceed.
+          </Text>
+        </View>
+      ) : needsSmartAccount && !hasSmartAccount ? (
+        <View style={[styles.notificationCard, styles.errorCard]}>
+          <View style={styles.notificationHeader}>
+            <Ionicons name="alert-circle" size={20} color="#FF6B6B" />
+            <Text style={[styles.notificationTitle, { color: '#FF6B6B' }]}>Smart Account Required</Text>
+          </View>
+          <Text style={styles.notificationText}>
+            EVM onramp transactions require a Smart Account to receive funds. Your balances are stored in the Smart Account. Please ensure your Embedded Wallet is properly initialized.
           </Text>
         </View>
       ) : !getSandboxMode() && !hasValidAddress ? (

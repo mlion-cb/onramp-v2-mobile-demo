@@ -232,7 +232,8 @@ export default function Index() {
     const solAccount = currentUser?.solanaAccounts?.[0] as string || solanaAddress;
 
     // Set in shared state (so getCurrentWalletAddress works)
-    const primaryEvmAddress = evmEOA || evmSmartAccount;
+    // IMPORTANT: Prioritize Smart Account over EOA for onramp (balances are in Smart Account)
+    const primaryEvmAddress = evmSmartAccount || evmEOA;
     if (primaryEvmAddress) {
       setCurrentWalletAddress(primaryEvmAddress);
     }

@@ -45,10 +45,10 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
 
       console.log('📱 [APP] Registering push notifications for user:', partnerUserRef);
 
-      registerForPushNotifications().then(async (pushToken) => {
-        if (pushToken) {
-          console.log('✅ [APP] Push token obtained, sending to server:', partnerUserRef);
-          await sendPushTokenToServer(pushToken, partnerUserRef, getAccessToken);
+      registerForPushNotifications().then(async (result) => {
+        if (result) {
+          console.log('✅ [APP] Push token obtained, sending to server:', partnerUserRef, `(${result.type})`);
+          await sendPushTokenToServer(result.token, partnerUserRef, getAccessToken, result.type);
           console.log('✅ [APP] Push token successfully sent to server');
         } else {
           console.log('ℹ️ [APP] No push token (likely simulator or permission denied)');
