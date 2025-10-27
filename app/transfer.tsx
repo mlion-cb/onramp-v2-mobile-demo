@@ -64,6 +64,10 @@ export default function TransferScreen() {
   // Get smart account address (where balances are stored for both Base and Ethereum)
   const smartAccountAddress = currentUser?.evmSmartAccounts?.[0] || null;
 
+  // Paymaster only supports specific tokens on Base: USDC, EURC, BTC (CBBTC)
+  const tokenSymbol = selectedToken?.token?.symbol?.toUpperCase() || '';
+  const isPaymasterSupported = network === 'base' && ['USDC', 'EURC', 'BTC'].includes(tokenSymbol);
+
   console.log('🔍 [TRANSFER] Account addresses:', {
     solanaAddress,
     smartAccountAddress,
@@ -74,7 +78,7 @@ export default function TransferScreen() {
     if (userOpStatus === 'pending' && userOpData?.userOpHash) {
       showAlert(
         'Transaction Pending ⏳',
-        `User Operation Hash:\n${userOpData.userOpHash}\n\nWaiting for confirmation...\nDo NOT close this alert to get updated status.`,
+        `User Operation Hash:\n${userOpData.userOpHash}\n\nWaiting for confirmation...\nPlease do NOT close this alert until transaction is complete. This may take a few seconds.`,
         'info'
       );
     } else if (userOpStatus === 'success' && userOpData) {
@@ -278,8 +282,8 @@ From: ${smartAccountAddress}
             value: amountInSmallestUnit,
             data: '0x' // Empty data for native transfer
           }],
-          useCdpPaymaster: network === 'base', // Paymaster only on Base
-          paymasterUrl: 'https://api.developer.coinbase.com/rpc/v1/base/6DmPQTz8egifUIDdGm3wl4aoXAdYWw5H'
+          useCdpPaymaster: isPaymasterSupported, // Paymaster only on Base for USDC/EURC/CBBTC
+          // paymasterUrl: 'https://api.developer.coinbase.com/rpc/v1/base/6DmPQTz8egifUIDdGm3wl4aoXAdYWw5H'
         });
 
         console.log('✅ [TRANSFER] User operation submitted:', result);
@@ -343,7 +347,7 @@ From: ${smartAccountAddress}
       // Show pending alert
       showAlert(
         'Transaction Pending ⏳',
-        `Building and submitting Solana transaction...\n\nAmount: ${amount} SOL\nTo: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}\n\nDo NOT close this alert to get updated status.`,
+        `Building and submitting Solana transaction...\n\nAmount: ${amount} SOL\nTo: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}\n\nPlease do NOT close this alert until transaction is complete. This may take a few seconds.`,
         'info'
       );
 
@@ -459,7 +463,7 @@ To: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}
           <View style={styles.card}>
             <Text style={styles.label}>Network</Text>
             <Text style={styles.networkText}>{network === 'base' ? 'Base' : network === 'ethereum' ? 'Ethereum' : 'Solana'}</Text>
-            {network === 'base' && (
+            {isPaymasterSupported && (
               <Text style={styles.helper}>✨ Gasless transfer powered by Coinbase Paymaster</Text>
             )}
           </View>

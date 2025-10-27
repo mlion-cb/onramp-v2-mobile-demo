@@ -671,6 +671,12 @@ app.post('/webhooks/onramp', async (req, res) => {
 
               if (isNativeToken && useAPNs && apnProvider && userTokenData.platform === 'ios') {
                 console.log('📤 [WEBHOOK] Sending via direct APNs');
+                console.log('🔍 [WEBHOOK] Token data:', {
+                  token: userTokenData.token,
+                  tokenType: typeof userTokenData.token,
+                  tokenLength: typeof userTokenData.token === 'string' ? userTokenData.token.length : 'N/A'
+                });
+
                 const apn = await import('@parse/node-apn');
                 const notification = new apn.Notification({
                   alert: { title, body },
