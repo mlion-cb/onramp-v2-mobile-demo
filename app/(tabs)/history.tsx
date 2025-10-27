@@ -87,7 +87,8 @@ export default function History() {
 
   useFocusEffect(
     useCallback(() => {
-      const userId = currentUser?.userId;
+      const isTestFlight = isTestSessionActive();
+      const userId = isTestFlight ? TEST_ACCOUNTS.userId : currentUser?.userId;
       console.log('History tab focused, userId:', userId);
       setCurrentUserRef(userId || null);
 
@@ -99,7 +100,8 @@ export default function History() {
   );
 
   useEffect(() => {
-    const userId = currentUser?.userId;
+    const isTestFlight = isTestSessionActive();
+    const userId = isTestFlight ? TEST_ACCOUNTS.userId : currentUser?.userId;
     setCurrentUserRef(userId || null);
 
     // Load transactions when user is available
