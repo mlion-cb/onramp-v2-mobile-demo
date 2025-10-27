@@ -24,9 +24,14 @@ let useAPNs = false;
 if (process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID && process.env.APNS_KEY) {
   try {
     const apn = await import('@parse/node-apn');
+
+    // Handle both actual newlines and escaped \n in env var
+    // If the env var contains literal "\n" strings, replace them with actual newlines
+    const apnsKey = process.env.APNS_KEY!.replace(/\\n/g, '\n');
+
     apnProvider = new apn.Provider({
       token: {
-        key: process.env.APNS_KEY!,
+        key: apnsKey,
         keyId: process.env.APNS_KEY_ID!,
         teamId: process.env.APNS_TEAM_ID!
       },
@@ -37,7 +42,8 @@ if (process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID && process.env.APNS_KEY)
   } catch (error) {
     console.error('❌ Failed to initialize APNs provider:', error instanceof Error ? error.message : error);
     console.warn('⚠️ Falling back to Expo push service');
-    console.warn('💡 Check APNS_KEY format: must include -----BEGIN PRIVATE KEY----- header/footer with \\n for newlines');
+    console.warn('💡 Check APNS_KEY format: must include -----BEGIN PRIVATE KEY----- header/footer');
+    console.warn('💡 In Vercel, paste the key with actual newlines OR use \\n for line breaks');
   }
 } else {
   console.log('ℹ️ Using Expo push service for notifications (dev)');
