@@ -75,6 +75,7 @@ export async function registerForPushNotifications(): Promise<{ token: string; t
       token = await Notifications.getDevicePushTokenAsync();
       tokenType = 'native';
       console.log('✅ [PUSH] Native device push token obtained (Standalone):', token.data);
+      console.log('📱 [PUSH] Build environment - isDevice:', Constants.isDevice, '| Platform:', Platform.OS);
     }
 
     // iOS-specific: Register for APNs
