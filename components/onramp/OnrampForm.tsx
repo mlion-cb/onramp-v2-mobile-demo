@@ -87,7 +87,8 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { COLORS } from '../../constants/Colors';
-import { getCountry, getSandboxMode, setCurrentNetwork } from '../../utils/sharedState';
+import { TEST_ACCOUNTS } from '../../constants/TestAccounts';
+import { getCountry, getSandboxMode, isTestSessionActive, setCurrentNetwork } from '../../utils/sharedState';
 import { SwipeToConfirm } from '../ui/SwipeToConfirm';
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE, SILVER } = COLORS;
@@ -233,7 +234,11 @@ export function OnrampForm({
   const isSandbox = sandboxMode ?? getSandboxMode();
 
   // Check if Smart Account is available for EVM networks (production only)
-  const smartAccount = currentUser?.evmSmartAccounts?.[0] as string | undefined;
+  // TestFlight reviewers use hardcoded address as their "smart account"
+  const isTestFlight = isTestSessionActive();
+  const smartAccount = isTestFlight
+    ? TEST_ACCOUNTS.wallets.evm  // TestFlight: Use hardcoded address
+    : (currentUser?.evmSmartAccounts?.[0] as string | undefined); // Real users: Use CDP Smart Account
   const needsSmartAccount = !isSandbox && isEvmNetwork;
   const hasSmartAccount = !!smartAccount;
 

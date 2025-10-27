@@ -28,7 +28,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>onrampdemo</string>
-				<string>com.mlion-cb.onrampv2demo</string>
+				<string>com.mlioncb.onrampv2demo</string>
 			</array>
 		</dict>
 	</array>
