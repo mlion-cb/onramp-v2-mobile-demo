@@ -99,7 +99,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
+import { ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { BASE_URL } from "../../constants/BASE_URL";
 import { COLORS } from "../../constants/Colors";
@@ -219,6 +219,7 @@ export default function WalletScreen() {
   const [usSubs, setUsSubs] = useState<string[]>([]);
   const [countryPickerVisible, setCountryPickerVisible] = useState(false);
   const [subPickerVisible, setSubPickerVisible] = useState(false);
+  const [productionSwitchAlertVisible, setProductionSwitchAlertVisible] = useState(false);
   const country = getCountry();
   const subdivision = getSubdivision();
   const backdropOpacity = useRef(new Animated.Value(0)).current;
@@ -435,9 +436,12 @@ export default function WalletScreen() {
     } catch (e) {
       console.warn('signOut error', e);
     } finally {
+      // Clear all user-specific state
       setCurrentWalletAddress(null);
       setManualWalletAddress(null);
       await setVerifiedPhone(null);
+      setCountry('US'); // Reset to default
+      setSubdivision('CA'); // Reset to default
       // Sandbox mode will reset to ON automatically on next app start
       // Navigate to login screen
       router.replace('/auth/login');
@@ -647,7 +651,7 @@ export default function WalletScreen() {
                   {smartAccountAddress && (
                     <View style={[styles.subBox, { flexDirection: 'row', alignItems: 'center' }]}>
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.subHint}>Smart Account Address (used for transactions)</Text>
+                        <Text style={styles.subHint}>EVM Smart Account Address (used for transactions)</Text>
                         <Text
                           selectable
                           style={styles.subValue}
@@ -677,7 +681,7 @@ export default function WalletScreen() {
                   {explicitEOAAddress && (
                     <View style={[styles.subBox, { flexDirection: 'row', alignItems: 'center' }]}>
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.subHint}>EOA Address (owner of Smart Account)</Text>
+                        <Text style={styles.subHint}>EVM EOA Address (owner of Smart Account)</Text>
                         <Text
                           selectable
                           style={styles.subValue}
@@ -997,23 +1001,7 @@ export default function WalletScreen() {
                   onValueChange={(value) => {
                     if (!value && manualAddress) {
                       // Switching to production with manual address set - show confirmation
-                      Alert.alert(
-                        'Switch to Production?',
-                        'Your manual wallet address will be cleared.',
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          {
-                            text: 'Confirm',
-                            style: 'destructive',
-                            onPress: () => {
-                              setLocalSandboxEnabled(value);
-                              setSandboxMode(value);
-                              clearManualAddress();
-                              setManualAddress('');
-                            }
-                          }
-                        ]
-                      );
+                      setProductionSwitchAlertVisible(true);
                     } else {
                       setLocalSandboxEnabled(value); // Update local state (triggers re-render)
                       setSandboxMode(value); // Update shared state (for other components)
@@ -1192,6 +1180,51 @@ export default function WalletScreen() {
               type={alertState.type}
               onConfirm={() => setAlertState({ ...alertState, visible: false })}
             />
+
+            {/* Production switch confirmation alert */}
+            <Modal
+              visible={productionSwitchAlertVisible}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setProductionSwitchAlertVisible(false)}
+            >
+              <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                <Pressable
+                  style={StyleSheet.absoluteFillObject}
+                  onPress={() => setProductionSwitchAlertVisible(false)}
+                />
+                <View style={styles.productionAlertCard}>
+                  <View style={styles.alertHandle} />
+                  <View style={styles.alertIconContainer}>
+                    <Ionicons name="information-circle" size={48} color={BLUE} />
+                  </View>
+                  <Text style={styles.alertTitle}>Switch to Production?</Text>
+                  <Text style={styles.alertMessage}>
+                    Your manual wallet address will be cleared when switching to production mode.
+                  </Text>
+                  <View style={styles.alertButtonRow}>
+                    <Pressable
+                      style={({ pressed }) => [styles.alertCancelButton, pressed && styles.buttonPressed]}
+                      onPress={() => setProductionSwitchAlertVisible(false)}
+                    >
+                      <Text style={styles.alertCancelButtonText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [styles.alertConfirmButton, pressed && styles.buttonPressed]}
+                      onPress={() => {
+                        setProductionSwitchAlertVisible(false);
+                        setLocalSandboxEnabled(false);
+                        setSandboxMode(false);
+                        clearManualAddress();
+                        setManualAddress('');
+                      }}
+                    >
+                      <Text style={styles.alertConfirmButtonText}>Confirm</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </Modal>
           </View>
         </ScrollView>
       </TouchableWithoutFeedback>
@@ -1532,4 +1565,74 @@ const styles = StyleSheet.create({
       color: TEXT_SECONDARY,
       marginBottom: 4,
     },
+  // Production switch alert styles (matching CoinbaseAlert)
+  productionAlertCard: {
+    backgroundColor: CARD_BG,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 34,
+    minHeight: 220,
+  },
+  alertHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: BORDER,
+    borderRadius: 2,
+    marginBottom: 20,
+    alignSelf: 'center',
+  },
+  alertIconContainer: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  alertTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: TEXT_PRIMARY,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  alertMessage: {
+    fontSize: 16,
+    color: TEXT_SECONDARY,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+    paddingHorizontal: 16,
+  },
+  alertButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+  },
+  alertCancelButton: {
+    flex: 1,
+    backgroundColor: BORDER,
+    paddingVertical: 16,
+    borderRadius: 25,
+    alignItems: 'center',
+  },
+  alertConfirmButton: {
+    flex: 1,
+    backgroundColor: BLUE,
+    paddingVertical: 16,
+    borderRadius: 25,
+    alignItems: 'center',
+  },
+  alertCancelButtonText: {
+    color: TEXT_PRIMARY,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  alertConfirmButtonText: {
+    color: WHITE,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
+  },
 });
