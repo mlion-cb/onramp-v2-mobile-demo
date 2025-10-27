@@ -703,7 +703,7 @@ export function OnrampForm({
             <Text style={styles.notificationTitle}>Network Not Supported</Text>
           </View>
           <Text style={styles.notificationText}>
-            This network is available for Onramp, but Embedded Wallet is not supported at the moment. Select an EVM or Solana network to proceed.
+            This network is available for Onramp, but Embedded Wallet is not supported at the moment. Try it out in Sandbox mode, or select an EVM or Solana network to proceed.
           </Text>
         </View>
       ) : needsSmartAccount && !hasSmartAccount ? (

@@ -260,7 +260,12 @@ export function useOnramp() {
 
       let destinationAddress = formData.address;
       if (!isSandbox && isEvmNetwork) {
-        const smartAccount = currentUser?.evmSmartAccounts?.[0] as string;
+        // TestFlight reviewers use hardcoded address as their "smart account"
+        const isTestFlight = isTestSessionActive();
+        const smartAccount = isTestFlight
+          ? TEST_ACCOUNTS.wallets.evm  // TestFlight: Use hardcoded address
+          : (currentUser?.evmSmartAccounts?.[0] as string); // Real users: Use CDP Smart Account
+
         if (!smartAccount) {
           throw new Error('Smart Account required for EVM onramp transactions. Your balances are stored in the Smart Account. Please ensure your Embedded Wallet is properly initialized.');
         }
