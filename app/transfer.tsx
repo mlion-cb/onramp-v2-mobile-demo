@@ -74,7 +74,7 @@ export default function TransferScreen() {
     if (userOpStatus === 'pending' && userOpData?.userOpHash) {
       showAlert(
         'Transaction Pending ⏳',
-        `User Operation Hash:\n${userOpData.userOpHash}\n\nWaiting for confirmation...`,
+        `User Operation Hash:\n${userOpData.userOpHash}\n\nWaiting for confirmation...\nDo NOT close this alert to get updated status.`,
         'info'
       );
     } else if (userOpStatus === 'success' && userOpData) {
@@ -89,9 +89,7 @@ From: ${smartAccountAddress}
 
 📋 Search on block explorer:
 - Base: basescan.org
-- Ethereum: etherscan.io
-
-Search for Transaction Hash or Smart Account address`;
+- Ethereum: etherscan.io`;
 
       showAlert(
         'Transfer Complete! ✨',

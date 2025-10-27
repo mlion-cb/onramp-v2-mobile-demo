@@ -662,7 +662,20 @@ app.post('/webhooks/onramp', async (req, res) => {
                 });
 
                 const result = await apnProvider.send(notification, userTokenData.token);
-                console.log('✅ [WEBHOOK] APNs notification sent:', result.sent.length > 0 ? 'success' : 'failed');
+                console.log('📊 [WEBHOOK] APNs result:', {
+                  sent: result.sent?.length || 0,
+                  failed: result.failed?.length || 0
+                });
+
+                if (result.failed && result.failed.length > 0) {
+                  console.error('❌ [WEBHOOK] APNs failures:', result.failed.map((f: any) => ({
+                    device: f.device,
+                    status: f.status,
+                    response: f.response
+                  })));
+                } else {
+                  console.log('✅ [WEBHOOK] APNs notification sent successfully');
+                }
               } else {
                 console.log('📤 [WEBHOOK] Sending via Expo push service');
                 const message = {
@@ -764,7 +777,20 @@ app.post('/webhooks/onramp', async (req, res) => {
                 });
 
                 const result = await apnProvider.send(notification, failedUserTokenData.token);
-                console.log('✅ [WEBHOOK] APNs failure notification sent:', result.sent.length > 0 ? 'success' : 'failed');
+                console.log('📊 [WEBHOOK] APNs result:', {
+                  sent: result.sent?.length || 0,
+                  failed: result.failed?.length || 0
+                });
+
+                if (result.failed && result.failed.length > 0) {
+                  console.error('❌ [WEBHOOK] APNs failures:', result.failed.map((f: any) => ({
+                    device: f.device,
+                    status: f.status,
+                    response: f.response
+                  })));
+                } else {
+                  console.log('✅ [WEBHOOK] APNs failure notification sent successfully');
+                }
               } else {
                 console.log('📤 [WEBHOOK] Sending failure notification via Expo push service');
                 const failureMessage = {
