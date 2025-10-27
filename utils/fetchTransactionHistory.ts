@@ -1,10 +1,10 @@
 import { BASE_URL } from "../constants/BASE_URL";
-import { getAccessTokenGlobal } from "./getAccessTokenGlobal";
 
 export async function fetchTransactionHistory(
   userId: string,
   pageKey?: string,
-  pageSize: number = 10
+  pageSize: number = 10,
+  accessToken?: string
 ) {
   try {
     // Format: /buy/user/{userId}/transactions
@@ -12,9 +12,6 @@ export async function fetchTransactionHistory(
     if (pageKey) {
       fullUrl += `&pageKey=${encodeURIComponent(pageKey)}`;
     }
-
-    // Get access token for authentication
-    const accessToken = getAccessTokenGlobal();
 
     console.log('Transaction history request →', {
       url: fullUrl,

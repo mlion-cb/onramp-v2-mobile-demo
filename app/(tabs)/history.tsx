@@ -13,7 +13,7 @@ import {
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
 import { fetchTransactionHistory } from "../../utils/fetchTransactionHistory";
-import { useCurrentUser } from "@coinbase/cdp-hooks";
+import { useCurrentUser, useGetAccessToken } from "@coinbase/cdp-hooks";
 
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
@@ -35,6 +35,7 @@ type Transaction = {
 
 export default function History() {
   const { currentUser } = useCurrentUser();
+  const { getAccessToken } = useGetAccessToken();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUserRef, setCurrentUserRef] = useState<string | null>(null);
@@ -63,7 +64,8 @@ export default function History() {
 
     try {
       setLoading(true);
-      const result = await fetchTransactionHistory(userId, pageKey, 50);
+      const accessToken = await getAccessToken();
+      const result = await fetchTransactionHistory(userId, pageKey, 50, accessToken || undefined);
       setTransactions(result.transactions || []); // Replace for new page
       // setNextPageKey(result.nextPageKey || null);
 
@@ -78,7 +80,7 @@ export default function History() {
     } finally {
       setLoading(false);
     }
-  }, [currentUser?.userId]);
+  }, [currentUser?.userId, getAccessToken]);
 
   useFocusEffect(
     useCallback(() => {
