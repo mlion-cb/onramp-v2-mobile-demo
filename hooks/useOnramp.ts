@@ -144,7 +144,7 @@ export function useOnramp() {
         console.log('📱 [TRANSACTION] Pre-registering push token for:', partnerUserRef);
         const pushToken = await registerForPushNotifications();
         if (pushToken) {
-          await sendPushTokenToServer(pushToken, partnerUserRef, getAccessTokenGlobal);
+          await sendPushTokenToServer(pushToken.token, partnerUserRef, getAccessTokenGlobal, pushToken.type);
           console.log('✅ [TRANSACTION] Push token registered successfully');
         }
       } catch (pushError) {
@@ -240,7 +240,7 @@ export function useOnramp() {
         console.log('📱 [TRANSACTION] Pre-registering push token for:', partnerUserRef);
         const pushToken = await registerForPushNotifications();
         if (pushToken) {
-          await sendPushTokenToServer(pushToken, partnerUserRef, getAccessTokenGlobal);
+          await sendPushTokenToServer(pushToken.token, partnerUserRef, getAccessTokenGlobal, pushToken.type);
           console.log('✅ [TRANSACTION] Push token registered successfully');
         }
       } catch (pushError) {
