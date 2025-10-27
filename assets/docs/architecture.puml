@@ -143,4 +143,49 @@
       Handles payment selection,
       KYC, and transaction
   end note
+
+  == Flow 4: Webhook & Push Notifications ==
+
+  OnrampAPI -> Server: POST /server/webhook\n{\n  eventType: "onramp.transaction.*",\n  data: {\n    transactionId: "123",\n    status: "completed",\n    ...\n  }\n}
+  activate Server
+
+  Server -> Server: Validate webhook signature
+
+  Server -> Server: Find user's Expo push token
+
+  Server -> Server: Expo Push API\nsendPushNotification({\n  to: pushToken,\n  title: "Transaction Complete",\n  body: "Your USDC purchase succeeded"\n})
+
+  Server --> OnrampAPI: 200 OK
+  deactivate Server
+
+  User -> User: Receive push notification
+
+  == Flow 5: Token Transfer ==
+
+  User -> App: Fill transfer form\nrecipient: "0xabcd..."\namount: "10"\ntoken: USDC\nnetwork: Base
+
+  App -> App: Validate recipient address
+
+  alt Base Network (Gasless for USDC, EURC, cbBTC)
+    App -> CDP: useSendUserOperation()\n{\n  to: "0xabcd...",\n  value: parseUnits("10", 6),\n  data: "0x...",\n  usePaymaster: true\n}
+
+    CDP -> CDP: Sign with Smart Account
+    CDP -> CDP: Submit via Paymaster\n(no ETH needed for gas)
+
+  else Ethereum Network
+    App -> CDP: useSendUserOperation()\n{\n  to: "0xabcd...",\n  value: parseUnits("10", 6),\n  data: "0x..."\n}
+
+    CDP -> CDP: Sign with Smart Account
+    CDP -> CDP: Pay gas with ETH
+
+  else Solana Network
+    App -> CDP: useSendSolanaTransaction()\n{\n  transaction: {...}\n}
+
+    CDP -> CDP: Sign with Solana keypair
+  end
+
+  CDP --> App: { transactionHash }
+
+  App -> User: Show "Transfer successful!"\nDisplay tx hash
+
 @enduml
