@@ -680,7 +680,7 @@ app.post('/webhooks/onramp', async (req, res) => {
                 const apn = await import('@parse/node-apn');
                 const notification = new apn.Notification({
                   alert: { title, body },
-                  topic: 'com.mlion-cb.onrampv2demo', // Your bundle ID
+                  topic: 'com.mlioncb.onrampv2demo', // Your bundle ID
                   sound: 'default',
                   payload: notificationData
                 });

@@ -12,7 +12,7 @@ const config: ExpoConfig = {
     icon: './assets/images/icon.png',
 
     ios: {
-      bundleIdentifier: 'com.mlion-cb.onrampv2demo', 
+      bundleIdentifier: 'com.mlioncb.onrampv2demo', 
       buildNumber: process.env.IOS_BUILD_NUMBER ?? '1.0.0', // bump each submit
       supportsTablet: false,
       infoPlist: {
