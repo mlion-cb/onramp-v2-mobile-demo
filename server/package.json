@@ -15,10 +15,10 @@
   "dependencies": {
     "@coinbase/cdp-sdk": "^1.36.0",
     "@parse/node-apn": "^6.5.0",
-    "@vercel/kv": "^3.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
+    "redis": "^5.9.0",
     "twilio": "^5.9.0",
     "undici": "^7.16.0",
     "zod": "^4.1.1"

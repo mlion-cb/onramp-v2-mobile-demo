@@ -14,9 +14,13 @@ export const TEST_ACCOUNTS = {
   phone: '+12345678901', // Standard test phone number (accepted by most APIs)
   smsCode: '654321',
 
+  // Mock user ID for history fetching
+  userId: 'f5ad4b85-368d-4ab5-a1b6-4f63fb1aab85',
+
   // Mock wallet addresses (consistent for testing)
   wallets: {
-    evm: '0x84ac0b2636ce2a40F7f558c1C449CBD15ec6F93E',
+    evm: '0x84ac0b2636ce2a40F7f558c1C449CBD15ec6F93E', // Smart Account for demo
+    eoaDummy: '0x4a0Db3874642b0FedFAaf7d797872E0E34657CcB', // Dummy EOA address for display
     solana: '7YjXXvu3iCv9g3Ek5g8HoNT6o8CuapriCJzNeBg2eDQy'
   },
 

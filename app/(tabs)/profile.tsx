@@ -126,8 +126,8 @@ export default function WalletScreen() {
   });
 
   // Override CDP data if test session active
-  const explicitEOAAddress = testSession ? getTestWalletEvm() : (currentUser?.evmAccounts?.[0] as string);
-  const smartAccountAddress = currentUser?.evmSmartAccounts?.[0] as string;
+  const explicitEOAAddress = testSession ? TEST_ACCOUNTS.wallets.eoaDummy : (currentUser?.evmAccounts?.[0] as string);
+  const smartAccountAddress = testSession ? TEST_ACCOUNTS.wallets.evm : (currentUser?.evmSmartAccounts?.[0] as string);
 
   // For display: prefer smart account, then EOA
   const primaryAddress = smartAccountAddress || explicitEOAAddress;

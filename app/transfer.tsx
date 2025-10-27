@@ -245,7 +245,10 @@ Search for Transaction Hash or Smart Account address`;
     }
 
     const tokenAddress = selectedToken.token?.contractAddress;
-    const isNativeTransfer = !tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000';
+    // Treat as native if no address, zero address, or 0xeeee... sentinel (used by some SDKs)
+    const isNativeTransfer = !tokenAddress ||
+      tokenAddress === '0x0000000000000000000000000000000000000000' ||
+      tokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
 
     // Convert amount to wei (smallest unit)
     // Native ETH: Use parseEther (always 18 decimals)
