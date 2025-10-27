@@ -7,13 +7,13 @@ import { resolveClientIp } from './ip.js';
 import { validateAccessToken } from './validateToken.js';
 import { verifyWebhookSignature, verifyLegacySignature } from './verifyWebhookSignature.js';
 
-// Conditional KV import - only use if KV env vars are set (Vercel production)
+// Conditional KV import - only use if Redis URL is set (Vercel production)
 let kv: any = null;
-const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
+const useKV = process.env.REDIS_URL || (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 if (useKV) {
   const kvModule = await import('@vercel/kv');
   kv = kvModule.kv;
-  console.log('✅ Using Vercel KV for storage (production)');
+  console.log('✅ Using Vercel KV (Redis) for storage (production)');
 } else {
   console.log('ℹ️ Using in-memory storage (local dev)');
 }
