@@ -340,6 +340,13 @@ From: ${smartAccountAddress}
         lamports: amountLamports
       });
 
+      // Show pending alert
+      showAlert(
+        'Transaction Pending ⏳',
+        `Building and submitting Solana transaction...\n\nAmount: ${amount} SOL\nTo: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}\n\nDo NOT close this alert to get updated status.`,
+        'info'
+      );
+
       // Create Solana connection to fetch recent blockhash
       const { Connection, clusterApiUrl } = await import('@solana/web3.js');
       const connection = new Connection(clusterApiUrl('mainnet-beta'));
@@ -377,9 +384,24 @@ From: ${smartAccountAddress}
       console.log('✅ [SOLANA] Transaction successful:', result.transactionSignature);
 
       setTxHash(result.transactionSignature);
+
+      // Show success alert with signature
+      const successInfo = `🔍 TRANSACTION CONFIRMED:
+
+Signature:
+${result.transactionSignature}
+
+Amount: ${amount} SOL
+Network: Solana
+From: ${solanaAddress.slice(0, 6)}...${solanaAddress.slice(-4)}
+To: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}
+
+📋 Search on block explorer:
+- Solana: solscan.io or explorer.solana.com`;
+
       showAlert(
         'Transfer Complete! ✨',
-        `Sent ${amount} SOL to ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}\n\nSignature: ${result.transactionSignature.slice(0, 20)}...`,
+        successInfo,
         'success'
       );
     } catch (error) {

@@ -20,18 +20,25 @@ if (useRedis) {
 
 // APNs setup for direct iOS push notifications
 let apnProvider: any = null;
-const useAPNs = process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID && process.env.APNS_KEY;
-if (useAPNs) {
-  const apn = await import('@parse/node-apn');
-  apnProvider = new apn.Provider({
-    token: {
-      key: process.env.APNS_KEY!,
-      keyId: process.env.APNS_KEY_ID!,
-      teamId: process.env.APNS_TEAM_ID!
-    },
-    production: true // Use production APNs for TestFlight
-  });
-  console.log('✅ Using direct APNs for push notifications (production)');
+let useAPNs = false;
+if (process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID && process.env.APNS_KEY) {
+  try {
+    const apn = await import('@parse/node-apn');
+    apnProvider = new apn.Provider({
+      token: {
+        key: process.env.APNS_KEY!,
+        keyId: process.env.APNS_KEY_ID!,
+        teamId: process.env.APNS_TEAM_ID!
+      },
+      production: true // Use production APNs for TestFlight
+    });
+    useAPNs = true;
+    console.log('✅ Using direct APNs for push notifications (production)');
+  } catch (error) {
+    console.error('❌ Failed to initialize APNs provider:', error instanceof Error ? error.message : error);
+    console.warn('⚠️ Falling back to Expo push service');
+    console.warn('💡 Check APNS_KEY format: must include -----BEGIN PRIVATE KEY----- header/footer with \\n for newlines');
+  }
 } else {
   console.log('ℹ️ Using Expo push service for notifications (dev)');
 }
