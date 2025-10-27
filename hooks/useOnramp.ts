@@ -161,6 +161,22 @@ export function useOnramp() {
         throw new Error('Phone not verified or expired');
       }
 
+      // CRITICAL: For EVM networks (Base, Ethereum), MUST use Smart Account
+      // App only shows Smart Account balances - funds sent to EOA would be invisible
+      const networkName = getNetworkNameFromDisplayName(formData.network);
+      const isEvmNetwork = ['base', 'ethereum', 'polygon', 'arbitrum', 'optimism', 'avalanche', 'linea', 'zksync'].includes(networkName.toLowerCase());
+      const isSandbox = getSandboxMode();
+
+      let destinationAddress = formData.address;
+      if (!isSandbox && isEvmNetwork) {
+        const smartAccount = currentUser?.evmSmartAccounts?.[0] as string;
+        if (!smartAccount) {
+          throw new Error('Smart Account required for EVM onramp transactions. Your balances are stored in the Smart Account. Please ensure your Embedded Wallet is properly initialized.');
+        }
+        destinationAddress = smartAccount;
+        console.log('🔒 [ONRAMP] Using Smart Account for EVM transaction:', smartAccount);
+      }
+
       // Map form values to API format (display names → API values)
       // Order creation: API call to Coinbase (auth handled by authenticatedFetch)
       const result = await createApplePayOrder({
@@ -168,8 +184,8 @@ export function useOnramp() {
         paymentCurrency: formData.paymentCurrency,
         purchaseCurrency: getAssetSymbolFromName(formData.asset),
         paymentMethod: "GUEST_CHECKOUT_APPLE_PAY",
-        destinationNetwork: getNetworkNameFromDisplayName(formData.network),
-        destinationAddress: formData.address,
+        destinationNetwork: networkName,
+        destinationAddress: destinationAddress,
         email: userEmail,
         phoneNumber: phone,
         phoneNumberVerifiedAt: new Date(phoneAt!).toISOString(),
@@ -232,11 +248,25 @@ export function useOnramp() {
         // Don't block transaction if push token fails
       }
 
+      // CRITICAL: For EVM networks, MUST use Smart Account (same as Apple Pay)
+      const isEvmNetwork = ['base', 'ethereum', 'polygon', 'arbitrum', 'optimism', 'avalanche', 'linea', 'zksync'].includes(networkName.toLowerCase());
+      const isSandbox = getSandboxMode();
+
+      let destinationAddress = formData.address;
+      if (!isSandbox && isEvmNetwork) {
+        const smartAccount = currentUser?.evmSmartAccounts?.[0] as string;
+        if (!smartAccount) {
+          throw new Error('Smart Account required for EVM onramp transactions. Your balances are stored in the Smart Account. Please ensure your Embedded Wallet is properly initialized.');
+        }
+        destinationAddress = smartAccount;
+        console.log('🔒 [ONRAMP] Using Smart Account for EVM widget transaction:', smartAccount);
+      }
+
       // Auth handled by authenticatedFetch
       const res = await createOnrampSession({
         purchaseCurrency: assetSymbol,
         destinationNetwork: networkName,
-        destinationAddress: formData.address,
+        destinationAddress: destinationAddress,
         paymentAmount: formData.amount,
         paymentCurrency: formData.paymentCurrency,
         country,

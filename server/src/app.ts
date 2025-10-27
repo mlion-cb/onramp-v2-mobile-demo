@@ -499,11 +499,11 @@ app.get('/balances/solana', async (req, res) => {
  */
 
 // In-memory storage for local development
-const pushTokenStore = new Map<string, { token: string; platform: string; updatedAt: number }>();
+const pushTokenStore = new Map<string, { token: string; platform: string; tokenType?: string; updatedAt: number }>();
 
 app.post('/push-tokens', async (req, res) => {
   try {
-    const { userId, pushToken, platform } = req.body;
+    const { userId, pushToken, platform, tokenType } = req.body;
 
     if (!userId || !pushToken) {
       return res.status(400).json({ error: 'userId and pushToken are required' });
@@ -518,6 +518,7 @@ app.post('/push-tokens', async (req, res) => {
     const tokenData = {
       token: pushToken,
       platform: platform || 'unknown',
+      tokenType: tokenType || 'native', // 'native' for APNs/FCM, 'expo' for Expo push service
       updatedAt: Date.now(),
     };
 
@@ -528,7 +529,7 @@ app.post('/push-tokens', async (req, res) => {
       pushTokenStore.set(userId, tokenData);
     }
 
-    console.log('✅ [PUSH] Token registered for user:', userId);
+    console.log('✅ [PUSH] Token registered for user:', userId, `(${tokenData.tokenType} token)`);
     res.json({ success: true });
   } catch (error) {
     console.error('❌ [PUSH] Error:', error);
@@ -653,7 +654,7 @@ app.post('/webhooks/onramp', async (req, res) => {
           };
 
           // Retrieve push token from Redis (production) or in-memory (local dev)
-          let userTokenData: { token: string; platform: string; updatedAt: number } | null;
+          let userTokenData: { token: string; platform: string; tokenType?: string; updatedAt: number } | null;
           if (useRedis && redis) {
             const data = await redis.get(`pushtoken:${partnerUserRef}`);
             userTokenData = data ? JSON.parse(data) : null;
@@ -663,8 +664,12 @@ app.post('/webhooks/onramp', async (req, res) => {
 
           if (userTokenData) {
             try {
-              // Use direct APNs if configured, otherwise fall back to Expo push service
-              if (useAPNs && apnProvider && userTokenData.platform === 'ios') {
+              // Choose notification service based on token type
+              // Native tokens: Use direct APNs (if configured)
+              // Expo tokens: Use Expo push service
+              const isNativeToken = userTokenData.tokenType === 'native' || !userTokenData.tokenType; // default to native for backwards compatibility
+
+              if (isNativeToken && useAPNs && apnProvider && userTokenData.platform === 'ios') {
                 console.log('📤 [WEBHOOK] Sending via direct APNs');
                 const apn = await import('@parse/node-apn');
                 const notification = new apn.Notification({
@@ -768,7 +773,7 @@ app.post('/webhooks/onramp', async (req, res) => {
           };
 
           // Retrieve push token from Redis (production) or in-memory (local dev)
-          let failedUserTokenData: { token: string; platform: string; updatedAt: number } | null;
+          let failedUserTokenData: { token: string; platform: string; tokenType?: string; updatedAt: number } | null;
           if (useRedis && redis) {
             const data = await redis.get(`pushtoken:${failedPartnerUserRef}`);
             failedUserTokenData = data ? JSON.parse(data) : null;
@@ -778,8 +783,10 @@ app.post('/webhooks/onramp', async (req, res) => {
 
           if (failedUserTokenData) {
             try {
-              // Use direct APNs if configured, otherwise fall back to Expo push service
-              if (useAPNs && apnProvider && failedUserTokenData.platform === 'ios') {
+              // Choose notification service based on token type
+              const isNativeToken = failedUserTokenData.tokenType === 'native' || !failedUserTokenData.tokenType;
+
+              if (isNativeToken && useAPNs && apnProvider && failedUserTokenData.platform === 'ios') {
                 console.log('📤 [WEBHOOK] Sending failure notification via direct APNs');
                 const apn = await import('@parse/node-apn');
                 const notification = new apn.Notification({

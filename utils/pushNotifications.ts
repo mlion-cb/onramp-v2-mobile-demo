@@ -25,9 +25,11 @@ Notifications.setNotificationHandler({
 
 /**
  * Request notification permissions and get push token
- * Returns the Expo push token that can be sent to the server
+ * Returns the appropriate push token based on environment:
+ * - Standalone builds: Native device token (for direct APNs/FCM)
+ * - Expo Go: Expo push token (for Expo push service)
  */
-export async function registerForPushNotifications(): Promise<string | null> {
+export async function registerForPushNotifications(): Promise<{ token: string; type: 'native' | 'expo' } | null> {
   try {
     // Note: Push tokens work in simulator, but notifications won't be delivered
     // This is fine for testing the webhook flow
@@ -49,19 +51,31 @@ export async function registerForPushNotifications(): Promise<string | null> {
       return null;
     }
 
-    // Get the push token
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    // Get push token based on environment
+    // Standalone builds: Use native token for direct APNs
+    // Expo Go: Use Expo token for Expo push service
+    let token;
+    let tokenType: 'native' | 'expo';
 
-    if (!projectId) {
-      console.error('❌ [PUSH] No EAS project ID found');
-      return null;
+    // Check if running in Expo Go
+    const isExpoGo = Constants.appOwnership === 'expo';
+
+    if (isExpoGo) {
+      // Expo Go: Get Expo push token (requires project ID)
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+      if (!projectId) {
+        console.error('❌ [PUSH] No EAS project ID found');
+        return null;
+      }
+      token = await Notifications.getExpoPushTokenAsync({ projectId });
+      tokenType = 'expo';
+      console.log('✅ [PUSH] Expo push token obtained (Expo Go):', token.data);
+    } else {
+      // Standalone build: Get native device token (for direct APNs)
+      token = await Notifications.getDevicePushTokenAsync();
+      tokenType = 'native';
+      console.log('✅ [PUSH] Native device push token obtained (Standalone):', token.data);
     }
-
-    const token = await Notifications.getExpoPushTokenAsync({
-      projectId,
-    });
-
-    console.log('✅ [PUSH] Push token obtained:', token.data);
 
     // iOS-specific: Register for APNs
     if (Platform.OS === 'ios') {
@@ -76,7 +90,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
       ]);
     }
 
-    return token.data;
+    return { token: token.data, type: tokenType };
   } catch (error) {
     console.error('❌ [PUSH] Error registering for push notifications:', error);
     return null;
@@ -86,7 +100,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
 /**
  * Send push token to server for webhook notifications
  */
-export async function sendPushTokenToServer(pushToken: string, userId: string, getAccessToken: () => Promise<string>): Promise<void> {
+export async function sendPushTokenToServer(pushToken: string, userId: string, getAccessToken: () => Promise<string>, tokenType: 'native' | 'expo' = 'native'): Promise<void> {
   try {
     const accessToken = await getAccessToken();
 
@@ -100,6 +114,7 @@ export async function sendPushTokenToServer(pushToken: string, userId: string, g
         userId,
         pushToken,
         platform: Platform.OS,
+        tokenType, // Tell server which type of token this is
       }),
     });
 
