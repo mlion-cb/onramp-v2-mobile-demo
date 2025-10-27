@@ -644,40 +644,29 @@ export default function WalletScreen() {
                     <Text style={styles.subValue}>{displayEmail}</Text>
                   </View>
 
-                  <View style={styles.subBox}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.subHint}>EVM wallet address</Text>
-                      <Text selectable style={styles.subValue}>{primaryAddress}</Text>
-                    </View>
-                    <Pressable
-                      onPress={async () => {
-                        await Clipboard.setStringAsync(primaryAddress || '');
-                        setAlertState({
-                          visible: true,
-                          title: "Address copied",
-                          message: "EVM wallet address copied to clipboard",
-                          type: "info",
-                        });
-                      }}
-                      style={styles.copyButton}
-                    >
-                      <Ionicons name="copy-outline" size={20} color={BLUE} />
-                    </Pressable>
-                  </View>
-
-                  {solanaAddress && (
-                    <View style={styles.subBox}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.subHint}>Solana wallet address</Text>
-                        <Text selectable style={styles.subValue}>{solanaAddress}</Text>
+                  {smartAccountAddress && (
+                    <View style={[styles.subBox, { flexDirection: 'row', alignItems: 'center' }]}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.subHint}>Smart Account Address (used for transactions)</Text>
+                        <Text
+                          selectable
+                          style={styles.subValue}
+                          numberOfLines={1}
+                          ellipsizeMode="middle"
+                        >
+                          {smartAccountAddress}
+                        </Text>
+                        <Text style={[styles.helper, { marginTop: 4 }]}>
+                          💰 Your balances are stored here. All transactions use this address.
+                        </Text>
                       </View>
                       <Pressable
                         onPress={async () => {
-                          await Clipboard.setStringAsync(solanaAddress || '');
+                          await Clipboard.setStringAsync(smartAccountAddress || '');
                           setAlertState({
                             visible: true,
                             title: "Address copied",
-                            message: "Solana wallet address copied to clipboard",
+                            message: "Smart Account address copied to clipboard",
                             type: "info",
                           });
                         }}
@@ -686,6 +675,69 @@ export default function WalletScreen() {
                         <Ionicons name="copy-outline" size={20} color={BLUE} />
                       </Pressable>
                     </View>
+                  )}
+
+                  {explicitEOAAddress && (
+                    <View style={[styles.subBox, { flexDirection: 'row', alignItems: 'center' }]}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.subHint}>EOA Address (not used for transactions)</Text>
+                        <Text
+                          selectable
+                          style={styles.subValue}
+                          numberOfLines={1}
+                          ellipsizeMode="middle"
+                        >
+                          {explicitEOAAddress}
+                        </Text>
+                        <Text style={[styles.helper, { marginTop: 4 }]}>
+                          ℹ️ This is your externally owned account. Transactions use the Smart Account above.
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={async () => {
+                          await Clipboard.setStringAsync(explicitEOAAddress || '');
+                          setAlertState({
+                            visible: true,
+                            title: "Address copied",
+                            message: "EOA address copied to clipboard",
+                            type: "info",
+                          });
+                        }}
+                        style={styles.copyButton}
+                      >
+                        <Ionicons name="copy-outline" size={20} color={BLUE} />
+                      </Pressable>
+                    </View>
+                  )}
+
+                  {solanaAddress && (
+                    <View style={[styles.subBox, { flexDirection: 'row', alignItems: 'center' }]}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.subHint}>Solana wallet address</Text>
+                      <Text
+                        selectable
+                        style={styles.subValue}
+                        numberOfLines={1}
+                        ellipsizeMode="middle"
+                      >
+                        {solanaAddress}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={async () => {
+                        await Clipboard.setStringAsync(solanaAddress || '');
+                        setAlertState({
+                          visible: true,
+                          title: "Address copied",
+                          message: "Solana wallet address copied to clipboard",
+                          type: "info",
+                        });
+                      }}
+                      style={styles.copyButton}
+                    >
+                      <Ionicons name="copy-outline" size={20} color={BLUE} />
+                    </Pressable>
+                  </View>
                   )}
 
                   <Pressable
@@ -839,75 +891,6 @@ export default function WalletScreen() {
               </View>
             )}
 
-            {/* Debug: Smart Account Info - Always visible for debugging transfers */}
-            {currentUser && (
-              <View style={styles.card}>
-                <Text style={styles.rowLabel}>🔍 Debug: Smart Account Info</Text>
-
-                <View style={styles.subBox}>
-                  <Text style={styles.subHint}>EVM Smart Account Address</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={[styles.rowValue, { flex: 1, fontFamily: 'monospace', fontSize: 12 }]} numberOfLines={1}>
-                      {currentUser.evmSmartAccounts?.[0] || 'Not created'}
-                    </Text>
-                    {currentUser.evmSmartAccounts?.[0] && (
-                      <Pressable
-                        onPress={() => Clipboard.setStringAsync(currentUser.evmSmartAccounts?.[0] || '')}
-                        style={styles.copyButton}
-                      >
-                        <Ionicons name="copy-outline" size={16} color={BLUE} />
-                      </Pressable>
-                    )}
-                  </View>
-                  {currentUser.evmSmartAccounts?.[0] && (
-                    <Text style={[styles.helper, { marginTop: 8 }]}>
-                      💡 Search this address on Etherscan or Basescan to see your transfer transactions
-                    </Text>
-                  )}
-                </View>
-
-                <View style={styles.subBox}>
-                  <Text style={styles.subHint}>Solana Account Address</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={[styles.rowValue, { flex: 1, fontFamily: 'monospace', fontSize: 12 }]} numberOfLines={1}>
-                      {currentUser.solanaAccounts?.[0] || 'Not created'}
-                    </Text>
-                    {currentUser.solanaAccounts?.[0] && (
-                      <Pressable
-                        onPress={() => Clipboard.setStringAsync(currentUser.solanaAccounts?.[0] || '')}
-                        style={styles.copyButton}
-                      >
-                        <Ionicons name="copy-outline" size={16} color={BLUE} />
-                      </Pressable>
-                    )}
-                  </View>
-                  {currentUser.solanaAccounts?.[0] && (
-                    <Text style={[styles.helper, { marginTop: 8 }]}>
-                      💡 Search this address on Solscan to see your Solana transactions
-                    </Text>
-                  )}
-                </View>
-
-                <View style={styles.subBox}>
-                  <Text style={styles.subHint}>User ID</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={[styles.rowValue, { flex: 1, fontFamily: 'monospace', fontSize: 12 }]} numberOfLines={1}>
-                      {currentUser.userId}
-                    </Text>
-                    <Pressable
-                      onPress={() => Clipboard.setStringAsync(currentUser.userId)}
-                      style={styles.copyButton}
-                    >
-                      <Ionicons name="copy-outline" size={16} color={BLUE} />
-                    </Pressable>
-                  </View>
-                </View>
-
-                <Text style={[styles.helper, { marginTop: 8 }]}>
-                  📋 Use these addresses to track your transactions on block explorers
-                </Text>
-              </View>
-            )}
 
             {/* Sandbox Wallet Card - show when sandbox mode is enabled */}
             {localSandboxEnabled && (

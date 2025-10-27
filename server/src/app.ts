@@ -7,6 +7,17 @@ import { resolveClientIp } from './ip.js';
 import { validateAccessToken } from './validateToken.js';
 import { verifyWebhookSignature, verifyLegacySignature } from './verifyWebhookSignature.js';
 
+// Conditional KV import - only use if KV env vars are set (Vercel production)
+let kv: any = null;
+const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
+if (useKV) {
+  const kvModule = await import('@vercel/kv');
+  kv = kvModule.kv;
+  console.log('✅ Using Vercel KV for storage (production)');
+} else {
+  console.log('ℹ️ Using in-memory storage (local dev)');
+}
+
 let twilioClient: ReturnType<typeof import('twilio')> | null = null;
 function getTwilio() {
   if (!twilioClient) {
@@ -52,7 +63,7 @@ app.use((req, res, next) => {
     return next();
   }
 
-  // Apply authentication to all other routes (including /push-tokens and /notifications/poll)
+  // Apply authentication to all other routes (including /push-tokens)
   return validateAccessToken(req, res, next);
 });
 
@@ -452,20 +463,12 @@ app.get('/balances/solana', async (req, res) => {
  * POST /push-tokens
  *
  * Stores user's Expo push token for sending notifications
+ * Uses Vercel KV (production) or in-memory Map (local dev)
  * Called when user opens app and registers for notifications
  */
-const pushTokenStore = new Map<string, { token: string; platform: string; updatedAt: number }>();
 
-// Store pending notifications for polling (simulator support)
-interface PendingNotification {
-  id: string;
-  userId: string;
-  title: string;
-  body: string;
-  data: any;
-  createdAt: number;
-}
-const pendingNotifications = new Map<string, PendingNotification[]>();
+// In-memory storage for local development
+const pushTokenStore = new Map<string, { token: string; platform: string; updatedAt: number }>();
 
 app.post('/push-tokens', async (req, res) => {
   try {
@@ -481,56 +484,24 @@ app.post('/push-tokens', async (req, res) => {
       return res.status(403).json({ error: 'Forbidden: Cannot register push token for another user' });
     }
 
-    pushTokenStore.set(userId, {
+    const tokenData = {
       token: pushToken,
       platform: platform || 'unknown',
       updatedAt: Date.now(),
-    });
+    };
+
+    // Store in KV (production) or in-memory (local dev)
+    if (useKV && kv) {
+      await kv.set(`pushtoken:${userId}`, tokenData);
+    } else {
+      pushTokenStore.set(userId, tokenData);
+    }
 
     console.log('✅ [PUSH] Token registered for user:', userId);
     res.json({ success: true });
   } catch (error) {
     console.error('❌ [PUSH] Error:', error);
     res.status(500).json({ error: 'Failed to store push token' });
-  }
-});
-
-/**
- * Poll for pending notifications (simulator support)
- * GET /notifications/poll?userId=USER_ID
- */
-app.get('/notifications/poll', (req, res) => {
-  try {
-    const userId = req.query.userId as string;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    // Security: Verify the authenticated user matches the userId they're polling for
-    if (req.userId !== userId) {
-      console.error('❌ [POLL] Unauthorized poll attempt');
-      return res.status(403).json({ error: 'Forbidden: Cannot poll notifications for another user' });
-    }
-
-    // Get pending notifications for this user
-    const userNotifications = pendingNotifications.get(userId) || [];
-
-    // Debug logging
-    console.log(`🔍 [POLL] Checking for userId: ${userId}`);
-    console.log(`🔍 [POLL] Found ${userNotifications.length} notification(s)`);
-    console.log(`🔍 [POLL] All pending users in memory:`, Array.from(pendingNotifications.keys()));
-
-    // Clear the notifications after fetching
-    if (userNotifications.length > 0) {
-      pendingNotifications.delete(userId);
-      console.log(`🔔 [POLL] Delivered ${userNotifications.length} notification(s)`);
-    }
-
-    res.json({ notifications: userNotifications });
-  } catch (error) {
-    console.error('❌ [POLL] Error:', error);
-    res.status(500).json({ error: 'Failed to fetch notifications' });
   }
 });
 
@@ -650,23 +621,13 @@ app.post('/webhooks/onramp', async (req, res) => {
             partnerUserRef
           };
 
-          // ALWAYS store notification for polling (works even if push token not found)
-          const notification: PendingNotification = {
-            id: `${Date.now()}-${Math.random()}`,
-            userId: partnerUserRef,
-            title,
-            body,
-            data: notificationData,
-            createdAt: Date.now()
-          };
-
-          const userPendingNotifs = pendingNotifications.get(partnerUserRef) || [];
-          userPendingNotifs.push(notification);
-          pendingNotifications.set(partnerUserRef, userPendingNotifs);
-          console.log('✅ [WEBHOOK] Notification queued for polling');
-
-          // Also try to send real push notification (for physical devices with registered tokens)
-          const userTokenData = pushTokenStore.get(partnerUserRef);
+          // Retrieve push token from KV (production) or in-memory (local dev)
+          let userTokenData: { token: string; platform: string; updatedAt: number } | null;
+          if (useKV && kv) {
+            userTokenData = await kv.get(`pushtoken:${partnerUserRef}`) as { token: string; platform: string; updatedAt: number } | null;
+          } else {
+            userTokenData = pushTokenStore.get(partnerUserRef) || null;
+          }
 
           if (userTokenData) {
             try {
@@ -700,7 +661,7 @@ app.post('/webhooks/onramp', async (req, res) => {
               console.error('❌ [WEBHOOK] Failed to send push notification:', pushError);
             }
           } else {
-            console.log('ℹ️ [WEBHOOK] No push token - notification will be delivered via polling');
+            console.log('⚠️ [WEBHOOK] No push token found for user:', partnerUserRef);
           }
         } catch (error) {
           console.error('❌ [WEBHOOK] Failed to process notification:', error);
@@ -745,23 +706,13 @@ app.post('/webhooks/onramp', async (req, res) => {
             partnerUserRef: failedPartnerUserRef
           };
 
-          // ALWAYS store notification for polling (works even if push token not found)
-          const failNotification: PendingNotification = {
-            id: `${Date.now()}-${Math.random()}`,
-            userId: failedPartnerUserRef,
-            title: failTitle,
-            body: failBody,
-            data: failData,
-            createdAt: Date.now()
-          };
-
-          const failUserPendingNotifs = pendingNotifications.get(failedPartnerUserRef) || [];
-          failUserPendingNotifs.push(failNotification);
-          pendingNotifications.set(failedPartnerUserRef, failUserPendingNotifs);
-          console.log('✅ [WEBHOOK] Failure notification queued for polling');
-
-          // Also try to send real push notification (for physical devices with registered tokens)
-          const failedUserTokenData = pushTokenStore.get(failedPartnerUserRef);
+          // Retrieve push token from KV (production) or in-memory (local dev)
+          let failedUserTokenData: { token: string; platform: string; updatedAt: number } | null;
+          if (useKV && kv) {
+            failedUserTokenData = await kv.get(`pushtoken:${failedPartnerUserRef}`) as { token: string; platform: string; updatedAt: number } | null;
+          } else {
+            failedUserTokenData = pushTokenStore.get(failedPartnerUserRef) || null;
+          }
 
           if (failedUserTokenData) {
             try {
@@ -787,7 +738,7 @@ app.post('/webhooks/onramp', async (req, res) => {
               console.error('❌ [WEBHOOK] Failed to send failure push notification:', pushError);
             }
           } else {
-            console.log('ℹ️ [WEBHOOK] No push token - failure notification will be delivered via polling');
+            console.log('⚠️ [WEBHOOK] No push token found for user:', failedPartnerUserRef);
           }
         } catch (error) {
           console.error('❌ [WEBHOOK] Error processing failure notification:', error);
