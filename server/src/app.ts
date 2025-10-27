@@ -18,6 +18,24 @@ if (useKV) {
   console.log('ℹ️ Using in-memory storage (local dev)');
 }
 
+// APNs setup for direct iOS push notifications
+let apnProvider: any = null;
+const useAPNs = process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID && process.env.APNS_KEY;
+if (useAPNs) {
+  const apn = await import('@parse/node-apn');
+  apnProvider = new apn.Provider({
+    token: {
+      key: process.env.APNS_KEY!,
+      keyId: process.env.APNS_KEY_ID!,
+      teamId: process.env.APNS_TEAM_ID!
+    },
+    production: true // Use production APNs for TestFlight
+  });
+  console.log('✅ Using direct APNs for push notifications (production)');
+} else {
+  console.log('ℹ️ Using Expo push service for notifications (dev)');
+}
+
 let twilioClient: ReturnType<typeof import('twilio')> | null = null;
 function getTwilio() {
   if (!twilioClient) {
@@ -631,31 +649,47 @@ app.post('/webhooks/onramp', async (req, res) => {
 
           if (userTokenData) {
             try {
-              const message = {
-                to: userTokenData.token,
-                sound: 'default',
-                title,
-                body,
-                data: notificationData,
-              };
+              // Use direct APNs if configured, otherwise fall back to Expo push service
+              if (useAPNs && apnProvider && userTokenData.platform === 'ios') {
+                console.log('📤 [WEBHOOK] Sending via direct APNs');
+                const apn = await import('@parse/node-apn');
+                const notification = new apn.Notification({
+                  alert: { title, body },
+                  topic: 'com.mlion-cb.onrampv2demo', // Your bundle ID
+                  sound: 'default',
+                  payload: notificationData
+                });
 
-              const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(message),
-              });
-
-              const pushResult = await pushResponse.json();
-              console.log('📤 [WEBHOOK] Push notification response:', JSON.stringify(pushResult));
-
-              // Check if push failed due to credentials
-              if (pushResult.data?.status === 'error') {
-                console.error('❌ [WEBHOOK] Push delivery error:', pushResult.data.message);
-                console.error('💡 [WEBHOOK] Hint: Configure APNs credentials with "eas credentials"');
+                const result = await apnProvider.send(notification, userTokenData.token);
+                console.log('✅ [WEBHOOK] APNs notification sent:', result.sent.length > 0 ? 'success' : 'failed');
               } else {
-                console.log('✅ [WEBHOOK] Push notification sent for transaction:', txId);
+                console.log('📤 [WEBHOOK] Sending via Expo push service');
+                const message = {
+                  to: userTokenData.token,
+                  sound: 'default',
+                  title,
+                  body,
+                  data: notificationData,
+                };
+
+                const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(message),
+                });
+
+                const pushResult = await pushResponse.json();
+                console.log('📤 [WEBHOOK] Push notification response:', JSON.stringify(pushResult));
+
+                // Check if push failed due to credentials
+                if (pushResult.data?.status === 'error') {
+                  console.error('❌ [WEBHOOK] Push delivery error:', pushResult.data.message);
+                  console.error('💡 [WEBHOOK] Hint: Add APNs credentials to .env for direct APNs');
+                } else {
+                  console.log('✅ [WEBHOOK] Push notification sent for transaction:', txId);
+                }
               }
             } catch (pushError) {
               console.error('❌ [WEBHOOK] Failed to send push notification:', pushError);
@@ -716,24 +750,40 @@ app.post('/webhooks/onramp', async (req, res) => {
 
           if (failedUserTokenData) {
             try {
-              const failureMessage = {
-                to: failedUserTokenData.token,
-                sound: 'default',
-                title: failTitle,
-                body: failBody,
-                data: failData,
-              };
+              // Use direct APNs if configured, otherwise fall back to Expo push service
+              if (useAPNs && apnProvider && failedUserTokenData.platform === 'ios') {
+                console.log('📤 [WEBHOOK] Sending failure notification via direct APNs');
+                const apn = await import('@parse/node-apn');
+                const notification = new apn.Notification({
+                  alert: { title: failTitle, body: failBody },
+                  topic: 'com.mlion-cb.onrampv2demo', // Your bundle ID
+                  sound: 'default',
+                  payload: failData
+                });
 
-              const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(failureMessage),
-              });
+                const result = await apnProvider.send(notification, failedUserTokenData.token);
+                console.log('✅ [WEBHOOK] APNs failure notification sent:', result.sent.length > 0 ? 'success' : 'failed');
+              } else {
+                console.log('📤 [WEBHOOK] Sending failure notification via Expo push service');
+                const failureMessage = {
+                  to: failedUserTokenData.token,
+                  sound: 'default',
+                  title: failTitle,
+                  body: failBody,
+                  data: failData,
+                };
 
-              const pushResult = await pushResponse.json();
-              console.log('✅ [WEBHOOK] Failure push notification sent for transaction:', txId);
+                const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(failureMessage),
+                });
+
+                const pushResult = await pushResponse.json();
+                console.log('✅ [WEBHOOK] Failure push notification sent for transaction:', txId);
+              }
             } catch (pushError) {
               console.error('❌ [WEBHOOK] Failed to send failure push notification:', pushError);
             }
