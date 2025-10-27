@@ -1,4 +1,4 @@
-import { getCurrentPartnerUserRef } from "@/utils/sharedState";
+import { getCurrentPartnerUserRef, isTestSessionActive } from "@/utils/sharedState";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useState } from "react";
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
+import { TEST_ACCOUNTS } from "../../constants/TestAccounts";
 import { fetchTransactionHistory } from "../../utils/fetchTransactionHistory";
 import { useCurrentUser, useGetAccessToken } from "@coinbase/cdp-hooks";
 
@@ -55,8 +56,10 @@ export default function History() {
   });
 
   const loadTransactions = useCallback(async (pageKey?: string, isNewPage: boolean = false) => {
-    // Use CDP userId directly (no need to wait for transaction)
-    const userId = currentUser?.userId;
+    // Use CDP userId or test account userId for TestFlight
+    const isTestFlight = isTestSessionActive();
+    const userId = isTestFlight ? TEST_ACCOUNTS.userId : currentUser?.userId;
+
     if (!userId) {
       console.log('No user ID available yet');
       return;

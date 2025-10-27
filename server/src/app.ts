@@ -5,17 +5,17 @@ import { generateJwt } from '@coinbase/cdp-sdk/auth';
 import twilio from 'twilio';
 import { resolveClientIp } from './ip.js';
 import { validateAccessToken } from './validateToken.js';
-import { verifyWebhookSignature, verifyLegacySignature } from './verifyWebhookSignature.js';
+import { verifyLegacySignature, verifyWebhookSignature } from './verifyWebhookSignature.js';
 
-// Conditional KV import - only use if Redis URL is set (Vercel production)
-let kv: any = null;
-const useKV = process.env.REDIS_URL || (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-if (useKV) {
-  const kvModule = await import('@vercel/kv');
-  kv = kvModule.kv;
-  console.log('✅ Using Vercel KV (Redis) for storage (production)');
+// Redis storage setup - use Redis for production, in-memory for local dev
+let redis: any = null;
+const useRedis = !!process.env.REDIS_URL;
+if (useRedis) {
+  const { createClient } = await import('redis');
+  redis = await createClient({ url: process.env.REDIS_URL! }).connect();
+  console.log('✅ Using Redis for push token storage (production)');
 } else {
-  console.log('ℹ️ Using in-memory storage (local dev)');
+  console.log('ℹ️ Using in-memory storage for push tokens (local dev)');
 }
 
 // APNs setup for direct iOS push notifications
@@ -508,9 +508,9 @@ app.post('/push-tokens', async (req, res) => {
       updatedAt: Date.now(),
     };
 
-    // Store in KV (production) or in-memory (local dev)
-    if (useKV && kv) {
-      await kv.set(`pushtoken:${userId}`, tokenData);
+    // Store in Redis (production) or in-memory (local dev)
+    if (useRedis && redis) {
+      await redis.set(`pushtoken:${userId}`, JSON.stringify(tokenData));
     } else {
       pushTokenStore.set(userId, tokenData);
     }
@@ -639,10 +639,11 @@ app.post('/webhooks/onramp', async (req, res) => {
             partnerUserRef
           };
 
-          // Retrieve push token from KV (production) or in-memory (local dev)
+          // Retrieve push token from Redis (production) or in-memory (local dev)
           let userTokenData: { token: string; platform: string; updatedAt: number } | null;
-          if (useKV && kv) {
-            userTokenData = await kv.get(`pushtoken:${partnerUserRef}`) as { token: string; platform: string; updatedAt: number } | null;
+          if (useRedis && redis) {
+            const data = await redis.get(`pushtoken:${partnerUserRef}`);
+            userTokenData = data ? JSON.parse(data) : null;
           } else {
             userTokenData = pushTokenStore.get(partnerUserRef) || null;
           }
@@ -740,10 +741,11 @@ app.post('/webhooks/onramp', async (req, res) => {
             partnerUserRef: failedPartnerUserRef
           };
 
-          // Retrieve push token from KV (production) or in-memory (local dev)
+          // Retrieve push token from Redis (production) or in-memory (local dev)
           let failedUserTokenData: { token: string; platform: string; updatedAt: number } | null;
-          if (useKV && kv) {
-            failedUserTokenData = await kv.get(`pushtoken:${failedPartnerUserRef}`) as { token: string; platform: string; updatedAt: number } | null;
+          if (useRedis && redis) {
+            const data = await redis.get(`pushtoken:${failedPartnerUserRef}`);
+            failedUserTokenData = data ? JSON.parse(data) : null;
           } else {
             failedUserTokenData = pushTokenStore.get(failedPartnerUserRef) || null;
           }
