@@ -288,9 +288,13 @@ export default function WalletScreen() {
   const openPhoneVerify = useCallback(() => {
     router.push({
       pathname: '/phone-verify',
-      params: { initialPhone: verifiedPhone || '' }
+      params: { initialPhone: verifiedPhone || '', mode: 'link' }
     });
   }, [router, verifiedPhone]);
+
+  const openEmailLink = useCallback(() => {
+    router.push('/email-verify?mode=link');
+  }, [router]);
 
   // Clear UI state when user signs out
   useEffect(() => {
@@ -648,6 +652,13 @@ export default function WalletScreen() {
                     <Text style={styles.subValue}>{displayEmail}</Text>
                   </View>
 
+                  {/* Link Email Button (show if user signed in with phone only) */}
+                  {!currentUser?.authenticationMethods.email?.email && !testSession && (
+                    <Pressable style={styles.button} onPress={openEmailLink}>
+                      <Text style={styles.buttonText}>Link Email</Text>
+                    </Pressable>
+                  )}
+
                   {smartAccountAddress && (
                     <View style={[styles.subBox, { flexDirection: 'row', alignItems: 'center' }]}>
                       <View style={{ flex: 1, minWidth: 0 }}>
@@ -946,18 +957,27 @@ export default function WalletScreen() {
                 </Text>
               </View>
 
-              <Pressable style={[styles.button, phoneFresh ? { backgroundColor: BORDER } : null]} onPress={openPhoneVerify}>
-                <Text style={[styles.buttonText, phoneFresh ? { color: TEXT_PRIMARY } : null]}>
-                  {verifiedPhone ? (phoneFresh ? 'Update phone' : 'Re-verify phone') : 'Verify phone'}
-                </Text>
-              </Pressable>
-              {verifiedPhone && (
-                <Pressable
-                  style={[styles.buttonSecondary, { backgroundColor: BORDER }]}
-                  onPress={unverifyPhone}
-                >
-                  <Text style={[styles.buttonTextSecondary, { color: TEXT_PRIMARY }]}>Unlink Phone</Text>
+              {/* Show Link Phone if user doesn't have phone linked yet */}
+              {!currentUser?.authenticationMethods.phoneNumber?.phoneNumber && !verifiedPhone && !testSession ? (
+                <Pressable style={styles.button} onPress={openPhoneVerify}>
+                  <Text style={styles.buttonText}>Link Phone</Text>
                 </Pressable>
+              ) : (
+                <>
+                  <Pressable style={[styles.button, phoneFresh ? { backgroundColor: BORDER } : null]} onPress={openPhoneVerify}>
+                    <Text style={[styles.buttonText, phoneFresh ? { color: TEXT_PRIMARY } : null]}>
+                      {verifiedPhone ? (phoneFresh ? 'Update phone' : 'Re-verify phone') : 'Verify phone'}
+                    </Text>
+                  </Pressable>
+                  {verifiedPhone && (
+                    <Pressable
+                      style={[styles.buttonSecondary, { backgroundColor: BORDER }]}
+                      onPress={unverifyPhone}
+                    >
+                      <Text style={[styles.buttonTextSecondary, { color: TEXT_PRIMARY }]}>Unlink Phone</Text>
+                    </Pressable>
+                  )}
+                </>
               )}
             </View>
 

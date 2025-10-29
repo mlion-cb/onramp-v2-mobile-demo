@@ -441,7 +441,40 @@ export default function Index() {
       }
 
       await createOrder(updatedFormData);
-    } catch (error) {
+    } catch (error: any) {
+      // Handle missing email - navigate to email linking flow
+      if (error.code === 'MISSING_EMAIL') {
+        setPendingForm(updatedFormData);
+        setApplePayAlert({
+          visible: true,
+          title: 'Email Required',
+          message: 'Apple Pay requires a verified email address. Please link your email to continue.',
+          type: 'info'
+        });
+        setTimeout(() => {
+          setApplePayAlert({ visible: false, title: '', message: '', type: 'info' });
+          router.push('/email-verify?mode=link');
+        }, 2000);
+        return;
+      }
+
+      // Handle missing phone - navigate to phone linking flow
+      if (error.code === 'MISSING_PHONE') {
+        setPendingForm(updatedFormData);
+        setApplePayAlert({
+          visible: true,
+          title: 'Phone Required',
+          message: 'Apple Pay requires a verified phone number. Please link your phone to continue.',
+          type: 'info'
+        });
+        setTimeout(() => {
+          setApplePayAlert({ visible: false, title: '', message: '', type: 'info' });
+          router.push('/phone-verify?mode=link');
+        }, 2000);
+        return;
+      }
+
+      // Generic error
       setApplePayAlert({
         visible: true,
         title: 'Transaction Failed',

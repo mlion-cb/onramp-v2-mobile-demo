@@ -11,8 +11,8 @@
     "lint": "expo lint"
   },
   "dependencies": {
-    "@coinbase/cdp-core": "^0.0.42",
-    "@coinbase/cdp-hooks": "^0.0.42",
+    "@coinbase/cdp-core": "^0.0.52",
+    "@coinbase/cdp-hooks": "^0.0.52",
     "@expo/vector-icons": "^14.1.0",
     "@react-native-async-storage/async-storage": "2.1.2",
     "@react-navigation/bottom-tabs": "^7.3.10",
