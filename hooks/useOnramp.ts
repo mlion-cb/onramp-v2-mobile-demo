@@ -127,9 +127,6 @@ export function useOnramp() {
     try {
       setIsProcessingPayment(true); // Start loading
 
-      // Get email from CDP user, fallback to placeholder
-      const userEmail = currentUser?.authenticationMethods.email?.email || 'noemail@test.com';
-
       // Generate unique user reference for transaction tracking
       // Apple Pay: Use userId with sandbox prefix for sandbox environment
       const sandboxPrefix = getSandboxMode() ? "sandbox-" : "";
@@ -153,8 +150,31 @@ export function useOnramp() {
         // Don't block transaction if push token fails
       }
 
+      // Apple Pay Guest Checkout requires BOTH email and phone
+      const userEmail = currentUser?.authenticationMethods.email?.email || null;
+      const userPhone = currentUser?.authenticationMethods.phoneNumber?.phoneNumber || null;
+
       let phone = getVerifiedPhone();
       let phoneAt = getVerifiedPhoneAt();
+
+      // Check for missing auth methods (non-sandbox only)
+      if (!getSandboxMode()) {
+        // Check if email is missing or not linked
+        if (!userEmail) {
+          const missingEmailError: any = new Error('Email verification required for Apple Pay');
+          missingEmailError.code = 'MISSING_EMAIL';
+          throw missingEmailError;
+        }
+
+        // Check if phone is missing or not linked
+        if (!userPhone && (!phone || !isPhoneFresh60d())) {
+          const missingPhoneError: any = new Error('Phone verification required for Apple Pay');
+          missingPhoneError.code = 'MISSING_PHONE';
+          throw missingPhoneError;
+        }
+      }
+
+      // Sandbox: use mock phone
       if (getSandboxMode() && (!phone || !isPhoneFresh60d())) {
         phone = '+12345678901'; // Mock US number for sandbox
         phoneAt = Date.now();
@@ -192,7 +212,7 @@ export function useOnramp() {
         paymentMethod: "GUEST_CHECKOUT_APPLE_PAY",
         destinationNetwork: networkName,
         destinationAddress: destinationAddress,
-        email: userEmail,
+        email: userEmail || 'noemail@test.com', // Fallback (should never happen due to validation above)
         phoneNumber: phone,
         phoneNumberVerifiedAt: new Date(phoneAt!).toISOString(),
         partnerUserRef: partnerUserRef,

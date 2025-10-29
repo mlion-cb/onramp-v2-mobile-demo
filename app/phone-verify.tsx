@@ -3,11 +3,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CoinbaseAlert } from '../components/ui/CoinbaseAlerts';
-import { BASE_URL } from '../constants/BASE_URL';
 import { COLORS } from '../constants/Colors';
 import { TEST_ACCOUNTS } from '../constants/TestAccounts';
-import { authenticatedFetch } from '../utils/authenticatedFetch';
 import { clearPendingForm, markPhoneVerifyCanceled } from '../utils/sharedState';
+import { useSignInWithSms, useLinkSms, useCurrentUser, useIsSignedIn } from '@coinbase/cdp-hooks';
 
 const { DARK_BG, CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BORDER, BLUE, WHITE } = COLORS;
 
@@ -15,6 +14,8 @@ export default function PhoneVerifyScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const initialPhone = params.initialPhone as string || '';
+  const mode = (params.mode as 'signin' | 'link') || 'link'; // Default to link for backwards compat
+
   const [phoneDisplay, setPhoneDisplay] = useState(''); // What user sees: (201) 555-0123
   const [phoneE164, setPhoneE164] = useState(''); // What we send: +12015550123
 
@@ -23,6 +24,11 @@ export default function PhoneVerifyScreen() {
   const [alert, setAlert] = useState<{visible:boolean; title:string; message:string; type:'success'|'error'|'info'}>({
     visible:false, title:'', message:'', type:'info'
   });
+
+  // CDP hooks - use different hook based on mode
+  const { signInWithSms } = useSignInWithSms();
+  const { linkSms } = useLinkSms();
+  const { isSignedIn } = useIsSignedIn();
 
   // Format phone number as user types
   const formatPhoneNumber = (input: string) => {
@@ -76,52 +82,111 @@ export default function PhoneVerifyScreen() {
 
   const isPhoneValid = phoneE164.length === 12; // +1 + 10 digits
 
-
-  // const e164Like = (s: string) => /^\+[1-9]\d{6,15}$/.test(s.trim());
-
   const startSms = async () => {
     if (!isPhoneValid) {
       setAlert({ visible:true, title:'Error', message:'Please enter a valid US phone number', type:'error' });
       return;
     }
+
+    // For linking mode, ensure user is signed in
+    if (mode === 'link' && !isSignedIn) {
+      setAlert({
+        visible: true,
+        title: 'Not Signed In',
+        message: 'You must be signed in before linking a phone number. Please sign in first.',
+        type: 'error'
+      });
+      return;
+    }
+
     setSending(true);
     try {
-      // Check if this is test phone (TestFlight) - bypass Twilio
+      // Check if this is test phone (TestFlight) - bypass CDP
       if (phoneE164 === TEST_ACCOUNTS.phone) {
-        console.log('🧪 Test phone detected, skipping Twilio SMS');
+        console.log(`🧪 Test phone detected, skipping CDP SMS (mode: ${mode})`);
 
         // Navigate directly to code screen
         router.push({
           pathname: '/phone-code',
-          params: { phone: phoneE164 }
+          params: { phone: phoneE164, mode }
         });
         return;
       }
 
-      // Real phone verification flow (auth handled by authenticatedFetch)
-      console.log('📤 [SMS Start] Sending authenticated request to backend');
+      // Real phone verification flow via CDP
+      console.log(`📤 [SMS] Starting ${mode} flow for phone`);
+      console.log('Debug info:', {
+        phoneE164,
+        isSignedIn,
+        mode,
+        linkSmsType: typeof linkSms,
+        signInWithSmsType: typeof signInWithSms
+      });
 
-      const r = await authenticatedFetch(`${BASE_URL}/auth/sms/start`, {
-        method:'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ phone: phoneE164 }) // Send E164 format
-      }).then(res => res.json());
+      let result;
+      if (mode === 'signin') {
+        console.log('Calling signInWithSms with:', { phoneNumber: phoneE164 });
+        result = await signInWithSms({ phoneNumber: phoneE164 });
+      } else {
+        console.log('Calling linkSms with:', phoneE164);
+        result = await linkSms(phoneE164); // linkSms takes string directly
+      }
 
-      if (r.error) throw new Error(r.error);
+      console.log('Result from CDP:', result);
 
-      console.log('✅ [SMS Start] SMS sent successfully');
+      console.log(`✅ [SMS] ${mode} SMS sent successfully`);
 
       // Navigate to code verification page
       router.push({
         pathname: '/phone-code',
-        params: { phone: phoneE164 }
+        params: { phone: phoneE164, flowId: result.flowId, mode }
       });
-    } catch (e:any) {
-      console.error('❌ [SMS Start] Error:', e.message);
-      setAlert({ visible:true, title:'Error', message:e.message || 'Failed to send SMS', type:'error' });
-    } finally { setSending(false); }
+    } catch (e: any) {
+      console.error(`❌ [SMS] ${mode} error:`, e);
+      console.error('Error details:', {
+        message: e.message,
+        code: e.code,
+        status: e.status,
+        stack: e.stack
+      });
+
+      // Handle METHOD_ALREADY_LINKED - phone already linked to this user
+      if (e.code === 'METHOD_ALREADY_LINKED') {
+        console.log('✅ Phone already linked to your account');
+        setAlert({
+          visible: true,
+          title: 'Already Linked',
+          message: 'This phone number is already linked to your account.',
+          type: 'info'
+        });
+        // Navigate back after acknowledgment
+        setTimeout(() => router.back(), 2000);
+        return;
+      }
+
+      // Handle ACCOUNT_EXISTS - phone linked to different account
+      if (e.code === 'ACCOUNT_EXISTS') {
+        setAlert({
+          visible: true,
+          title: mode === 'signin' ? 'Sign In Instead?' : 'Phone Already Used',
+          message: mode === 'signin'
+            ? 'This phone number is already associated with another account. Would you like to sign in with that account instead?'
+            : 'This phone number is associated with another account. Please use a different number or sign in with that account.',
+          type: 'error'
+        });
+        return;
+      }
+
+      // Generic error
+      setAlert({
+        visible: true,
+        title: 'Error',
+        message: e.message || 'Failed to send SMS',
+        type: 'error'
+      });
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleBack = () => {
@@ -150,9 +215,13 @@ export default function PhoneVerifyScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.stepContainer}>
-            <Text style={styles.title}>What's your phone number?</Text>
+            <Text style={styles.title}>
+              {mode === 'signin' ? 'Sign in with phone' : 'Link your phone number'}
+            </Text>
             <Text style={styles.subtitle}>
-              We'll text you a code. We keep your number private and won't send spam.
+              {mode === 'signin'
+                ? "We'll text you a code to sign in. Standard message rates may apply."
+                : "We'll text you a code to link your phone. This is required for Apple Pay checkout."}
             </Text>
 
             <View style={styles.phoneInputContainer}>

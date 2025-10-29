@@ -65,8 +65,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
     const inAuthGroup = segments[0] === 'auth';
 
-    // Allow unauthenticated access to email/SMS verification flows
-    const publicRoutes = ['email-verify', 'email-code', 'sms-verify', 'sms-code'];
+    // Allow unauthenticated access to email/phone verification flows (for sign-in)
+    const publicRoutes = ['email-verify', 'email-code', 'phone-verify', 'phone-code'];
     const isPublicRoute = publicRoutes.includes(segments[0]);
 
     console.log('🔍 [AUTH GATE] Auth check:', {

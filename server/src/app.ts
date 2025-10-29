@@ -2,7 +2,6 @@ import express from 'express';
 import { z } from 'zod';
 
 import { generateJwt } from '@coinbase/cdp-sdk/auth';
-import twilio from 'twilio';
 import { resolveClientIp } from './ip.js';
 import { validateAccessToken } from './validateToken.js';
 import { verifyLegacySignature, verifyWebhookSignature } from './verifyWebhookSignature.js';
@@ -47,17 +46,6 @@ if (process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID && process.env.APNS_KEY)
   }
 } else {
   console.log('ℹ️ Using Expo push service for notifications (dev)');
-}
-
-let twilioClient: ReturnType<typeof import('twilio')> | null = null;
-function getTwilio() {
-  if (!twilioClient) {
-    const sid = process.env.TWILIO_ACCOUNT_SID;
-    const token = process.env.TWILIO_AUTH_TOKEN;
-    if (!sid || !token) throw new Error('Twilio env not configured');
-    twilioClient = twilio(sid, token);
-  }
-  return twilioClient;
 }
 
 const app = express();
@@ -192,44 +180,6 @@ app.post("/server/api", async (req, res) => {
   }
 });
 
-
-// Twilio SMS endpoints
-// Note: Authentication handled by global middleware above
-app.post('/auth/sms/start', async (req, res) => {
-  try {
-    const { phone } = req.body || {};
-    if (!phone) return res.status(400).json({ error: 'phone required' });
-
-    console.log('📱 [TWILIO] SMS start request - User:', req.userId, 'Phone:', phone);
-
-    const r = await getTwilio().verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
-      .verifications.create({ to: phone, channel: 'sms' });
-
-    console.log('✅ [TWILIO] SMS sent successfully - Status:', r.status);
-    res.json({ status: r.status });
-  } catch (e: any) {
-    console.error('❌ [TWILIO] SMS start error:', e.message);
-    res.status(500).json({ error: e.message || 'twilio start error' });
-  }
-});
-
-app.post('/auth/sms/verify', async (req, res) => {
-  try {
-    const { phone, code } = req.body || {};
-    if (!phone || !code) return res.status(400).json({ error: 'phone and code required' });
-
-    console.log('🔐 [TWILIO] SMS verify request - User:', req.userId, 'Phone:', phone);
-
-    const r = await getTwilio().verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
-      .verificationChecks.create({ to: phone, code });
-
-    console.log('✅ [TWILIO] SMS verification result - Status:', r.status, 'Valid:', r.valid);
-    return res.json({ status: r.status, valid: r.valid });
-  } catch (e:any) {
-    console.error('❌ [TWILIO] SMS verify error:', e.message);
-    return res.status(500).json({ error: e.message || 'twilio verify error' });
-  }
-});
 
 /**
  * EVM Token Balance Endpoint
