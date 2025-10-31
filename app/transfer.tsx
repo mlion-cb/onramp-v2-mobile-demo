@@ -140,7 +140,10 @@ From: ${smartAccountAddress}
       return false;
     }
 
-    if (network === 'solana') {
+    // Check if network is Solana (includes both 'solana' and 'solana-devnet')
+    const isSolanaNetwork = network?.toLowerCase().includes('solana');
+
+    if (isSolanaNetwork) {
       // Solana address validation (base58, 32-44 chars)
       if (!address.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)) {
         setAddressError('Invalid Solana address format');

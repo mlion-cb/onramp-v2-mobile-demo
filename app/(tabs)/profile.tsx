@@ -92,6 +92,7 @@ import {
   useExportSolanaAccount,
   useIsInitialized,
   useIsSignedIn,
+  useLinkSms,
   useSignOut,
   useSolanaAddress,
 } from "@coinbase/cdp-hooks";
@@ -117,6 +118,7 @@ export default function WalletScreen() {
   const { isSignedIn } = useIsSignedIn();
   const { currentUser } = useCurrentUser();
   const { signOut } = useSignOut();
+  const { linkSms } = useLinkSms();
 
   const [alertState, setAlertState] = useState({
     visible: false,
@@ -222,6 +224,31 @@ export default function WalletScreen() {
     }, [])
   );
 
+  // Clear stale verified phone data when user changes or CDP phone doesn't match
+  useEffect(() => {
+    const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
+    const storedVerifiedPhone = getVerifiedPhone();
+
+    // If there's a stored verified phone but no CDP phone, clear it (user signed in with different account)
+    if (storedVerifiedPhone && !cdpPhone) {
+      console.log('🧹 [PROFILE] Clearing stale verified phone (no CDP phone)');
+      setVerifiedPhone(null).then(() => {
+        setVerifiedPhoneLocal(null);
+        setPhoneFresh(false);
+        setPhoneExpiry(-1);
+      });
+    }
+    // If stored phone doesn't match CDP phone, clear it (switched accounts or unlinked phone)
+    else if (storedVerifiedPhone && cdpPhone && storedVerifiedPhone !== cdpPhone) {
+      console.log('🧹 [PROFILE] Clearing stale verified phone (mismatch with CDP)');
+      setVerifiedPhone(null).then(() => {
+        setVerifiedPhoneLocal(null);
+        setPhoneFresh(false);
+        setPhoneExpiry(-1);
+      });
+    }
+  }, [currentUser]);
+
 
   const [productionSwitchAlertVisible, setProductionSwitchAlertVisible] = useState(false); 
 
@@ -262,12 +289,43 @@ export default function WalletScreen() {
     }
   }, [manualAddress, localSandboxEnabled]);
 
-  const openPhoneVerify = useCallback(() => {
-    router.push({
-      pathname: '/phone-verify',
-      params: { initialPhone: verifiedPhone || '', mode: 'link' }
-    });
-  }, [router, verifiedPhone]);
+  const openPhoneVerify = useCallback(async () => {
+    const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
+
+    // If phone already linked to CDP, skip phone entry and go straight to OTP
+    if (cdpPhone) {
+      try {
+        console.log('📱 [PROFILE] Re-verifying existing phone:', cdpPhone);
+
+        // Trigger OTP via CDP
+        const result = await linkSms(cdpPhone);
+
+        // Go directly to code entry screen
+        router.push({
+          pathname: '/phone-code',
+          params: {
+            phone: cdpPhone,
+            flowId: result.flowId,
+            mode: 'link'
+          }
+        });
+      } catch (error: any) {
+        console.error('❌ [PROFILE] Failed to send OTP:', error);
+
+        // If OTP sending fails, fall back to phone entry screen
+        router.push({
+          pathname: '/phone-verify',
+          params: { initialPhone: cdpPhone, mode: 'link' }
+        });
+      }
+    } else {
+      // No phone linked yet, go to phone entry screen
+      router.push({
+        pathname: '/phone-verify',
+        params: { initialPhone: verifiedPhone || '', mode: 'link' }
+      });
+    }
+  }, [router, verifiedPhone, currentUser, linkSms]);
 
   const openEmailLink = useCallback(() => {
     router.push('/email-verify?mode=link');
@@ -768,11 +826,21 @@ export default function WalletScreen() {
 
                   {/* Phone Link/Verify Buttons */}
                   {(() => {
-                    const hasPhoneInCDP = currentUser?.authenticationMethods?.sms?.phoneNumber;
-                    const hasLocalPhone = verifiedPhone;
-                    const showLinkButton = !hasPhoneInCDP && !hasLocalPhone && !testSession;
+                    const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
 
-                    if (showLinkButton) {
+                    console.log('📱 [PHONE BUTTON] Debug:', {
+                      cdpPhone,
+                      verifiedPhone,
+                      phoneFresh,
+                      testSession,
+                      match: verifiedPhone === cdpPhone
+                    });
+
+                    // Skip button for test sessions
+                    if (testSession) return null;
+
+                    // No phone in CDP → Link Phone
+                    if (!cdpPhone) {
                       return (
                         <Pressable style={styles.button} onPress={openPhoneVerify}>
                           <Text style={styles.buttonText}>Link Phone</Text>
@@ -780,10 +848,17 @@ export default function WalletScreen() {
                       );
                     }
 
+                    // Has CDP phone but verified and fresh → No button needed
+                    if (verifiedPhone === cdpPhone && phoneFresh) {
+                      return null;
+                    }
+
+                    // Has CDP phone but not verified or expired → Show verify/re-verify
+                    const isExpired = verifiedPhone === cdpPhone && !phoneFresh;
                     return (
-                      <Pressable style={[styles.button, phoneFresh ? { backgroundColor: BORDER } : null]} onPress={openPhoneVerify}>
-                        <Text style={[styles.buttonText, phoneFresh ? { color: TEXT_PRIMARY } : null]}>
-                          {verifiedPhone ? (phoneFresh ? 'Update phone' : 'Re-verify phone') : 'Verify phone'}
+                      <Pressable style={styles.button} onPress={openPhoneVerify}>
+                        <Text style={styles.buttonText}>
+                          {isExpired ? 'Re-verify phone' : 'Verify phone'}
                         </Text>
                       </Pressable>
                     );

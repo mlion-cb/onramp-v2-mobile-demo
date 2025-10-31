@@ -30,61 +30,28 @@ export default function PhoneVerifyScreen() {
   const { linkSms } = useLinkSms();
   const { isSignedIn } = useIsSignedIn();
 
-  // Format phone number as user types
-  const formatPhoneNumber = (input: string) => {
-    // Remove all non-digits
-    const digits = input.replace(/\D/g, '');
-    
-    // Limit to 10 digits (US phone number)
-    const limitedDigits = digits.slice(0, 10);
-    
-    // Format based on length
-    if (limitedDigits.length === 0) {
-      return '';
-    } else if (limitedDigits.length <= 3) {
-      return `(${limitedDigits}`;
-    } else if (limitedDigits.length <= 6) {
-      return `(${limitedDigits.slice(0, 3)}) ${limitedDigits.slice(3)}`;
-    } else {
-      return `(${limitedDigits.slice(0, 3)}) ${limitedDigits.slice(3, 6)}-${limitedDigits.slice(6)}`;
-    }
-  };
-
+  // TEMPORARY: Allow international numbers for testing
+  // Just accept raw input with country code (e.g., +6591234567)
   const handlePhoneChange = (input: string) => {
-    // If user is deleting and hits a formatted character, remove it
-    if (input.length < phoneDisplay.length) {
-      // User is deleting - extract just the digits
-      const digits = input.replace(/\D/g, '');
-      const formatted = formatPhoneNumber(digits);
-      setPhoneDisplay(formatted);
-      
-      // Convert to E164 format
-      if (digits.length === 10) {
-        setPhoneE164(`+1${digits}`);
-      } else {
-        setPhoneE164('');
-      }
-      return;
-    }
-    
-    // User is typing - normal formatting
-    const formatted = formatPhoneNumber(input);
-    setPhoneDisplay(formatted);
-    
-    // Convert to E164 format
-    const digits = input.replace(/\D/g, '');
-    if (digits.length === 10) {
-      setPhoneE164(`+1${digits}`);
+    setPhoneDisplay(input);
+
+    // Convert to E164 format (just the input as-is if it starts with +)
+    if (input.startsWith('+')) {
+      setPhoneE164(input);
+    } else if (input.replace(/\D/g, '').length === 10) {
+      // US number without +1 prefix
+      setPhoneE164(`+1${input.replace(/\D/g, '')}`);
     } else {
       setPhoneE164('');
     }
   };
 
-  const isPhoneValid = phoneE164.length === 12; // +1 + 10 digits
+  // TEMPORARY: Accept any phone number with + and at least 8 digits (international)
+  const isPhoneValid = phoneE164.startsWith('+') && phoneE164.replace(/\D/g, '').length >= 8;
 
   const startSms = async () => {
     if (!isPhoneValid) {
-      setAlert({ visible:true, title:'Error', message:'Please enter a valid US phone number', type:'error' });
+      setAlert({ visible:true, title:'Error', message:'Please enter a valid phone number with country code (e.g., +6591234567)', type:'error' });
       return;
     }
 
@@ -225,17 +192,15 @@ export default function PhoneVerifyScreen() {
             </Text>
 
             <View style={styles.phoneInputContainer}>
-              <Text style={styles.countryCode}>🇺🇸 +1</Text>
               <TextInput
                 style={styles.phoneInput}
                 value={phoneDisplay}
                 onChangeText={handlePhoneChange}
-                placeholder="(201) 555-0123"
+                placeholder="+6591234567 or +12015550123"
                 placeholderTextColor={TEXT_SECONDARY}
                 keyboardType="phone-pad"
                 editable={!sending}
                 autoFocus
-                maxLength={14}
               />
             </View>
 

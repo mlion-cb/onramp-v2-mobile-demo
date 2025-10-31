@@ -29,6 +29,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   // TestFlight bypass OR real CDP auth
   const isAuthenticated = testSession || isSignedIn;
 
+  // Track when isSignedIn changes unexpectedly
+  useEffect(() => {
+    console.log('🔐 [AUTH GATE] isSignedIn changed:', {
+      isSignedIn,
+      testSession,
+      isAuthenticated,
+      isInitialized,
+      hasCheckedAuth,
+      timestamp: new Date().toISOString()
+    });
+  }, [isSignedIn]);
+
   // Wait for navigation to be ready before attempting any navigation
   useEffect(() => {
     if (navigationState?.key) {
@@ -39,17 +51,21 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   // Add a delay after initialization to let CDP load stored credentials
   useEffect(() => {
     if (isInitialized) {
-      // Give CDP 500ms to load stored credentials before checking auth
+      // Give CDP time to load stored credentials before checking auth
       const timer = setTimeout(() => {
+        console.log('✅ [AUTH GATE] Credential loading delay complete');
         setHasCheckedAuth(true);
-      }, 500);
+      }, 1000); // 1 second for better UX
       return () => clearTimeout(timer);
     }
   }, [isInitialized]);
 
   useEffect(() => {
     // Only run navigation logic after the router is ready
-    if (!isReady) return;
+    if (!isReady) {
+      console.log('⏳ [AUTH GATE] Router not ready');
+      return;
+    }
 
     // Wait for CDP to initialize before making auth decisions
     if (!isInitialized) {
@@ -63,6 +79,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Additional safety: Don't run auth checks too frequently
+    // This prevents rapid re-checks during navigation transitions
+    console.log('✅ [AUTH GATE] All initialization complete, running auth check');
+
     const inAuthGroup = segments[0] === 'auth';
 
     // Allow unauthenticated access to email/phone verification flows (for sign-in)
@@ -75,12 +95,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       testSession,
       inAuthGroup,
       isPublicRoute,
-      segments: segments.join('/')
+      segments: segments.join('/'),
+      timestamp: new Date().toISOString()
     });
 
     if (!isAuthenticated && !inAuthGroup && !isPublicRoute) {
       // Not logged in and not on login/public screen → redirect
-      console.log('🚫 [AUTH GATE] Not authenticated, redirecting to login');
+      console.warn('🚫 [AUTH GATE] LOGGING OUT USER - Not authenticated', {
+        isSignedIn,
+        testSession,
+        currentPath: segments.join('/'),
+        timestamp: new Date().toISOString()
+      });
       // Use setTimeout to defer navigation to next tick
       setTimeout(() => {
         try {

@@ -83,7 +83,7 @@ export default function LoginScreen() {
         <Text style={styles.title}>Onramp V2 Demo</Text>
         <Text style={styles.subtitle}>
           Buy crypto with your wallet{'\n'}
-          Powered by Coinbase Developer Platform Embedded Wallet
+          Powered by Coinbase Developer Platform
         </Text>
 
         {/* Auth Method Selection */}

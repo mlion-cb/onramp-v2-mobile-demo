@@ -536,7 +536,11 @@ app.post('/push-tokens', async (req, res) => {
 
     // Security: Verify the authenticated user matches the userId they're trying to register
     if (req.userId !== userId) {
-      console.error('❌ [PUSH] Unauthorized token registration attempt');
+      console.error('❌ [PUSH] Unauthorized token registration attempt:', {
+        tokenUserId: req.userId,
+        requestUserId: userId,
+        match: req.userId === userId
+      });
       return res.status(403).json({ error: 'Forbidden: Cannot register push token for another user' });
     }
 

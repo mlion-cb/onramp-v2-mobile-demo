@@ -159,6 +159,14 @@ export function useOnramp() {
 
       // Check for missing auth methods (non-sandbox only)
       if (!getSandboxMode()) {
+        console.log('🔒 [APPLE PAY] Production mode - validating phone/email:', {
+          userEmail,
+          cdpPhone,
+          verifiedPhone: phone,
+          phoneAt,
+          isPhoneFresh: isPhoneFresh60d()
+        });
+
         // Check if email is missing or not linked
         if (!userEmail) {
           const missingEmailError: any = new Error('Email verification required for Apple Pay');
@@ -175,10 +183,16 @@ export function useOnramp() {
 
         // Check if CDP phone matches verified phone AND is fresh (60 days)
         if (phone !== cdpPhone || !isPhoneFresh60d()) {
+          console.log('🚫 [APPLE PAY] Phone verification failed:', {
+            phoneMatch: phone === cdpPhone,
+            isFresh: isPhoneFresh60d()
+          });
           const missingPhoneError: any = new Error('Phone verification required for Apple Pay. Please verify your phone on the Profile page.');
           missingPhoneError.code = 'MISSING_PHONE';
           throw missingPhoneError;
         }
+      } else {
+        console.log('🧪 [APPLE PAY] Sandbox mode - skipping phone validation');
       }
 
       // Sandbox: use mock phone if no verified phone
@@ -196,6 +210,15 @@ export function useOnramp() {
       const isSandbox = getSandboxMode();
 
       let destinationAddress = formData.address;
+      console.log('🎯 [ONRAMP] Address debug:', {
+        formDataAddress: formData.address,
+        network: networkName,
+        isEvmNetwork,
+        isSandbox,
+        currentUserSolana: currentUser?.solanaAccounts?.[0],
+        currentUserEvm: currentUser?.evmSmartAccounts?.[0]
+      });
+
       if (!isSandbox && isEvmNetwork) {
         // TestFlight reviewers use hardcoded address as their "smart account"
         const isTestFlight = isTestSessionActive();
@@ -286,9 +309,21 @@ export function useOnramp() {
 
       // CRITICAL: For EVM networks, MUST use Smart Account (same as Apple Pay)
       const isEvmNetwork = ['base', 'ethereum', 'polygon', 'arbitrum', 'optimism', 'avalanche', 'linea', 'zksync'].includes(networkName.toLowerCase());
+      const isSolanaNetwork = networkName.toLowerCase().includes('solana');
       const isSandbox = getSandboxMode();
 
       let destinationAddress = formData.address;
+
+      console.log('🎯 [WIDGET SESSION] Address before processing:', {
+        formDataAddress: formData.address,
+        network: networkName,
+        isEvmNetwork,
+        isSolanaNetwork,
+        isSandbox,
+        currentUserSolana: currentUser?.solanaAccounts?.[0],
+        currentUserEvm: currentUser?.evmSmartAccounts?.[0]
+      });
+
       if (!isSandbox && isEvmNetwork) {
         // TestFlight reviewers use hardcoded address as their "smart account"
         const isTestFlight = isTestSessionActive();
@@ -301,7 +336,21 @@ export function useOnramp() {
         }
         destinationAddress = smartAccount;
         console.log('🔒 [ONRAMP] Using Smart Account for EVM widget transaction:', smartAccount);
+      } else if (!isSandbox && isSolanaNetwork) {
+        // For Solana in production, use real Solana address from CDP
+        const isTestFlight = isTestSessionActive();
+        const solanaAddress = isTestFlight
+          ? TEST_ACCOUNTS.wallets.solana  // TestFlight: Use hardcoded address
+          : (currentUser?.solanaAccounts?.[0] as string); // Real users: Use CDP Solana Account
+
+        if (!solanaAddress) {
+          throw new Error('Solana account required for Solana onramp transactions. Please ensure your Embedded Wallet is properly initialized.');
+        }
+        destinationAddress = solanaAddress;
+        console.log('🔒 [ONRAMP] Using Solana Account for Solana widget transaction:', solanaAddress);
       }
+
+      console.log('✅ [WIDGET SESSION] Final destination address:', destinationAddress);
 
       // Auth handled by authenticatedFetch
       const res = await createOnrampSession({
