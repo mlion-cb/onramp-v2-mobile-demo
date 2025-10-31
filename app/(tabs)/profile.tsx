@@ -292,13 +292,30 @@ export default function WalletScreen() {
   const openPhoneVerify = useCallback(async () => {
     const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
 
-    // If phone already linked to CDP, skip phone entry and go straight to OTP
+    console.log('📱 [PROFILE] openPhoneVerify called:', {
+      cdpPhone,
+      hasCurrentUser: !!currentUser,
+      authMethods: currentUser?.authenticationMethods
+    });
+
+    // If phone already linked to CDP, automatically send OTP and go to code screen
     if (cdpPhone) {
       try {
-        console.log('📱 [PROFILE] Re-verifying existing phone:', cdpPhone);
+        console.log('📱 [PROFILE] Phone already linked, sending OTP automatically');
+        console.log('📱 [PROFILE] Phone format:', {
+          raw: cdpPhone,
+          type: typeof cdpPhone,
+          length: cdpPhone.length,
+          startsWithPlus: cdpPhone.startsWith('+')
+        });
 
         // Trigger OTP via CDP
         const result = await linkSms(cdpPhone);
+
+        console.log('✅ [PROFILE] OTP sent successfully:', {
+          flowId: result.flowId,
+          hasFlowId: !!result.flowId
+        });
 
         // Go directly to code entry screen
         router.push({
@@ -310,15 +327,31 @@ export default function WalletScreen() {
           }
         });
       } catch (error: any) {
-        console.error('❌ [PROFILE] Failed to send OTP:', error);
+        console.error('❌ [PROFILE] Failed to send OTP:', {
+          message: error.message,
+          code: error.code,
+          status: error.status,
+          fullError: error
+        });
 
-        // If OTP sending fails, fall back to phone entry screen
-        router.push({
-          pathname: '/phone-verify',
-          params: { initialPhone: cdpPhone, mode: 'link' }
+        // Build detailed error message
+        let errorMessage = error.message || 'Unable to send verification code. Please try again.';
+        if (error.code || error.status) {
+          errorMessage += '\n\nError Details:';
+          if (error.code) errorMessage += `\nCode: ${error.code}`;
+          if (error.status) errorMessage += `\nStatus: ${error.status}`;
+        }
+
+        // Show error alert
+        setAlertState({
+          visible: true,
+          title: 'Failed to Send Code',
+          message: errorMessage,
+          type: 'error'
         });
       }
     } else {
+      console.log('📱 [PROFILE] No CDP phone, navigating to phone entry screen');
       // No phone linked yet, go to phone entry screen
       router.push({
         pathname: '/phone-verify',
