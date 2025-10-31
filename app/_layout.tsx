@@ -69,14 +69,14 @@ export default function RootLayout() {
               name="phone-verify"
               options={{
                 presentation: 'card',
-                animation: 'none',
+                animation: 'slide_from_right',
               }}
             />
             <Stack.Screen
                 name="phone-code"
                 options={{
                   presentation: 'card',
-                  animation: 'none',
+                  animation: 'slide_from_right',
                 }}
             />
 

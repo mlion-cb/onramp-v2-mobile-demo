@@ -88,7 +88,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PHONE_KEY = 'verifiedPhone';
 const PHONE_AT_KEY = 'verifiedPhoneAt';
-export const PHONE_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
+// export const PHONE_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
+export const PHONE_TTL_MS = 60 * 1000; // 1 minute
 
 let currentPartnerUserRef: string | null = null;
 let currentWalletAddress: string | null = null;

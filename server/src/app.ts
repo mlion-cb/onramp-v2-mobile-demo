@@ -185,7 +185,7 @@ app.post("/server/api", async (req, res) => {
  * EVM Token Balance Endpoint
  * GET /balances/evm?address=0x...&network=base
  *
- * Supported networks: base, ethereum (mainnet only)
+ * Supported networks: base, ethereum, base-sepolia (testnets)
  * Returns token balances with USD prices from Coinbase Price API
  */
 app.get('/balances/evm', async (req, res) => {
@@ -200,13 +200,83 @@ app.get('/balances/evm', async (req, res) => {
       return res.status(400).json({ error: 'Invalid EVM address format' });
     }
 
-    const validNetworks = ['base', 'ethereum'];
+    const validNetworks = ['base', 'ethereum', 'base-sepolia', 'ethereum-sepolia'];
     if (!validNetworks.includes(network as string)) {
       return res.status(400).json({ error: `Invalid network. Supported: ${validNetworks.join(', ')}` });
     }
 
     console.log(`💰 [BALANCES] Fetching EVM balances - Address: ${address}, Network: ${network}`);
 
+    // Ethereum Sepolia uses v1 REST API with network name (not chain ID)
+    if (network === 'ethereum-sepolia') {
+      const balancesPath = `/platform/v1/networks/ethereum-sepolia/addresses/${address}/balances`;
+      const balancesUrl = `https://api.cdp.coinbase.com${balancesPath}`;
+
+      console.log(`🔗 [BALANCES] Ethereum Sepolia URL (v1 API): ${balancesUrl}`);
+
+      const authToken = await generateJwt({
+        apiKeyId: process.env.CDP_API_KEY_ID!,
+        apiKeySecret: process.env.CDP_API_KEY_SECRET!,
+        requestMethod: 'GET',
+        requestHost: 'api.cdp.coinbase.com',
+        requestPath: balancesPath,
+        expiresIn: 120
+      });
+
+      const balancesResponse = await fetch(balancesUrl, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+
+      console.log(`📡 [BALANCES] Response status: ${balancesResponse.status} ${balancesResponse.statusText}`);
+
+      if (!balancesResponse.ok) {
+        const errorText = await balancesResponse.text();
+        console.error('❌ [BALANCES] CDP API error response:', errorText);
+
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { message: errorText };
+        }
+
+        console.error('❌ [BALANCES] CDP API error details:', errorData);
+        return res.status(balancesResponse.status).json({
+          error: 'Failed to fetch Ethereum Sepolia balances from CDP',
+          details: errorData
+        });
+      }
+
+      const balancesData = await balancesResponse.json();
+      const balances = balancesData.data || [];
+
+      console.log(`✅ [BALANCES] Ethereum Sepolia RAW response:`, JSON.stringify(balancesData, null, 2));
+      console.log(`✅ [BALANCES] Fetched ${balances.length} Ethereum Sepolia balances`);
+
+      // Transform v1 response to match v2 format
+      const transformedBalances = balances
+        .filter((b: any) => parseFloat(b.amount || '0') > 0)
+        .map((b: any) => ({
+          token: {
+            symbol: (b.asset?.asset_id || 'UNKNOWN').toUpperCase(), // asset_id is lowercase, convert to uppercase
+            contractAddress: b.asset?.contract_address || null,
+            name: b.asset?.name || null,
+          },
+          amount: {
+            amount: b.amount || '0',
+            decimals: String(b.asset?.decimals || '18'), // Ensure string format
+          },
+          usdValue: null,
+        }));
+
+      return res.json({
+        balances: transformedBalances,
+        totalBalances: transformedBalances.length
+      });
+    }
+
+    // For other networks (base, ethereum, base-sepolia), use v2 API
     const balancesPath = `/platform/v2/evm/token-balances/${network}/${address}`;
     const balancesUrl = `https://api.cdp.coinbase.com${balancesPath}`;
 
@@ -314,14 +384,14 @@ app.get('/balances/evm', async (req, res) => {
 
 /**
  * Solana Token Balance Endpoint
- * GET /balances/solana?address=...
+ * GET /balances/solana?address=...&network=solana
  *
+ * Supported networks: solana (mainnet), solana-devnet (testnet)
  * Returns SPL token balances with USD prices from Coinbase Price API
  */
 app.get('/balances/solana', async (req, res) => {
   try {
-    const { address } = req.query;
-    const network = 'solana';
+    const { address, network = 'solana' } = req.query;
 
     if (!address || typeof address !== 'string') {
       return res.status(400).json({ error: 'address query parameter required' });
@@ -332,7 +402,12 @@ app.get('/balances/solana', async (req, res) => {
       return res.status(400).json({ error: 'Invalid Solana address format' });
     }
 
-    console.log(`💰 [BALANCES] Fetching Solana balances - Address: ${address}`);
+    const validNetworks = ['solana', 'solana-devnet'];
+    if (!validNetworks.includes(network as string)) {
+      return res.status(400).json({ error: `Invalid network. Supported: ${validNetworks.join(', ')}` });
+    }
+
+    console.log(`💰 [BALANCES] Fetching Solana balances - Address: ${address}, Network: ${network}`);
 
     const balancesPath = `/platform/v2/solana/token-balances/${network}/${address}`;
     const balancesUrl = `https://api.cdp.coinbase.com${balancesPath}`;

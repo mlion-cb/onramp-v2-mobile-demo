@@ -129,7 +129,9 @@ export default function PhoneCodeScreen() {
           await new Promise(resolve => setTimeout(resolve, 200)); // Check every 200ms
         }
 
-        console.log('✅ Phone sign-in successful, wallet ready');
+        // Mark phone as verified (fresh OTP = verified for 60 days)
+        await setVerifiedPhone(phone);
+        console.log('✅ Phone sign-in successful, wallet ready, phone verified');
         router.dismissAll();
       } else {
         // Link phone to existing account

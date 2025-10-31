@@ -752,7 +752,7 @@ export function OnrampForm({
           </Text>
 
           <Text style={[styles.notificationText, styles.italicNote]}>
-            You may toggle to Production Mode to test with a real wallet on the <Text style={styles.badgeProd}>Profile</Text> page.
+            You may toggle to Production Mode to test with a real wallet.
           </Text>
         </View>
       ) : isSignedIn ? (
@@ -766,7 +766,7 @@ export function OnrampForm({
           </Text>
           {address ? (
             <Text style={[styles.notificationText, { marginTop: 8, fontFamily: 'monospace' }]}>
-              Using: {address.slice(0, 8)}...{address.slice(-6)}
+              Using: {address}
             </Text>
           ) : !isEvmNetwork && !isSolanaNetwork ? (
             <Text style={[styles.notificationText, { marginTop: 8, fontStyle: 'italic', color: TEXT_SECONDARY }]}>

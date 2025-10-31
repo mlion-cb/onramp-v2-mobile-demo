@@ -19,6 +19,7 @@ import { isTestSessionActive } from '@/utils/sharedState';
 import { useCurrentUser, useSendSolanaTransaction, useSendUserOperation, useSolanaAddress } from '@coinbase/cdp-hooks';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
+import { createTransferInstruction, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, getAccount } from '@solana/spl-token';
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -333,44 +334,116 @@ From: ${smartAccountAddress}
     try {
       const amountFloat = parseFloat(amount);
       const decimals = parseInt(selectedToken.amount?.decimals || '9');
-      const amountLamports = Math.floor(amountFloat * Math.pow(10, decimals));
+      const amountRaw = Math.floor(amountFloat * Math.pow(10, decimals));
 
-      // Native SOL transfer using Solana web3.js
-      // Note: This only works for native SOL. For SPL tokens (USDC, EURC, etc.),
-      // users should export their private key and use a full wallet like Phantom.
+      // Check if this is an SPL token (has mintAddress) or native SOL
+      const isSPLToken = selectedToken.token?.mintAddress;
+      const tokenSymbol = selectedToken.token?.symbol || 'SOL';
+      const isDevnet = network?.toLowerCase().includes('devnet');
+
       console.log('🔄 [SOLANA] Building transfer transaction:', {
         from: solanaAddress,
         to: recipientAddress,
-        lamports: amountLamports
+        amount: amountRaw,
+        isSPLToken,
+        isDevnet,
+        network,
+        mintAddress: selectedToken.token?.mintAddress
       });
 
       // Show pending alert
       showAlert(
         'Transaction Pending ⏳',
-        `Building and submitting Solana transaction...\n\nAmount: ${amount} SOL\nTo: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}\n\nPlease do NOT close this alert until transaction is complete. This may take a few seconds.`,
+        `Building and submitting Solana transaction...\n\nAmount: ${amount} ${tokenSymbol}\nTo: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}\n\nPlease do NOT close this alert until transaction is complete. This may take a few seconds.`,
         'info'
       );
 
-      // Create Solana connection to fetch recent blockhash
+      // Create Solana connection - use network parameter to determine cluster
       const { Connection, clusterApiUrl } = await import('@solana/web3.js');
-      const connection = new Connection(clusterApiUrl('mainnet-beta'));
+      const cluster = isDevnet ? 'devnet' : 'mainnet-beta';
+      const connection = new Connection(clusterApiUrl(cluster));
 
       // Fetch recent blockhash
       const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
-      // Create Solana transaction with System Program transfer instruction
-      const transaction = new Transaction({
-        recentBlockhash: blockhash,
-        feePayer: new PublicKey(solanaAddress)
-      }).add(
-        SystemProgram.transfer({
-          fromPubkey: new PublicKey(solanaAddress),
-          toPubkey: new PublicKey(recipientAddress),
-          lamports: amountLamports
-        })
-      );
+      let transaction: Transaction;
 
-      // Serialize transaction to base64
+      if (isSPLToken) {
+        // SPL Token Transfer (USDC, etc.) - only on devnet
+        console.log('📦 [SPL] Building SPL token transfer...');
+
+        const mintAddress = new PublicKey(selectedToken.token.mintAddress);
+        const fromPubkey = new PublicKey(solanaAddress);
+        const toPubkey = new PublicKey(recipientAddress);
+
+        // Get sender's token account (ATA)
+        const fromTokenAccount = await getAssociatedTokenAddress(
+          mintAddress,
+          fromPubkey
+        );
+
+        // Get recipient's token account (ATA)
+        const toTokenAccount = await getAssociatedTokenAddress(
+          mintAddress,
+          toPubkey
+        );
+
+        // Check if recipient's token account exists
+        let needsATACreation = false;
+        try {
+          await getAccount(connection, toTokenAccount);
+          console.log('✅ [SPL] Recipient ATA exists');
+        } catch (error) {
+          console.log('⚠️ [SPL] Recipient ATA does not exist, will create');
+          needsATACreation = true;
+        }
+
+        transaction = new Transaction({
+          recentBlockhash: blockhash,
+          feePayer: fromPubkey
+        });
+
+        // Add create ATA instruction if needed
+        if (needsATACreation) {
+          transaction.add(
+            createAssociatedTokenAccountInstruction(
+              fromPubkey, // payer
+              toTokenAccount, // ata
+              toPubkey, // owner
+              mintAddress // mint
+            )
+          );
+          console.log('📝 [SPL] Added create ATA instruction');
+        }
+
+        // Add transfer instruction
+        transaction.add(
+          createTransferInstruction(
+            fromTokenAccount, // source
+            toTokenAccount, // destination
+            fromPubkey, // owner
+            amountRaw // amount
+          )
+        );
+
+        console.log('✅ [SPL] Transaction built with', transaction.instructions.length, 'instructions');
+      } else {
+        // Native SOL transfer
+        console.log('💎 [SOL] Building native SOL transfer...');
+
+        transaction = new Transaction({
+          recentBlockhash: blockhash,
+          feePayer: new PublicKey(solanaAddress)
+        }).add(
+          SystemProgram.transfer({
+            fromPubkey: new PublicKey(solanaAddress),
+            toPubkey: new PublicKey(recipientAddress),
+            lamports: amountRaw
+          })
+        );
+      }
+
+      // Serialize transaction to base64 (required by CDP API)
       const serializedTransaction = transaction.serialize({
         requireAllSignatures: false,
         verifySignatures: false
@@ -378,10 +451,13 @@ From: ${smartAccountAddress}
 
       console.log('📤 [SOLANA] Sending transaction...');
 
+      // Determine CDP network parameter
+      const cdpNetwork = isDevnet ? 'solana-devnet' : 'solana';
+
       // Send transaction using CDP hook
       const result = await sendSolanaTransaction({
         solanaAccount: solanaAddress,
-        network: 'solana' as any,
+        network: cdpNetwork as any,
         transaction: serializedTransaction
       });
 
@@ -390,18 +466,22 @@ From: ${smartAccountAddress}
       setTxHash(result.transactionSignature);
 
       // Show success alert with signature
+      const explorerUrl = isDevnet
+        ? `https://explorer.solana.com/tx/${result.transactionSignature}?cluster=devnet`
+        : `https://solscan.io/tx/${result.transactionSignature}`;
+
       const successInfo = `🔍 TRANSACTION CONFIRMED:
 
 Signature:
 ${result.transactionSignature}
 
-Amount: ${amount} SOL
-Network: Solana
+Amount: ${amount} ${tokenSymbol}
+Network: Solana ${isDevnet ? 'Devnet' : 'Mainnet'}
 From: ${solanaAddress.slice(0, 6)}...${solanaAddress.slice(-4)}
 To: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}
 
-📋 Search on block explorer:
-- Solana: solscan.io or explorer.solana.com`;
+📋 View on explorer:
+${explorerUrl}`;
 
       showAlert(
         'Transfer Complete! ✨',
@@ -442,17 +522,17 @@ To: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Solana SPL Token Notice */}
-          {network === 'solana' && (
+          {/* Solana SPL Token Notice - only show on mainnet SPL tokens */}
+          {network === 'solana' && selectedToken?.token?.mintAddress && (
             <View style={[styles.card, { backgroundColor: '#FFF3CD', borderColor: '#FFC107' }]}>
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
                 <Ionicons name="information-circle" size={20} color="#856404" style={{ marginTop: 2 }} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.helper, { color: '#856404', fontWeight: '600' }]}>
-                    Solana Network Note
+                    Mainnet SPL Token
                   </Text>
                   <Text style={[styles.helper, { color: '#856404', marginTop: 4 }]}>
-                    Only native SOL transfers are supported. To transfer SPL tokens (USDC, USDT, etc.), export your private key from the Profile tab.
+                    SPL token transfers are only supported on Solana Devnet. For mainnet SPL tokens, please export your private key from the Profile tab.
                   </Text>
                 </View>
               </View>
