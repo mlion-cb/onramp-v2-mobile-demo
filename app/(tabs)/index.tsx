@@ -307,11 +307,13 @@ export default function Index() {
     title: string;
     message: string;
     type: 'success' | 'error' | 'info';
+    navigationPath?: string;
   }>({
     visible: false,
     title: '',
     message: '',
-    type: 'info'
+    type: 'info',
+    navigationPath: undefined
   });
 
 
@@ -490,13 +492,9 @@ export default function Index() {
           visible: true,
           title: 'Link Email for Apple Pay',
           message: 'Apple Pay requires both email and phone verification for compliance.\n\nWould you like to link your email to this account to continue?',
-          type: 'info'
+          type: 'info',
+          navigationPath: '/email-verify?mode=link'
         });
-        // Note: User can dismiss alert to cancel, or we navigate after acknowledgment
-        setTimeout(() => {
-          router.push('/email-verify?mode=link');
-          setApplePayAlert({ visible: false, title: '', message: '', type: 'info' });
-        }, 3000);
         return;
       }
 
@@ -507,13 +505,9 @@ export default function Index() {
           visible: true,
           title: 'Link Phone for Apple Pay',
           message: 'Apple Pay requires both email and phone verification for compliance.\n\nWould you like to link your phone to this account to continue?',
-          type: 'info'
+          type: 'info',
+          navigationPath: '/phone-verify?mode=link'
         });
-        // Note: User can dismiss alert to cancel, or we navigate after acknowledgment
-        setTimeout(() => {
-          router.push('/phone-verify?mode=link');
-          setApplePayAlert({ visible: false, title: '', message: '', type: 'info' });
-        }, 3000);
         return;
       }
 
@@ -536,8 +530,15 @@ export default function Index() {
         <Text style={styles.title}>Onramp V2 Demo</Text>
       </View>
 
-      {/* Sandbox Mode Toggle */}
-      <View style={styles.sandboxToggleContainer}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        scrollEnabled={!applePayVisible}
+      >
+        {/* Sandbox Mode Toggle */}
+        <View style={styles.sandboxToggleContainer}>
         <View style={styles.sandboxToggleContent}>
           <Text style={styles.sandboxToggleLabel}>
             {sandboxMode ? '🧪 Sandbox Mode' : '🔴 Production Mode'}
@@ -557,30 +558,6 @@ export default function Index() {
           trackColor={{ true: BLUE, false: BORDER }}
           thumbColor={Platform.OS === "android" ? (sandboxMode ? "#ffffff" : "#f4f3f4") : undefined}
         />
-      </View>
-
-      {/* Region Selection */}
-      <View style={styles.regionContainer}>
-        <Text style={styles.regionLabel}>Region</Text>
-        <View style={styles.regionRow}>
-          <View style={styles.regionItem}>
-            <Text style={styles.regionItemLabel}>Country</Text>
-            <Pressable style={styles.pillSelect} onPress={() => setCountryPickerVisible(true)}>
-              <Text style={styles.pillText}>{country}</Text>
-              <Ionicons name="chevron-down" size={16} color={TEXT_SECONDARY} />
-            </Pressable>
-          </View>
-
-          {country === "US" && (
-            <View style={styles.regionItem}>
-              <Text style={styles.regionItemLabel}>State</Text>
-              <Pressable style={styles.pillSelect} onPress={() => setSubPickerVisible(true)}>
-                <Text style={styles.pillText}>{subdivision}</Text>
-                <Ionicons name="chevron-down" size={16} color={TEXT_SECONDARY} />
-              </Pressable>
-            </View>
-          )}
-        </View>
       </View>
 
       {/* Error banner for failed options fetch */}
@@ -624,6 +601,31 @@ export default function Index() {
         sandboxMode={sandboxMode}
       />
 
+      {/* Region Selection - At bottom */}
+      <View style={styles.regionContainer}>
+        <Text style={styles.regionLabel}>Region</Text>
+        <View style={styles.regionRow}>
+          <View style={styles.regionItem}>
+            <Text style={styles.regionItemLabel}>Country</Text>
+            <Pressable style={styles.pillSelect} onPress={() => setCountryPickerVisible(true)}>
+              <Text style={styles.pillText}>{country}</Text>
+              <Ionicons name="chevron-down" size={16} color={TEXT_SECONDARY} />
+            </Pressable>
+          </View>
+
+          {country === "US" && (
+            <View style={styles.regionItem}>
+              <Text style={styles.regionItemLabel}>State</Text>
+              <Pressable style={styles.pillSelect} onPress={() => setSubPickerVisible(true)}>
+                <Text style={styles.pillText}>{subdivision}</Text>
+                <Ionicons name="chevron-down" size={16} color={TEXT_SECONDARY} />
+              </Pressable>
+            </View>
+          )}
+        </View>
+      </View>
+      </ScrollView>
+
       {applePayVisible && (
         <ApplePayWidget
           paymentUrl={hostedUrl}
@@ -649,7 +651,13 @@ export default function Index() {
         title={applePayAlert.title}
         message={applePayAlert.message}
         type={applePayAlert.type}
-        onConfirm={() => setApplePayAlert(prev => ({ ...prev, visible: false }))}
+        onConfirm={() => {
+          const navPath = applePayAlert.navigationPath;
+          setApplePayAlert({ visible: false, title: '', message: '', type: 'info', navigationPath: undefined });
+          if (navPath) {
+            router.push(navPath as any);
+          }
+        }}
       />
 
       {/* Country picker modal */}
@@ -731,7 +739,14 @@ export default function Index() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: DARK_BG, 
+    backgroundColor: DARK_BG,
+  },
+  scrollView: {
+    flex: 1,
+    backgroundColor: DARK_BG,
+  },
+  scrollContent: {
+    paddingBottom: 40, // Add some space at the very bottom for scrolling
   },
   header: {
     flexDirection: "row",

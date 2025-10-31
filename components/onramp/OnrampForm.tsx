@@ -748,7 +748,7 @@ export function OnrampForm({
           </Text>
 
           <Text style={[styles.notificationText, styles.italicNote]}>
-            Head to the <Text style={styles.badgeProd}>Profile</Text> page to use a manual wallet address (signed out), or connect to an Embedded Wallet (EVM or Solana Network).
+            Head to the <Text style={styles.badgeProd}>Profile</Text> page to override with a manual wallet address.
           </Text>
 
           <Text style={[styles.notificationText, styles.italicNote]}>
@@ -1041,10 +1041,10 @@ export function OnrampForm({
 
 const styles = StyleSheet.create({
   content: {
-    padding: 12,                
-    gap: 12,                     
+    padding: 12,
+    gap: 12,
     backgroundColor: DARK_BG,
-    paddingBottom: 100,       
+    paddingBottom: 20, // Reduced from 100 to bring region section closer
   },
   fieldGroup: {
     gap: 6,
