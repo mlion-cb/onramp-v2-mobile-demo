@@ -150,10 +150,21 @@ export default function PhoneCodeScreen() {
       }
     } catch (e: any) {
       console.error(`❌ [SMS Verify] ${mode} error:`, e);
+
+      // Build detailed error message for TestFlight debugging
+      let errorMessage = e.message || 'Invalid code. Please try again.';
+
+      // Add error code and status if available
+      if (e.code || e.status) {
+        errorMessage += '\n\nError Details:';
+        if (e.code) errorMessage += `\nCode: ${e.code}`;
+        if (e.status) errorMessage += `\nStatus: ${e.status}`;
+      }
+
       setAlert({
         visible: true,
         title: 'Verification Failed',
-        message: e.message || 'Invalid code. Please try again.',
+        message: errorMessage,
         type: 'error'
       });
     } finally {
@@ -184,8 +195,8 @@ export default function PhoneCodeScreen() {
             </Text>
             <Text style={styles.subtitle}>
               {mode === 'signin'
-                ? 'Please enter the verification code we texted you to sign in.'
-                : 'Please enter the verification code we texted you to link your phone.'}
+                ? `Please enter the verification code we texted to ${phone || 'your phone'}.`
+                : `Please enter the verification code we texted to ${phone || 'your phone'}.`}
             </Text>
 
             <View style={styles.codeInputContainer}>
