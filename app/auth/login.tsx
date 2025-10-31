@@ -41,11 +41,17 @@ export default function LoginScreen() {
   }, [isSignedIn, testSession]);
 
   const handleEmailLogin = () => {
-    router.push('/email-verify?mode=signin');
+    router.push({
+      pathname: '/email-verify',
+      params: { mode: 'signin' }
+    });
   };
 
   const handlePhoneLogin = () => {
-    router.push('/phone-verify?mode=signin');
+    router.push({
+      pathname: '/phone-verify',
+      params: { mode: 'signin' }
+    });
   };
 
   // TestFlight loading state

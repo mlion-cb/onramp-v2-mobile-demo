@@ -152,7 +152,7 @@ export function useOnramp() {
 
       // Apple Pay Guest Checkout requires BOTH email and phone
       const userEmail = currentUser?.authenticationMethods.email?.email || null;
-      const userPhone = currentUser?.authenticationMethods.phoneNumber?.phoneNumber || null;
+      const cdpPhone = currentUser?.authenticationMethods.sms?.phoneNumber || null;
 
       let phone = getVerifiedPhone();
       let phoneAt = getVerifiedPhoneAt();
@@ -166,15 +166,22 @@ export function useOnramp() {
           throw missingEmailError;
         }
 
-        // Check if phone is missing or not linked
-        if (!userPhone && (!phone || !isPhoneFresh60d())) {
+        // Check if phone is missing or not linked to CDP
+        if (!cdpPhone) {
           const missingPhoneError: any = new Error('Phone verification required for Apple Pay');
+          missingPhoneError.code = 'MISSING_PHONE';
+          throw missingPhoneError;
+        }
+
+        // Check if CDP phone matches verified phone AND is fresh (60 days)
+        if (phone !== cdpPhone || !isPhoneFresh60d()) {
+          const missingPhoneError: any = new Error('Phone verification required for Apple Pay. Please verify your phone on the Profile page.');
           missingPhoneError.code = 'MISSING_PHONE';
           throw missingPhoneError;
         }
       }
 
-      // Sandbox: use mock phone
+      // Sandbox: use mock phone if no verified phone
       if (getSandboxMode() && (!phone || !isPhoneFresh60d())) {
         phone = '+12345678901'; // Mock US number for sandbox
         phoneAt = Date.now();
@@ -233,8 +240,11 @@ export function useOnramp() {
       }
       
     
-    } catch (error) {
-      console.error('API Error:', error);
+    } catch (error: any) {
+      // Don't log expected validation errors (they're handled gracefully by the UI)
+      if (error?.code !== 'MISSING_EMAIL' && error?.code !== 'MISSING_PHONE') {
+        console.error('API Error:', error);
+      }
       setIsProcessingPayment(false);
       throw error;
     }

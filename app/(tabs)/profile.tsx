@@ -99,14 +99,14 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
+import { ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { BASE_URL } from "../../constants/BASE_URL";
 import { COLORS } from "../../constants/Colors";
 import { TEST_ACCOUNTS } from "../../constants/TestAccounts";
 import { clearManualAddress, clearTestSession, daysUntilExpiry, formatPhoneDisplay, getCountry, getManualWalletAddress, getSandboxMode, getSubdivision, getTestWalletSol, getVerifiedPhone, isPhoneFresh60d, isTestSessionActive, setCountry, setCurrentSolanaAddress, setCurrentWalletAddress, setManualWalletAddress, setSandboxMode, setSubdivision, setVerifiedPhone } from "../../utils/sharedState";
 
-const { CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BLUE, BORDER, WHITE } = COLORS;
+const { CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BLUE, BORDER, WHITE, VIOLET, ORANGE } = COLORS;
 
 export default function WalletScreen() {
   // Check for test session first
@@ -182,6 +182,14 @@ export default function WalletScreen() {
       console.log('useEvmAddress() hook:', evmAddress);
       console.log('Final evmWalletAddress:', evmWalletAddress);
       console.log('Solana Address:', solanaAddress);
+
+      // Authentication Methods
+      console.log('--- AUTHENTICATION METHODS ---');
+      console.log('Full authenticationMethods:', JSON.stringify(currentUser.authenticationMethods, null, 2));
+      console.log('Email:', currentUser.authenticationMethods?.email?.email);
+      console.log('Phone (sms - CORRECT FIELD):', currentUser.authenticationMethods?.sms?.phoneNumber);
+      console.log('Verified Phone (AsyncStorage):', verifiedPhone);
+      console.log('Phone Fresh:', phoneFresh);
       console.log('=== END DETAILED WALLET INFO ===');
     }
   }, [currentUser, evmAddress, solanaAddress, explicitEOAAddress, smartAccountAddress, evmWalletAddress]);
@@ -215,16 +223,7 @@ export default function WalletScreen() {
   );
 
 
-  const [countries, setCountries] = useState<string[]>([]);
-  const [usSubs, setUsSubs] = useState<string[]>([]);
-  const [countryPickerVisible, setCountryPickerVisible] = useState(false);
-  const [subPickerVisible, setSubPickerVisible] = useState(false);
-  const [productionSwitchAlertVisible, setProductionSwitchAlertVisible] = useState(false);
-  const country = getCountry();
-  const subdivision = getSubdivision();
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const sheetTranslate = useRef(new Animated.Value(300)).current;
-  const { buyConfig, fetchOptions } = useOnramp(); 
+  const [productionSwitchAlertVisible, setProductionSwitchAlertVisible] = useState(false); 
 
   const sandboxEnabled = getSandboxMode();
   const [localSandboxEnabled, setLocalSandboxEnabled] = useState(getSandboxMode());
@@ -236,6 +235,12 @@ export default function WalletScreen() {
   const [balancesError, setBalancesError] = useState<string | null>(null);
   const [balancesExpanded, setBalancesExpanded] = useState(false);
 
+  // Testnet balance state
+  const [testnetBalances, setTestnetBalances] = useState<any[]>([]);
+  const [loadingTestnetBalances, setLoadingTestnetBalances] = useState(false);
+  const [testnetBalancesError, setTestnetBalancesError] = useState<string | null>(null);
+  const [testnetBalancesExpanded, setTestnetBalancesExpanded] = useState(false);
+
   // sync local state with shared state on mount
   useEffect(() => {
     setLocalSandboxEnabled(getSandboxMode());
@@ -245,13 +250,6 @@ export default function WalletScreen() {
       setManualAddress(stored);
     }
   }, [sandboxEnabled]);
-
-  useEffect(() => {
-    // Ensure this hook instance has loaded the config (only when signed in)
-    if (!buyConfig && effectiveIsSignedIn) {
-      fetchOptions();
-    }
-  }, [buyConfig, fetchOptions, effectiveIsSignedIn]);
 
   // Save manual address to shared state when changed
   useEffect(() => {
@@ -263,27 +261,6 @@ export default function WalletScreen() {
       setManualWalletAddress(null);
     }
   }, [manualAddress, localSandboxEnabled]);
-
-  useEffect(() => {
-    if (buyConfig?.countries) {
-      const validCountries = buyConfig.countries.map((c: any) => c.id).filter(Boolean);
-      setCountries(validCountries);
-
-      const us = buyConfig.countries.find((c: any) => c.id === 'US');
-      setUsSubs(us?.subdivisions || []);
-    }
-  }, [buyConfig]);
-
-  useEffect(() => {
-    const anyVisible = countryPickerVisible || subPickerVisible;
-    Animated.parallel([
-      Animated.timing(backdropOpacity, { toValue: anyVisible ? 1 : 0, duration: anyVisible ? 200 : 150, useNativeDriver: true }),
-      Animated[anyVisible ? "spring" : "timing"](sheetTranslate, {
-        toValue: anyVisible ? 0 : 300,
-        ...(anyVisible ? { useNativeDriver: true, damping: 20, stiffness: 90 } : { duration: 150, useNativeDriver: true }),
-      }),
-    ]).start();
-  }, [countryPickerVisible, subPickerVisible]);
 
   const openPhoneVerify = useCallback(() => {
     router.push({
@@ -302,6 +279,8 @@ export default function WalletScreen() {
       console.log('🧹 [PROFILE] User signed out - clearing UI state');
       setBalances([]);
       setBalancesError(null);
+      setTestnetBalances([]);
+      setTestnetBalancesError(null);
       setCurrentWalletAddress(null);
       setCurrentSolanaAddress(null);
     }
@@ -401,12 +380,103 @@ export default function WalletScreen() {
       }
 
       setBalances(allBalances);
-      console.log(`✅ [PROFILE] Loaded ${allBalances.length} token balances`);
+      console.log(`✅ [PROFILE] Loaded ${allBalances.length} mainnet token balances`);
     } catch (error) {
-      console.error('❌ [PROFILE] Error fetching balances:', error);
+      console.error('❌ [PROFILE] Error fetching mainnet balances:', error);
       setBalancesError('Failed to load balances');
     } finally {
       setLoadingBalances(false);
+    }
+  }, [primaryAddress, solanaAddress]);
+
+  // Fetch testnet balances
+  const fetchTestnetBalances = useCallback(async () => {
+    if (!primaryAddress && !solanaAddress) return;
+
+    setLoadingTestnetBalances(true);
+    setTestnetBalancesError(null);
+
+    try {
+      // Check if TestFlight mode
+      const { isTestSessionActive } = await import('@/utils/sharedState');
+      const isTestFlight = isTestSessionActive();
+
+      let accessToken: string | null = null;
+
+      if (isTestFlight) {
+        console.log('🧪 [PROFILE] TestFlight mode - using mock token for testnet');
+        accessToken = 'testflight-mock-token';
+      } else {
+        // Get access token from CDP (real accounts)
+        const { getAccessTokenGlobal } = await import('@/utils/getAccessTokenGlobal');
+        accessToken = await getAccessTokenGlobal();
+
+        if (!accessToken) {
+          console.error('❌ [PROFILE] No access token available for testnet');
+          setTestnetBalancesError('Authentication required');
+          setLoadingTestnetBalances(false);
+          return;
+        }
+      }
+
+      const allTestnetBalances: any[] = [];
+
+      // Fetch EVM testnet balances
+      if (primaryAddress) {
+        try {
+          // Fetch Base Sepolia balances
+          const baseSepoliaResponse = await fetch(`${BASE_URL}/balances/evm?address=${primaryAddress}&network=base-sepolia`, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`
+            }
+          });
+
+          if (baseSepoliaResponse.ok) {
+            const baseSepoliaData = await baseSepoliaResponse.json();
+            allTestnetBalances.push(...(baseSepoliaData.balances || []).map((b: any) => ({ ...b, network: 'Base Sepolia' })));
+          }
+
+          // Fetch Ethereum Sepolia balances via backend
+          const ethSepoliaResponse = await fetch(`${BASE_URL}/balances/evm?address=${primaryAddress}&network=ethereum-sepolia`, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`
+            }
+          });
+
+          if (ethSepoliaResponse.ok) {
+            const ethSepoliaData = await ethSepoliaResponse.json();
+            allTestnetBalances.push(...(ethSepoliaData.balances || []).map((b: any) => ({ ...b, network: 'Ethereum Sepolia' })));
+          }
+        } catch (e) {
+          console.error('Error fetching EVM testnet balances:', e);
+        }
+      }
+
+      // Fetch Solana Devnet balances
+      if (solanaAddress) {
+        try {
+          const solDevnetResponse = await fetch(`${BASE_URL}/balances/solana?address=${solanaAddress}&network=solana-devnet`, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`
+            }
+          });
+
+          if (solDevnetResponse.ok) {
+            const solDevnetData = await solDevnetResponse.json();
+            allTestnetBalances.push(...(solDevnetData.balances || []).map((b: any) => ({ ...b, network: 'Solana Devnet' })));
+          }
+        } catch (e) {
+          console.error('Error fetching Solana Devnet balances:', e);
+        }
+      }
+
+      setTestnetBalances(allTestnetBalances);
+      console.log(`✅ [PROFILE] Loaded ${allTestnetBalances.length} testnet token balances`);
+    } catch (error) {
+      console.error('❌ [PROFILE] Error fetching testnet balances:', error);
+      setTestnetBalancesError('Failed to load testnet balances');
+    } finally {
+      setLoadingTestnetBalances(false);
     }
   }, [primaryAddress, solanaAddress]);
 
@@ -414,8 +484,9 @@ export default function WalletScreen() {
   useEffect(() => {
     if (effectiveIsSignedIn && (primaryAddress || solanaAddress)) {
       fetchBalances();
+      fetchTestnetBalances();
     }
-  }, [effectiveIsSignedIn, primaryAddress, solanaAddress, fetchBalances]);
+  }, [effectiveIsSignedIn, primaryAddress, solanaAddress, fetchBalances, fetchTestnetBalances]);
 
   // Re-fetch balances when profile tab comes into focus
   useFocusEffect(
@@ -423,8 +494,9 @@ export default function WalletScreen() {
       if (effectiveIsSignedIn && (primaryAddress || solanaAddress)) {
         console.log('🔄 [PROFILE] Tab focused - refreshing balances');
         fetchBalances();
+        fetchTestnetBalances();
       }
-    }, [effectiveIsSignedIn, primaryAddress, solanaAddress, fetchBalances])
+    }, [effectiveIsSignedIn, primaryAddress, solanaAddress, fetchBalances, fetchTestnetBalances])
   );
 
   const handleSignOut = useCallback(async () => {
@@ -577,20 +649,6 @@ export default function WalletScreen() {
     }
   };
 
-  const unverifyPhone = async () => {
-    await setVerifiedPhone(null);
-    // Update local state immediately
-    setVerifiedPhoneLocal(null);
-    setPhoneFresh(false);
-    setPhoneExpiry(-1);
-    setAlertState({
-      visible: true,
-      title: "Phone removed",
-      message: "Phone verification was cleared for this demo. You'll be asked to verify again on next purchase.",
-      type: "info",
-    });
-  };
-
   if (!isInitialized) {
     return (
       <View style={styles.container}>
@@ -615,7 +673,7 @@ export default function WalletScreen() {
           <View style={styles.container}>
             {/* Account card */}
             <View style={styles.card}>
-              <Text style={styles.rowLabel}>Embedded wallet (by Email)</Text>
+              <Text style={styles.rowLabel}>Embedded wallet</Text>
 
               {signedButNoSA ? (
                 <View style={styles.subContainer}>
@@ -658,6 +716,78 @@ export default function WalletScreen() {
                       <Text style={styles.buttonText}>Link Email</Text>
                     </Pressable>
                   )}
+
+                  {/* Phone Number Section */}
+                  <View style={styles.subBox}>
+                    <Text style={styles.subHint}>Phone number {testSession && '(TestFlight)'}</Text>
+                    <Text style={styles.subValue}>
+                      {(() => {
+                        const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
+
+                        if (!cdpPhone) return 'No phone linked';
+
+                        const cdpPhoneFormatted = formatPhoneDisplay(cdpPhone);
+
+                        // Check if CDP phone matches verified phone and is fresh
+                        const isVerified = verifiedPhone === cdpPhone && phoneFresh;
+                        const isExpired = verifiedPhone === cdpPhone && !phoneFresh;
+
+                        if (isVerified) return cdpPhoneFormatted;
+                        if (isExpired) return `${cdpPhoneFormatted} (expired)`;
+                        return `${cdpPhoneFormatted} (needs verification)`;
+                      })()}
+                    </Text>
+                    {(() => {
+                      const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
+                      if (!cdpPhone) return null;
+
+                      const isVerified = verifiedPhone === cdpPhone && phoneFresh;
+                      const isExpired = verifiedPhone === cdpPhone && !phoneFresh;
+
+                      if (isVerified) {
+                        return (
+                          <Text style={styles.subHint}>
+                            Verified for Apple Pay • expires in {d} day{d===1?'':'s'}
+                          </Text>
+                        );
+                      } else if (isExpired) {
+                        return (
+                          <Text style={styles.subHint}>
+                            Verification expired • Re-verify below for Apple Pay
+                          </Text>
+                        );
+                      } else {
+                        return (
+                          <Text style={styles.subHint}>
+                            Linked to account • Verify below to use with Apple Pay
+                          </Text>
+                        );
+                      }
+                    })()}
+                  </View>
+
+                  {/* Phone Link/Verify Buttons */}
+                  {(() => {
+                    const hasPhoneInCDP = currentUser?.authenticationMethods?.sms?.phoneNumber;
+                    const hasLocalPhone = verifiedPhone;
+                    const showLinkButton = !hasPhoneInCDP && !hasLocalPhone && !testSession;
+
+                    if (showLinkButton) {
+                      return (
+                        <Pressable style={styles.button} onPress={openPhoneVerify}>
+                          <Text style={styles.buttonText}>Link Phone</Text>
+                        </Pressable>
+                      );
+                    }
+
+                    return (
+                      <Pressable style={[styles.button, phoneFresh ? { backgroundColor: BORDER } : null]} onPress={openPhoneVerify}>
+                        <Text style={[styles.buttonText, phoneFresh ? { color: TEXT_PRIMARY } : null]}>
+                          {verifiedPhone ? (phoneFresh ? 'Update phone' : 'Re-verify phone') : 'Verify phone'}
+                        </Text>
+                      </Pressable>
+                    );
+                  })()}
 
                   {smartAccountAddress && (
                     <View style={[styles.subBox, { flexDirection: 'row', alignItems: 'center' }]}>
@@ -848,38 +978,252 @@ export default function WalletScreen() {
                                 ) : (
                                   <Text style={styles.tokenUsd}>Price N/A</Text>
                                 )}
+                                {(() => {
+                                  // Check if this is a Solana SPL token (has mintAddress)
+                                  const isSolanaNetwork = network?.toLowerCase().includes('solana');
+                                  const isSPLToken = isSolanaNetwork && balance.token?.mintAddress;
+                                  const isDevnet = network?.toLowerCase().includes('devnet');
+
+                                  // SPL tokens only supported on devnet
+                                  if (isSPLToken && !isDevnet) {
+                                    return (
+                                      <Text style={[styles.tokenUsd, { marginTop: 8, fontSize: 11, fontStyle: 'italic' }]}>
+                                        Transfer not supported on mainnet
+                                      </Text>
+                                    );
+                                  }
+
+                                  return (
+                                    <Pressable
+                                      style={[
+                                        styles.button,
+                                        { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12 },
+                                        isExpoGo && styles.buttonDisabled
+                                      ]}
+                                      onPress={() => {
+                                        if (isExpoGo) {
+                                          setAlertState({
+                                            visible: true,
+                                            title: "Transfer not available",
+                                            message: "Crypto transfers are not available in Expo Go due to missing crypto.subtle package. Please use TestFlight or a development build.",
+                                            type: "info",
+                                          });
+                                          return;
+                                        }
+                                        // Navigate to transfer page with token data
+                                        router.push({
+                                          pathname: '/transfer',
+                                          params: {
+                                            token: JSON.stringify(balance),
+                                            network: network.toLowerCase()
+                                          }
+                                        });
+                                      }}
+                                      disabled={isExpoGo}
+                                    >
+                                      <Text style={[styles.buttonText, { fontSize: 12 }]}>
+                                        {isExpoGo ? "Transfer unavailable (Expo Go)" : "Transfer"}
+                                      </Text>
+                                    </Pressable>
+                                  );
+                                })()}
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+            )}
+
+            {/* Testnet Balances - show when wallet is connected */}
+            {effectiveIsSignedIn && (primaryAddress || solanaAddress) && (
+              <View style={styles.card}>
+                <Pressable
+                  onPress={() => setTestnetBalancesExpanded(!testnetBalancesExpanded)}
+                  style={styles.row}
+                >
+                  <Text style={styles.rowLabel}>🧪 Testnet Balances</Text>
+                  <Ionicons
+                    name={testnetBalancesExpanded ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color={TEXT_SECONDARY}
+                  />
+                </Pressable>
+
+                <Text style={styles.helper}>
+                  Showing balances for Base Sepolia, Ethereum Sepolia, and Solana Devnet
+                </Text>
+
+                {testnetBalancesExpanded && (
+                  <>
+                    {loadingTestnetBalances && (
+                      <View style={{ marginTop: 16, alignItems: 'center' }}>
+                        <ActivityIndicator size="small" color={BLUE} />
+                        <Text style={[styles.subHint, { marginTop: 8 }]}>Loading testnet balances...</Text>
+                      </View>
+                    )}
+
+                    {testnetBalancesError && (
+                      <View style={{ marginTop: 16 }}>
+                        <Text style={[styles.helper, { color: '#FF6B6B' }]}>{testnetBalancesError}</Text>
+                        <Pressable style={[styles.button, { marginTop: 8 }]} onPress={fetchTestnetBalances}>
+                          <Text style={styles.buttonText}>Retry</Text>
+                        </Pressable>
+                      </View>
+                    )}
+
+                    {!loadingTestnetBalances && !testnetBalancesError && testnetBalances.length === 0 && (
+                      <View style={{ marginTop: 16 }}>
+                        <Text style={[styles.subHint, { textAlign: 'center', marginBottom: 12 }]}>
+                          No testnet tokens found. Get free testnet tokens from the faucets below.
+                        </Text>
+
+                        {/* Faucet buttons */}
+                        <View style={{ gap: 8 }}>
+                          {primaryAddress && (
+                            <>
+                              <Pressable
+                                style={[styles.button, { backgroundColor: VIOLET }]}
+                                onPress={() => {
+                                  const faucetUrl = `https://portal.cdp.coinbase.com/products/faucet?address=${primaryAddress}&network=base-sepolia`;
+                                  Linking.openURL(faucetUrl);
+                                }}
+                              >
+                                <Ionicons name="water-outline" size={16} color={WHITE} style={{ marginRight: 8 }} />
+                                <Text style={styles.buttonText}>Get Base Sepolia ETH</Text>
+                              </Pressable>
+
+                              <Pressable
+                                style={[styles.button, { backgroundColor: VIOLET }]}
+                                onPress={() => {
+                                  const faucetUrl = `https://portal.cdp.coinbase.com/products/faucet?address=${primaryAddress}&network=ethereum-sepolia`;
+                                  Linking.openURL(faucetUrl);
+                                }}
+                              >
+                                <Ionicons name="water-outline" size={16} color={WHITE} style={{ marginRight: 8 }} />
+                                <Text style={styles.buttonText}>Get Ethereum Sepolia ETH</Text>
+                              </Pressable>
+                            </>
+                          )}
+
+                          {solanaAddress && (
+                            <Pressable
+                              style={[styles.button, { backgroundColor: VIOLET }]}
+                              onPress={() => {
+                                const faucetUrl = `https://portal.cdp.coinbase.com/products/faucet?address=${solanaAddress}&network=solana-devnet`;
+                                Linking.openURL(faucetUrl);
+                              }}
+                            >
+                              <Ionicons name="water-outline" size={16} color={WHITE} style={{ marginRight: 8 }} />
+                              <Text style={styles.buttonText}>Get Solana Devnet SOL</Text>
+                            </Pressable>
+                          )}
+                        </View>
+
+                        <Pressable style={[styles.button, { marginTop: 12 }]} onPress={fetchTestnetBalances}>
+                          <Text style={styles.buttonText}>Refresh Testnet Balances</Text>
+                        </Pressable>
+                      </View>
+                    )}
+
+                    {!loadingTestnetBalances && !testnetBalancesError && testnetBalances.length > 0 && (
+                      <View style={{ marginTop: 16 }}>
+                        {/* Group balances by network */}
+                        {['Base Sepolia', 'Ethereum Sepolia', 'Solana Devnet'].map(networkName => {
+                          const networkBalances = testnetBalances.filter(b => b.network === networkName);
+                          if (networkBalances.length === 0) return null;
+
+                          return (
+                            <View key={networkName} style={{ marginBottom: 24 }}>
+                              {/* Network header */}
+                              <View style={styles.networkHeader}>
+                                <Text style={styles.networkTitle}>{networkName}</Text>
+                                {/* Faucet button per network */}
                                 <Pressable
-                                  style={[
-                                    styles.button,
-                                    { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12 },
-                                    isExpoGo && styles.buttonDisabled
-                                  ]}
+                                  style={styles.faucetIconButton}
                                   onPress={() => {
-                                    if (isExpoGo) {
-                                      setAlertState({
-                                        visible: true,
-                                        title: "Transfer not available",
-                                        message: "Crypto transfers are not available in Expo Go due to missing crypto.subtle package. Please use TestFlight or a development build.",
-                                        type: "info",
-                                      });
-                                      return;
-                                    }
-                                    // Navigate to transfer page with token data
-                                    router.push({
-                                      pathname: '/transfer',
-                                      params: {
-                                        token: JSON.stringify(balance),
-                                        network: network.toLowerCase()
-                                      }
-                                    });
+                                    let faucetUrl;
+                                    const address = networkName.includes('Solana') ? solanaAddress : primaryAddress;
+                                    const networkParam = networkName === 'Base Sepolia' ? 'base-sepolia'
+                                      : networkName === 'Ethereum Sepolia' ? 'ethereum-sepolia'
+                                      : 'solana-devnet';
+                                    faucetUrl = `https://portal.cdp.coinbase.com/products/faucet?address=${address}&network=${networkParam}`;
+                                    Linking.openURL(faucetUrl);
                                   }}
-                                  disabled={isExpoGo}
                                 >
-                                  <Text style={[styles.buttonText, { fontSize: 12 }]}>
-                                    {isExpoGo ? "Transfer unavailable (Expo Go)" : "Transfer"}
-                                  </Text>
+                                  <Ionicons name="water-outline" size={18} color={VIOLET} />
                                 </Pressable>
                               </View>
+
+                              {/* Tokens for this network */}
+                              {networkBalances.map((balance, index) => {
+                                const symbol = balance.token?.symbol || 'UNKNOWN';
+                                const amount = parseFloat(balance.amount?.amount || '0');
+                                const decimals = parseInt(balance.amount?.decimals || '0');
+                                const actualAmount = amount / Math.pow(10, decimals);
+                                const formattedAmount = actualAmount.toFixed(6);
+                                const usdValue = balance.usdValue;
+
+                                return (
+                                  <View
+                                    key={`${balance.token?.contractAddress || balance.token?.mintAddress}-${index}`}
+                                    style={[
+                                      styles.tokenRow,
+                                      index < networkBalances.length - 1 && { borderBottomWidth: 1, borderBottomColor: BORDER }
+                                    ]}
+                                  >
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={styles.tokenSymbol}>{symbol}</Text>
+                                      {balance.token?.name && (
+                                        <Text style={styles.tokenName}>{balance.token.name}</Text>
+                                      )}
+                                    </View>
+
+                                    <View style={{ alignItems: 'flex-end' }}>
+                                      <Text style={styles.tokenAmount}>{formattedAmount}</Text>
+                                      {usdValue ? (
+                                        <Text style={styles.tokenUsd}>${usdValue.toFixed(2)}</Text>
+                                      ) : (
+                                        <Text style={styles.tokenUsd}>Testnet</Text>
+                                      )}
+                                      <Pressable
+                                        style={[
+                                          styles.button,
+                                          { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12 },
+                                          isExpoGo && styles.buttonDisabled
+                                        ]}
+                                        onPress={() => {
+                                          if (isExpoGo) {
+                                            setAlertState({
+                                              visible: true,
+                                              title: "Transfer not available",
+                                              message: "Crypto transfers are not available in Expo Go due to missing crypto.subtle package. Please use TestFlight or a development build.",
+                                              type: "info",
+                                            });
+                                            return;
+                                          }
+                                          // Navigate to transfer page with token data
+                                          router.push({
+                                            pathname: '/transfer',
+                                            params: {
+                                              token: JSON.stringify(balance),
+                                              network: networkName.toLowerCase().replace(' ', '-')
+                                            }
+                                          });
+                                        }}
+                                        disabled={isExpoGo}
+                                      >
+                                        <Text style={[styles.buttonText, { fontSize: 12 }]}>
+                                          {isExpoGo ? "Transfer unavailable (Expo Go)" : "Transfer"}
+                                        </Text>
+                                      </Pressable>
+                                    </View>
+                                  </View>
+                                );
+                              })}
                             </View>
                           );
                         })}
@@ -943,95 +1287,6 @@ export default function WalletScreen() {
                 </Text>
               </View>
             )}
-
-            {/* Phone verification card */}
-            <View style={styles.card}>
-              <Text style={styles.rowLabel}>Phone verification (for Apple Pay)</Text>
-
-              <View style={styles.subBox}>
-                <Text style={styles.subValue}>
-                  {verifiedPhone ? (phoneFresh ? formattedPhone : `${formattedPhone} (expired)`) : 'No verified phone'}
-                </Text>
-                <Text style={styles.subHint}>
-                  {verifiedPhone ? (phoneFresh ? `Verified • expires in ${d} day${d===1?'':'s'}` : 'Re-verify required') : 'Required before buying crypto'}
-                </Text>
-              </View>
-
-              {/* Show Link Phone if user doesn't have phone linked yet */}
-              {!currentUser?.authenticationMethods.phoneNumber?.phoneNumber && !verifiedPhone && !testSession ? (
-                <Pressable style={styles.button} onPress={openPhoneVerify}>
-                  <Text style={styles.buttonText}>Link Phone</Text>
-                </Pressable>
-              ) : (
-                <>
-                  <Pressable style={[styles.button, phoneFresh ? { backgroundColor: BORDER } : null]} onPress={openPhoneVerify}>
-                    <Text style={[styles.buttonText, phoneFresh ? { color: TEXT_PRIMARY } : null]}>
-                      {verifiedPhone ? (phoneFresh ? 'Update phone' : 'Re-verify phone') : 'Verify phone'}
-                    </Text>
-                  </Pressable>
-                  {verifiedPhone && (
-                    <Pressable
-                      style={[styles.buttonSecondary, { backgroundColor: BORDER }]}
-                      onPress={unverifyPhone}
-                    >
-                      <Text style={[styles.buttonTextSecondary, { color: TEXT_PRIMARY }]}>Unlink Phone</Text>
-                    </Pressable>
-                  )}
-                </>
-              )}
-            </View>
-
-            <View style={styles.card}>
-              <Text style={styles.rowLabel}>Region (for Onramp Options)</Text>
-
-              <View style={styles.row}>
-                <Text style={styles.rowLabel}>Country</Text>
-                <Pressable style={styles.pillSelect} onPress={() => setCountryPickerVisible(true)}>
-                  <View style={styles.selectContent}>
-                    <Text style={styles.pillText}>{country}</Text>
-                  </View>
-                  <Ionicons name="chevron-down" size={16} color={TEXT_SECONDARY} />
-                </Pressable>
-              </View>
-
-              {country === "US" && (
-                <View style={[styles.row, { marginTop: 12 }]}>
-                  <Text style={styles.rowLabel}>Subdivision</Text>
-                  <Pressable style={styles.pillSelect} onPress={() => setSubPickerVisible(true)}>
-                    <View style={styles.selectContent}>
-                      <Text style={styles.pillText}>{subdivision}</Text>
-                    </View>
-                    <Ionicons name="chevron-down" size={16} color={TEXT_SECONDARY} />
-                  </Pressable>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.card}>
-              
-              <View style={styles.row}>
-                <View style={styles.textContainer}>
-                  <Text style={styles.rowValue}>{localSandboxEnabled ? 'Sandbox Environment' : 'Production Environment'}</Text>
-                  <Text style={localSandboxEnabled ? styles.subHint : styles.productionWarning}>
-                    {localSandboxEnabled ? 'Test Mode\n\nNo real transactions will be executed.\n\nYou may experience Onramp flow with optional phone and email verification.\n\nOnly Guest Checkout (Debit Card) will be available for Coinbase Widget.' : 'Production Mode\n\nReal transactions will be executed on chain and balances will be debited if successful.\n\nPhone and email vericiation required.'}
-                  </Text>
-                </View>
-                <Switch
-                  value={localSandboxEnabled}
-                  onValueChange={(value) => {
-                    if (!value && manualAddress) {
-                      // Switching to production with manual address set - show confirmation
-                      setProductionSwitchAlertVisible(true);
-                    } else {
-                      setLocalSandboxEnabled(value); // Update local state (triggers re-render)
-                      setSandboxMode(value); // Update shared state (for other components)
-                    }
-                  }}
-                  trackColor={{ true: BLUE, false: BORDER }}
-                  thumbColor={Platform.OS === "android" ? (sandboxEnabled ? "#ffffff" : "#f4f3f4") : undefined}
-                />
-              </View>
-            </View>
 
             {/* Wallet choice modal - shown when user has both EVM and Solana wallets */}
             <Modal
@@ -1114,82 +1369,6 @@ export default function WalletScreen() {
                     </Pressable>
                   </View>
                 </View>
-              </View>
-            </Modal>
-
-            {/* Country picker modal */}
-            <Modal visible={countryPickerVisible} transparent animationType="none" presentationStyle="overFullScreen" onRequestClose={() => setCountryPickerVisible(false)}>
-              <View style={{ flex: 1, justifyContent: "flex-end" }}>
-                <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.5)", opacity: backdropOpacity }]}>
-                  <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setCountryPickerVisible(false)} />
-                </Animated.View>
-
-                <Animated.View style={[styles.modalSheet, { transform: [{ translateY: sheetTranslate }] }]}>
-                  <View style={styles.modalHandle} />
-                  <ScrollView style={styles.modalScrollView} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
-                    {countries.map((c, index) => {
-                      const isSelected = c === country;
-                      return (
-                        <Pressable
-                          key={`country-${index}-${c}`}
-                          onPress={() => {
-                            setCountry(c);
-                            if (c === 'US') {
-                              const current = getSubdivision();
-                              setSubdivision(current || 'CA');
-                            } else {
-                            setSubdivision("");
-                            }
-                            setCountryPickerVisible(false);
-                          }}
-                          style={[styles.modalItem, isSelected && styles.modalItemSelected]}
-                        >
-                          <View style={styles.modalItemContent}>
-                            <View style={styles.modalItemLeft}>
-                              <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected]}>{c}</Text>
-                            </View>
-                            {isSelected && <Ionicons name="checkmark" size={20} color={BLUE} />}
-                          </View>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-                </Animated.View>
-              </View>
-            </Modal>
-
-            {/* Subdivision picker modal */}
-            <Modal visible={subPickerVisible} transparent animationType="none" presentationStyle="overFullScreen" onRequestClose={() => setSubPickerVisible(false)}>
-              <View style={{ flex: 1, justifyContent: "flex-end" }}>
-                <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.5)", opacity: backdropOpacity }]}>
-                  <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setSubPickerVisible(false)} />
-                </Animated.View>
-
-                <Animated.View style={[styles.modalSheet, { transform: [{ translateY: sheetTranslate }] }]}>
-                  <View style={styles.modalHandle} />
-                  <ScrollView style={styles.modalScrollView} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
-                    {usSubs.map((s, index) => {
-                      const isSelected = s === subdivision;
-                      return (
-                        <Pressable
-                          key={`sub-${index}-${s}`}
-                          onPress={() => {
-                            setSubdivision(s);
-                            setSubPickerVisible(false);
-                          }}
-                          style={[styles.modalItem, isSelected && styles.modalItemSelected]}
-                        >
-                          <View style={styles.modalItemContent}>
-                            <View style={styles.modalItemLeft}>
-                              <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected]}>{s}</Text>
-                            </View>
-                            {isSelected && <Ionicons name="checkmark" size={20} color={BLUE} />}
-                          </View>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-                </Animated.View>
               </View>
             </Modal>
 
@@ -1293,13 +1472,14 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: BLUE,
-    borderRadius: 22,            
-    paddingVertical: 12,         
-    paddingHorizontal: 20,       
+    borderRadius: 22,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,               
-    minHeight: 36,               
+    marginTop: 10,
+    minHeight: 36,
+    flexDirection: 'row',
   },
   modalButton: {
     marginTop: 0,
@@ -1585,6 +1765,31 @@ const styles = StyleSheet.create({
       color: TEXT_SECONDARY,
       marginBottom: 4,
     },
+  // Network grouping styles
+  networkHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: BORDER,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  networkTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: TEXT_PRIMARY,
+  },
+  faucetIconButton: {
+    padding: 8,
+    backgroundColor: 'rgba(105, 145, 255, 0.2)', // VIOLET with opacity
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // Production switch alert styles (matching CoinbaseAlert)
   productionAlertCard: {
     backgroundColor: CARD_BG,
