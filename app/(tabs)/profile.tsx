@@ -606,7 +606,8 @@ export default function WalletScreen() {
       // Clear all user-specific state
       setCurrentWalletAddress(null);
       setManualWalletAddress(null);
-      await setVerifiedPhone(null);
+      // DON'T clear verifiedPhone - let useEffect cleanup handle it when different user signs in
+      // This allows same user to re-sign in without re-verifying within 60 days
       setCountry('US'); // Reset to default
       setSubdivision('CA'); // Reset to default
       // Sandbox mode will reset to ON automatically on next app start
