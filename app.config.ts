@@ -42,8 +42,7 @@ const config: ExpoConfig = {
       ['expo-build-properties', { ios: { deploymentTarget: '15.1' } }],
       ['expo-notifications', {
         icon: './assets/images/icon.png',
-        color: '#0052FF',
-        sounds: ['default']
+        color: '#0052FF'
       }]
     ],
 
