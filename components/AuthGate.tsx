@@ -55,7 +55,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       const timer = setTimeout(() => {
         console.log('✅ [AUTH GATE] Credential loading delay complete');
         setHasCheckedAuth(true);
-      }, 1000); // 1 second for better UX
+      }, 2000); // 2 seconds - increased for CDP session loading
       return () => clearTimeout(timer);
     }
   }, [isInitialized]);
@@ -145,6 +145,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <Text style={styles.debugText}>CDP Initialized</Text>
           </View>
           <View style={styles.debugRow}>
+            <View style={[styles.dot, hasCheckedAuth ? styles.dotGreen : styles.dotRed]} />
+            <Text style={styles.debugText}>Credentials Loaded (2s wait)</Text>
+          </View>
+          <View style={styles.debugRow}>
             <View style={[styles.dot, testSession ? styles.dotGreen : styles.dotRed]} />
             <Text style={styles.debugText}>Test Session</Text>
           </View>
@@ -153,6 +157,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <Text style={styles.debugText}>CDP Signed In</Text>
           </View>
         </View>
+        <Text style={styles.debugHint}>
+          If "CDP Signed In" doesn't turn green after 2s,{'\n'}
+          SecureStore may not be working.{'\n'}
+          Try rebuilding the app with clean pods.
+        </Text>
       </View>
     );
   }
@@ -183,6 +192,14 @@ const styles = StyleSheet.create({
   debugText: {
     fontSize: 12,
     color: '#999',
+  },
+  debugHint: {
+    fontSize: 11,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 16,
+    paddingHorizontal: 20,
   },
   dot: {
     width: 8,

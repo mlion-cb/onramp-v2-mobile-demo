@@ -228,7 +228,10 @@ From: ${smartAccountAddress}
         return;
       }
 
-      if (network === 'solana') {
+      // Check if network is Solana (includes both 'solana' and 'solana-devnet')
+      const isSolanaNetwork = network?.toLowerCase().includes('solana');
+
+      if (isSolanaNetwork) {
         await handleSolanaTransfer();
       } else {
         await handleEvmTransfer();

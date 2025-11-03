@@ -14,7 +14,7 @@ export default function PhoneVerifyScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const initialPhone = params.initialPhone as string || '';
-  const mode = (params.mode as 'signin' | 'link') || 'link'; // Default to link for backwards compat
+  const mode = (params.mode as 'signin' | 'link' | 'reverify') || 'link'; // Default to link for backwards compat
 
   const [phoneDisplay, setPhoneDisplay] = useState(''); // What user sees: (201) 555-0123
   const [phoneE164, setPhoneE164] = useState(''); // What we send: +12015550123
@@ -91,8 +91,10 @@ export default function PhoneVerifyScreen() {
       });
 
       let result;
-      if (mode === 'signin') {
-        console.log('Calling signInWithSms with:', { phoneNumber: phoneE164 });
+      if (mode === 'signin' || mode === 'reverify') {
+        // Use signInWithSms for both signin and reverify
+        // For reverify: sends OTP to already-linked phone without creating new session
+        console.log(`Calling signInWithSms (${mode}) with:`, { phoneNumber: phoneE164 });
         result = await signInWithSms({ phoneNumber: phoneE164 });
       } else {
         console.log('Calling linkSms with:', phoneE164);
@@ -183,11 +185,13 @@ export default function PhoneVerifyScreen() {
         >
           <View style={styles.stepContainer}>
             <Text style={styles.title}>
-              {mode === 'signin' ? 'Sign in with phone' : 'Link your phone number'}
+              {mode === 'signin' ? 'Sign in with phone' : mode === 'reverify' ? 'Re-verify your phone' : 'Link your phone number'}
             </Text>
             <Text style={styles.subtitle}>
               {mode === 'signin'
                 ? "We'll text you a code to sign in. Standard message rates may apply."
+                : mode === 'reverify'
+                ? "We'll text you a code to verify you still have access to this phone. This is required for Apple Pay checkout."
                 : "We'll text you a code to link your phone. This is required for Apple Pay checkout."}
             </Text>
 
