@@ -298,58 +298,19 @@ export default function WalletScreen() {
       authMethods: currentUser?.authenticationMethods
     });
 
-    // If phone already linked to CDP, automatically send OTP and go to code screen
+    // If phone already linked to CDP, use sign-in flow for re-verification
     if (cdpPhone) {
-      try {
-        console.log('📱 [PROFILE] Phone already linked, sending OTP automatically');
-        console.log('📱 [PROFILE] Phone format:', {
-          raw: cdpPhone,
-          type: typeof cdpPhone,
-          length: cdpPhone.length,
-          startsWithPlus: cdpPhone.startsWith('+')
-        });
+      console.log('📱 [PROFILE] Phone already linked - using sign-in flow for re-verification');
 
-        // Trigger OTP via CDP
-        const result = await linkSms(cdpPhone);
-
-        console.log('✅ [PROFILE] OTP sent successfully:', {
-          flowId: result.flowId,
-          hasFlowId: !!result.flowId
-        });
-
-        // Go directly to code entry screen
-        router.push({
-          pathname: '/phone-code',
-          params: {
-            phone: cdpPhone,
-            flowId: result.flowId,
-            mode: 'link'
-          }
-        });
-      } catch (error: any) {
-        console.error('❌ [PROFILE] Failed to send OTP:', {
-          message: error.message,
-          code: error.code,
-          status: error.status,
-          fullError: error
-        });
-
-        // Build detailed error message
-        let errorMessage = error.message || 'Unable to send verification code. Please try again.';
-        if (error.code || error.status) {
-          errorMessage += '\n\nError Details:';
-          if (error.code) errorMessage += `\nCode: ${error.code}`;
-          if (error.status) errorMessage += `\nStatus: ${error.status}`;
+      // Navigate to phone-verify with signin mode (pre-populated)
+      // This will use signInWithSms instead of linkSms, which works for already-linked phones
+      router.push({
+        pathname: '/phone-verify',
+        params: {
+          initialPhone: cdpPhone,
+          mode: 'reverify' // Special mode for re-verification
         }
-
-        // Show error alert
-        setAlertState({
-          visible: true,
-          title: 'Failed to Send Code',
-          message: errorMessage,
-          type: 'error'
-        });
-      }
+      });
     } else {
       console.log('📱 [PROFILE] No CDP phone, navigating to phone entry screen');
       // No phone linked yet, go to phone entry screen
@@ -358,7 +319,7 @@ export default function WalletScreen() {
         params: { initialPhone: verifiedPhone || '', mode: 'link' }
       });
     }
-  }, [router, verifiedPhone, currentUser, linkSms]);
+  }, [router, verifiedPhone, currentUser]);
 
   const openEmailLink = useCallback(() => {
     router.push('/email-verify?mode=link');

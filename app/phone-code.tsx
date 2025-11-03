@@ -16,7 +16,7 @@ export default function PhoneCodeScreen() {
   const params = useLocalSearchParams();
   const phone = params.phone as string;
   const flowId = params.flowId as string;
-  const mode = (params.mode as 'signin' | 'link') || 'link'; // Default to link for backwards compat
+  const mode = (params.mode as 'signin' | 'link' | 'reverify') || 'link'; // Default to link for backwards compat
 
   const [code, setCode] = useState('');
   const [verifying, setVerifying] = useState(false);
@@ -133,6 +133,20 @@ export default function PhoneCodeScreen() {
         await setVerifiedPhone(phone);
         console.log('✅ Phone sign-in successful, wallet ready, phone verified');
         router.dismissAll();
+      } else if (mode === 'reverify') {
+        // Re-verify existing phone - just update verification timestamp
+        console.log('✅ Phone re-verified successfully (already linked)');
+        await setVerifiedPhone(phone);
+
+        // Show success message
+        setAlert({
+          visible: true,
+          title: 'Phone Re-verified ✅',
+          message: 'Your phone number has been re-verified and is ready for Apple Pay checkout.',
+          type: 'success'
+        });
+
+        setTimeout(() => router.dismissAll(), 1500);
       } else {
         // Link phone to existing account
         console.log('✅ Phone linked successfully');
@@ -191,11 +205,13 @@ export default function PhoneCodeScreen() {
         >
           <View style={styles.stepContainer}>
             <Text style={styles.title}>
-              {mode === 'signin' ? 'Verify your phone' : 'Link your phone'}
+              {mode === 'signin' ? 'Verify your phone' : mode === 'reverify' ? 'Re-verify your phone' : 'Link your phone'}
             </Text>
             <Text style={styles.subtitle}>
               {mode === 'signin'
                 ? `Please enter the verification code we texted to ${phone || 'your phone'}.`
+                : mode === 'reverify'
+                ? `Please enter the verification code we texted to ${phone || 'your phone'} to re-verify.`
                 : `Please enter the verification code we texted to ${phone || 'your phone'}.`}
             </Text>
 
