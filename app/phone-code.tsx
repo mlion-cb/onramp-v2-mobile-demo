@@ -6,7 +6,7 @@ import { CoinbaseAlert } from '../components/ui/CoinbaseAlerts';
 import { COLORS } from '../constants/Colors';
 import { TEST_ACCOUNTS } from '../constants/TestAccounts';
 import { setVerifiedPhone, setCurrentWalletAddress, setCurrentSolanaAddress, setTestSession } from '../utils/sharedState';
-import { useVerifySmsOTP, useSignInWithSms, useLinkSms, useIsInitialized } from '@coinbase/cdp-hooks';
+import { useCurrentUser, useVerifySmsOTP, useSignInWithSms, useLinkSms, useIsInitialized } from '@coinbase/cdp-hooks';
 
 const { DARK_BG, CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BORDER, BLUE, WHITE } = COLORS;
 const RESEND_SECONDS = 30;
@@ -31,6 +31,7 @@ export default function PhoneCodeScreen() {
   const { signInWithSms } = useSignInWithSms();
   const { linkSms } = useLinkSms();
   const { isInitialized } = useIsInitialized();
+  const { currentUser } = useCurrentUser();
 
   const canResend = resendSeconds <= 0 && !sending && !verifying;
 
@@ -101,7 +102,7 @@ export default function PhoneCodeScreen() {
         } else {
           // Mock phone linking
           console.log('🧪 Storing test phone for linking');
-          await setVerifiedPhone(phone);
+          await setVerifiedPhone(phone, testUser.userId);
         }
 
         router.dismissAll();
@@ -130,13 +131,18 @@ export default function PhoneCodeScreen() {
         }
 
         // Mark phone as verified (fresh OTP = verified for 60 days)
-        await setVerifiedPhone(phone);
-        console.log('✅ Phone sign-in successful, wallet ready, phone verified');
-        router.dismissAll();
+        // Wait a moment for currentUser to be available after sign-in
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const userId = currentUser?.userId;
+        await setVerifiedPhone(phone, userId);
+        console.log('✅ Phone sign-in successful, wallet ready, phone verified', { userId});
+
+        // Navigate to home page after successful sign-in
+        router.replace('/(tabs)');
       } else if (mode === 'reverify') {
         // Re-verify existing phone - just update verification timestamp
         console.log('✅ Phone re-verified successfully (already linked)');
-        await setVerifiedPhone(phone);
+        await setVerifiedPhone(phone, currentUser?.userId);
 
         // Show success message
         setAlert({
@@ -150,7 +156,7 @@ export default function PhoneCodeScreen() {
       } else {
         // Link phone to existing account
         console.log('✅ Phone linked successfully');
-        await setVerifiedPhone(phone);
+        await setVerifiedPhone(phone, currentUser?.userId);
 
         // Show success message
         setAlert({
@@ -164,15 +170,48 @@ export default function PhoneCodeScreen() {
       }
     } catch (e: any) {
       console.error(`❌ [SMS Verify] ${mode} error:`, e);
+      console.error('Error type:', typeof e);
+      console.error('Error constructor:', e?.constructor?.name);
+      console.error('Error details:', {
+        message: e.message,
+        code: e.code,
+        status: e.status,
+        statusCode: e.statusCode,
+        correlationId: e.correlationId,
+        requestId: e.requestId,
+        cause: e.cause,
+        response: e.response,
+        data: e.data
+      });
 
-      // Build detailed error message for TestFlight debugging
+      // Try to log wrapped errors
+      if (e.cause) {
+        console.error('Original error cause:', e.cause);
+      }
+
+      // Build comprehensive error message
       let errorMessage = e.message || 'Invalid code. Please try again.';
 
-      // Add error code and status if available
-      if (e.code || e.status) {
-        errorMessage += '\n\nError Details:';
-        if (e.code) errorMessage += `\nCode: ${e.code}`;
-        if (e.status) errorMessage += `\nStatus: ${e.status}`;
+      // Add all error properties to the message
+      const errorDetails: string[] = [];
+      if (e.code) errorDetails.push(`Code: ${e.code}`);
+      if (e.status) errorDetails.push(`Status: ${e.status}`);
+      if (e.statusCode) errorDetails.push(`Status Code: ${e.statusCode}`);
+      if (e.correlationId) errorDetails.push(`Correlation ID: ${e.correlationId}`);
+      if (e.requestId) errorDetails.push(`Request ID: ${e.requestId}`);
+
+      // Try to stringify the entire error object
+      try {
+        const errorJson = JSON.stringify(e, null, 2);
+        if (errorJson !== '{}') {
+          errorDetails.push(`\nFull Error:\n${errorJson}`);
+        }
+      } catch (jsonError) {
+        // Ignore JSON stringify errors
+      }
+
+      if (errorDetails.length > 0) {
+        errorMessage += '\n\n' + errorDetails.join('\n');
       }
 
       setAlert({

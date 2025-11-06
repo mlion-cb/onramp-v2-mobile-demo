@@ -120,7 +120,7 @@ export function ApplePayWidget({
           onAlert?.("Payment Timeout", "The payment process took too long. Please try again.", 'error');
           setIsProcessingPayment?.(false);
           onClose?.();
-        }, 30000); // 30 second timeout
+        }, 60000); // 30 second timeout
       }}
 
       onMessage={({ nativeEvent }) => {

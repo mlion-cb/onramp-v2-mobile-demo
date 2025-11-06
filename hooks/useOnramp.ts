@@ -157,6 +157,13 @@ export function useOnramp() {
       let phone = getVerifiedPhone();
       let phoneAt = getVerifiedPhoneAt();
 
+      // DEBUG: Log sandbox mode state
+      const currentSandboxMode = getSandboxMode();
+      console.log('🔍 [DEBUG] Sandbox mode check:', {
+        sandboxMode: currentSandboxMode,
+        willSkipValidation: currentSandboxMode === true
+      });
+
       // Check for missing auth methods (non-sandbox only)
       if (!getSandboxMode()) {
         console.log('🔒 [APPLE PAY] Production mode - validating phone/email:', {
@@ -166,6 +173,10 @@ export function useOnramp() {
           phoneAt,
           isPhoneFresh: isPhoneFresh60d()
         });
+
+        // Note: Non-US phones can now go through the verification flow for experience
+        // The actual Apple Pay order will fail at Coinbase API level for non-US phones
+        // This allows international users to experience the flow with disclaimers
 
         // Check if email is missing or not linked
         if (!userEmail) {
@@ -193,14 +204,19 @@ export function useOnramp() {
         }
       } else {
         console.log('🧪 [APPLE PAY] Sandbox mode - skipping phone validation');
+
+        // CRITICAL: Apple Pay is US-only, so always use TEST_ACCOUNTS US phone in sandbox
+        // This allows international users to test Apple Pay flow
+        phone = TEST_ACCOUNTS.phone; // US phone: +12345678901
+        phoneAt = Date.now();
+        console.log('🧪 [APPLE PAY] Using TEST_ACCOUNTS US phone for sandbox:', phone);
       }
 
-      // Sandbox: use mock phone if no verified phone
-      if (getSandboxMode() && (!phone || !isPhoneFresh60d())) {
-        phone = '+12345678901'; // Mock US number for sandbox
-        phoneAt = Date.now();
-      } else if (!phone || !isPhoneFresh60d()) {
-        throw new Error('Phone not verified or expired');
+      // Production: require fresh phone verification
+      if (!getSandboxMode() && (!phone || !isPhoneFresh60d())) {
+        const phoneExpiredError: any = new Error('Phone verification has expired. Please re-verify your phone to continue with Apple Pay.');
+        phoneExpiredError.code = 'PHONE_EXPIRED';
+        throw phoneExpiredError;
       }
 
       // CRITICAL: For EVM networks (Base, Ethereum), MUST use Smart Account
@@ -544,5 +560,8 @@ export function useOnramp() {
     setTransactionStatus,
     setIsProcessingPayment,
     fetchQuote,
+    // Helpers
+    getNetworkNameFromDisplayName,
+    getAssetSymbolFromName,
   };
 }
