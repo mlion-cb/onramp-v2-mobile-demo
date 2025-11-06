@@ -308,10 +308,14 @@ export default function WalletScreen() {
   }, [manualAddress, localSandboxEnabled]);
 
   const openPhoneVerify = useCallback(async () => {
-    const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
+    // Use test phone for TestFlight, real phone for production
+    const cdpPhone = testSession
+      ? TEST_ACCOUNTS.phone
+      : currentUser?.authenticationMethods?.sms?.phoneNumber;
 
     console.log('📱 [PROFILE] openPhoneVerify called:', {
       cdpPhone,
+      testSession,
       hasCurrentUser: !!currentUser,
       authMethods: currentUser?.authenticationMethods
     });
@@ -328,7 +332,7 @@ export default function WalletScreen() {
         params: { initialPhone: verifiedPhone || '', mode: 'link' }
       });
     }
-  }, [router, verifiedPhone, currentUser]);
+  }, [router, verifiedPhone, currentUser, testSession]);
 
   const handleReverifyConfirm = useCallback(async () => {
     if (!reverifyPhone) return;
@@ -338,13 +342,16 @@ export default function WalletScreen() {
     try {
       console.log('🔄 [PROFILE] Starting re-verification - signing out and navigating to phone-verify');
 
-      // Sign out first
-      await signOut();
+      // Sign out first (skip for test sessions)
+      if (!testSession) {
+        await signOut();
+        // Wait a moment for sign out to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } else {
+        console.log('🧪 [PROFILE] Test session - skipping sign out');
+      }
 
-      // Wait a moment for sign out to complete
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      console.log('✅ [PROFILE] Signed out, navigating to phone-verify with pre-filled number');
+      console.log('✅ [PROFILE] Navigating to phone-verify with pre-filled number');
 
       // Navigate to phone-verify with phone pre-filled and auto-send enabled
       // Use replace to avoid auth gate seeing us on profile while signed out
@@ -365,7 +372,7 @@ export default function WalletScreen() {
         type: 'error'
       });
     }
-  }, [reverifyPhone, signOut, router]);
+  }, [reverifyPhone, signOut, router, testSession]);
 
   const openEmailLink = useCallback(() => {
     router.push('/email-verify?mode=link');
@@ -846,7 +853,10 @@ export default function WalletScreen() {
                     <Text style={styles.subHint}>Phone number {testSession && '(TestFlight)'}</Text>
                     <Text style={styles.subValue}>
                       {(() => {
-                        const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
+                        // Use test phone for TestFlight, real phone for production
+                        const cdpPhone = testSession
+                          ? TEST_ACCOUNTS.phone
+                          : currentUser?.authenticationMethods?.sms?.phoneNumber;
 
                         if (!cdpPhone) return 'No phone linked';
 
@@ -864,7 +874,10 @@ export default function WalletScreen() {
                       })()}
                     </Text>
                     {(() => {
-                      const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
+                      // Use test phone for TestFlight, real phone for production
+                      const cdpPhone = testSession
+                        ? TEST_ACCOUNTS.phone
+                        : currentUser?.authenticationMethods?.sms?.phoneNumber;
                       if (!cdpPhone) return null;
 
                       const isVerified = verifiedPhone === cdpPhone && phoneFresh;
@@ -905,7 +918,10 @@ export default function WalletScreen() {
 
                   {/* Phone Link/Verify Buttons */}
                   {(() => {
-                    const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
+                    // Use test phone for TestFlight, real phone for production
+                    const cdpPhone = testSession
+                      ? TEST_ACCOUNTS.phone
+                      : currentUser?.authenticationMethods?.sms?.phoneNumber;
 
                     console.log('📱 [PHONE BUTTON] Debug:', {
                       cdpPhone,
@@ -915,8 +931,17 @@ export default function WalletScreen() {
                       match: verifiedPhone === cdpPhone
                     });
 
-                    // Skip button for test sessions
-                    if (testSession) return null;
+                    // For test sessions, always show verify button if not verified
+                    if (testSession) {
+                      const isVerified = verifiedPhone === cdpPhone && phoneFresh;
+                      if (isVerified) return null; // Already verified
+
+                      return (
+                        <Pressable style={styles.button} onPress={openPhoneVerify}>
+                          <Text style={styles.buttonText}>Verify Test Phone</Text>
+                        </Pressable>
+                      );
+                    }
 
                     // No phone in CDP → Link Phone
                     if (!cdpPhone) {
@@ -947,11 +972,14 @@ export default function WalletScreen() {
 
                   {/* Developer Tool: Force Unverify Phone */}
                   {(() => {
-                    const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
+                    // Use test phone for TestFlight, real phone for production
+                    const cdpPhone = testSession
+                      ? TEST_ACCOUNTS.phone
+                      : currentUser?.authenticationMethods?.sms?.phoneNumber;
                     const isVerified = verifiedPhone === cdpPhone && phoneFresh;
 
                     // Only show if phone is currently verified (for testing re-verification flow)
-                    if (!isVerified || testSession) return null;
+                    if (!isVerified) return null;
 
                     return (
                       <Pressable
@@ -1150,19 +1178,21 @@ export default function WalletScreen() {
                       </View>
                     )}
 
-                    {!loadingBalances && !balancesError && balances.length > 0 && (
+                    {!loadingBalances && !balancesError && (
                       <View style={{ marginTop: 16 }}>
                         {/* Group balances by network */}
                         {['Base', 'Ethereum', 'Solana'].map(networkName => {
                           const networkBalances = balances.filter(b => b.network === networkName);
-                          if (networkBalances.length === 0) return null;
 
                           return (
                             <View key={networkName} style={{ marginBottom: 20 }}>
                               <View style={styles.networkHeader}>
                                 <Text style={styles.networkTitle}>{networkName}</Text>
                               </View>
-                              {networkBalances.map((balance, index) => {
+                              {networkBalances.length === 0 ? (
+                                <Text style={[styles.subHint, { paddingVertical: 12 }]}>No tokens</Text>
+                              ) : (
+                                networkBalances.map((balance, index) => {
                                 const symbol = balance.token?.symbol || 'UNKNOWN';
                                 const amount = parseFloat(balance.amount?.amount || '0');
                                 const decimals = parseInt(balance.amount?.decimals || '0');
@@ -1227,7 +1257,8 @@ export default function WalletScreen() {
                                     </View>
                                   </View>
                                 );
-                              })}
+                              })
+                              )}
                             </View>
                           );
                         })}
@@ -1329,12 +1360,11 @@ export default function WalletScreen() {
                       </View>
                     )}
 
-                    {!loadingTestnetBalances && !testnetBalancesError && testnetBalances.length > 0 && (
+                    {!loadingTestnetBalances && !testnetBalancesError && (
                       <View style={{ marginTop: 16 }}>
                         {/* Group balances by network */}
                         {['Base Sepolia', 'Ethereum Sepolia', 'Solana Devnet'].map(networkName => {
                           const networkBalances = testnetBalances.filter(b => b.network === networkName);
-                          if (networkBalances.length === 0) return null;
 
                           return (
                             <View key={networkName} style={{ marginBottom: 24 }}>
@@ -1359,7 +1389,10 @@ export default function WalletScreen() {
                               </View>
 
                               {/* Tokens for this network */}
-                              {networkBalances.map((balance, index) => {
+                              {networkBalances.length === 0 ? (
+                                <Text style={[styles.subHint, { paddingVertical: 12 }]}>No tokens - use faucet above</Text>
+                              ) : (
+                                networkBalances.map((balance, index) => {
                                 const symbol = balance.token?.symbol || 'UNKNOWN';
                                 const amount = parseFloat(balance.amount?.amount || '0');
                                 const decimals = parseInt(balance.amount?.decimals || '0');
@@ -1423,7 +1456,8 @@ export default function WalletScreen() {
                 </View>
             </View>
                                 );
-                              })}
+                              })
+                              )}
                             </View>
                           );
                         })}

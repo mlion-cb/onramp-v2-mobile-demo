@@ -26,6 +26,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -36,7 +37,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { parseEther, parseUnits } from 'viem';
+import { parseEther, parseUnits, createPublicClient, http, formatEther } from 'viem';
+import { base, baseSepolia, mainnet, sepolia } from 'viem/chains';
 
 const { DARK_BG, CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BLUE, WHITE, BORDER } = COLORS;
 
@@ -58,6 +60,7 @@ export default function TransferScreen() {
   const [alertMessage, setAlertMessage] = useState('');
   const [alertType, setAlertType] = useState<'success' | 'error' | 'info'>('info');
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
+  const [isPendingAlert, setIsPendingAlert] = useState(false); // Track if alert is showing pending state
 
   // Confirmation modal state
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -72,7 +75,27 @@ export default function TransferScreen() {
 
   // Paymaster only supports specific tokens on Base: USDC, EURC, BTC (CBBTC)
   const tokenSymbol = selectedToken?.token?.symbol?.toUpperCase() || '';
-  const isPaymasterSupported = network === 'base' && ['USDC', 'EURC', 'BTC'].includes(tokenSymbol);
+  // Paymaster support:
+  // - Base mainnet: USDC, EURC, BTC only
+  // - Base Sepolia: All tokens (all transactions sponsored)
+  const isPaymasterSupported =
+    (network === 'base' && ['USDC', 'EURC', 'BTC'].includes(tokenSymbol)) ||
+    (network === 'base-sepolia');
+
+  // Check if this is a native token transfer (ETH on EVM, SOL on Solana)
+  // Native tokens don't have contract addresses and require gas fees
+  // Also check for sentinel addresses: 0x0000... or 0xeeee... (used by SDKs to represent native tokens)
+  const contractAddress = selectedToken?.token?.contractAddress;
+  const mintAddress = selectedToken?.token?.mintAddress;
+
+  // For Solana: native SOL has no mintAddress, SPL tokens have mintAddress
+  // For EVM: native ETH has no/sentinel contractAddress, ERC-20s have real contractAddress
+  const isNativeToken = !mintAddress && (
+    !contractAddress ||
+    contractAddress === '0x0000000000000000000000000000000000000000' ||
+    contractAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
+  );
+  const needsGasFee = isNativeToken && !isPaymasterSupported;
 
   console.log('🔍 [TRANSFER] Account addresses:', {
     solanaAddress,
@@ -85,7 +108,9 @@ export default function TransferScreen() {
       showAlert(
         'Transaction Pending ⏳',
         `User Operation Hash:\n${userOpData.userOpHash}\n\nWaiting for confirmation...\nPlease do NOT close this alert until transaction is complete. This may take a few seconds.`,
-        'info'
+        'info',
+        undefined,
+        true // Mark as pending alert (hide button)
       );
     } else if (userOpStatus === 'success' && userOpData) {
       // Build explorer URL based on network and transaction hash
@@ -192,11 +217,12 @@ From: ${smartAccountAddress?.slice(0, 6)}...${smartAccountAddress?.slice(-4)}`;
   };
 
   // Helper to show custom alerts
-  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info', url?: string) => {
+  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info', url?: string, isPending = false) => {
     setAlertTitle(title);
     setAlertMessage(message);
     setAlertType(type);
     setExplorerUrl(url || null);
+    setIsPendingAlert(isPending);
     setAlertVisible(true);
   };
 
@@ -229,7 +255,7 @@ From: ${smartAccountAddress?.slice(0, 6)}...${smartAccountAddress?.slice(-4)}`;
       return;
     }
 
-    // Show confirmation modal instead of executing immediately
+    // Show confirmation modal
     setShowConfirmation(true);
   };
 
@@ -385,7 +411,9 @@ From: ${smartAccountAddress?.slice(0, 6)}...${smartAccountAddress?.slice(-4)}`;
       showAlert(
         'Transaction Pending ⏳',
         `Building and submitting Solana transaction...\n\nAmount: ${amount} ${tokenSymbol}\nTo: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}\n\nPlease do NOT close this alert until transaction is complete. This may take a few seconds.`,
-        'info'
+        'info',
+        undefined,
+        true // Mark as pending alert (hide button)
       );
 
       // Create Solana connection - use network parameter to determine cluster
@@ -627,8 +655,15 @@ To: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`;
                 return network.charAt(0).toUpperCase() + network.slice(1);
               })()}
             </Text>
-            {isPaymasterSupported && (
-              <Text style={styles.helper}>✨ Gasless transfer powered by Coinbase Paymaster</Text>
+            {isPaymasterSupported ? (
+              <Text style={styles.helper}>
+                ✨ Gasless transfer powered by Coinbase Paymaster
+                {network === 'base-sepolia' && ' (all tokens sponsored on testnet)'}
+              </Text>
+            ) : (
+              <Text style={[styles.helper, { color: '#FF9800' }]}>
+                ⚠️ Network fees in {isNativeToken ? selectedToken?.token?.symbol : 'ETH'} will apply to this transfer
+              </Text>
             )}
           </View>
 
@@ -736,6 +771,13 @@ To: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`;
                 <Text style={styles.quickButtonText}>Max</Text>
               </Pressable>
             </View>
+
+            {/* Warning for native tokens without paymaster */}
+            {needsGasFee && (
+              <Text style={[styles.helper, { color: '#FF9800', marginTop: 12 }]}>
+                ⚠️ Note: You cannot transfer 100% of {selectedToken?.token?.symbol} as gas fees must be paid from your balance. Please leave some {selectedToken?.token?.symbol} for transaction fees.
+              </Text>
+            )}
           </View>
 
           {/* Send Button */}
@@ -848,6 +890,7 @@ To: ${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`;
           handleAlertDismiss();
         }}
         confirmText={explorerUrl && !explorerUrl.startsWith('Transaction Hash:') ? "View Transaction" : "Got it"}
+        hideButton={isPendingAlert} // Hide button during pending state
       />
     </SafeAreaView>
   );

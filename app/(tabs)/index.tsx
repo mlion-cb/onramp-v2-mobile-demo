@@ -98,6 +98,7 @@ import { ApplePayWidget, OnrampForm, useOnramp } from "../../components";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
 import { clearPhoneVerifyWasCanceled, getCountry, getCurrentNetwork, getCurrentWalletAddress, getPendingForm, getPhoneVerifyWasCanceled, getSandboxMode, getSubdivision, getTestWalletEvm, getTestWalletSol, getVerifiedPhone, isPhoneFresh60d, isTestSessionActive, setCurrentSolanaAddress, setCurrentWalletAddress, setPendingForm } from "../../utils/sharedState";
+import { TEST_ACCOUNTS } from "../../constants/TestAccounts";
 
 
 const { BLUE, DARK_BG, CARD_BG, BORDER, TEXT_PRIMARY, TEXT_SECONDARY, WHITE } = COLORS;
@@ -580,7 +581,10 @@ export default function Index() {
       // Handle missing phone - show confirmation before linking/verifying
       if (error.code === 'MISSING_PHONE') {
         setPendingForm(updatedFormData);
-        const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
+        // Use test phone for test sessions, real phone for production
+        const cdpPhone = testSession
+          ? TEST_ACCOUNTS.phone
+          : currentUser?.authenticationMethods?.sms?.phoneNumber;
 
         // If phone is linked to CDP but not verified/expired, use re-verify flow
         if (cdpPhone) {
@@ -594,15 +598,19 @@ export default function Index() {
             type: 'info',
             onConfirmCallback: async () => {
               try {
-                console.log('🔄 [INDEX] Starting phone verification - signing out');
+                console.log('🔄 [INDEX] Starting phone verification');
 
-                // Sign out first
-                await signOut();
+                // Sign out first (skip for test sessions)
+                if (!testSession) {
+                  console.log('🔄 [INDEX] Signing out for re-verification');
+                  await signOut();
+                  // Wait for sign out to complete
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                } else {
+                  console.log('🧪 [INDEX] Test session - skipping sign out');
+                }
 
-                // Wait for sign out to complete
-                await new Promise(resolve => setTimeout(resolve, 500));
-
-                console.log('✅ [INDEX] Signed out, navigating to phone-verify with pre-filled number');
+                console.log('✅ [INDEX] Navigating to phone-verify with pre-filled number');
 
                 // Navigate to phone-verify with phone pre-filled and auto-send enabled
                 router.replace({

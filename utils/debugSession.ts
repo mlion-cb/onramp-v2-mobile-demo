@@ -4,8 +4,8 @@
  * Checks SecureStore for CDP tokens and displays results in UI alerts
  */
 
-import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 // CDP SDK likely uses keys like these (common patterns)
 // Note: SecureStore only allows alphanumeric, ".", "-", "_" in key names
@@ -145,7 +145,7 @@ export async function debugSecureStoreSession(): Promise<string> {
     results.push('\n❌ NO CDP TOKENS FOUND ANYWHERE');
     results.push('Session won\'t persist on restart!');
     results.push('\nThis is a CDP SDK bug.');
-    results.push('SDK v0.0.52 may not be saving tokens.');
+    results.push('SDK v0.0.57 may not be saving tokens.');
   }
 
   return results.join('\n');

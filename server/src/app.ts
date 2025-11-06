@@ -530,7 +530,17 @@ app.post('/push-tokens', async (req, res) => {
   try {
     const { userId, pushToken, platform, tokenType } = req.body;
 
+    console.log('📥 [PUSH] Registration request received:', {
+      userId,
+      platform,
+      tokenType,
+      reqUserId: req.userId,
+      hasToken: !!pushToken,
+      tokenLength: pushToken?.length
+    });
+
     if (!userId || !pushToken) {
+      console.error('❌ [PUSH] Missing required fields');
       return res.status(400).json({ error: 'userId and pushToken are required' });
     }
 
@@ -554,15 +564,52 @@ app.post('/push-tokens', async (req, res) => {
     // Store in Redis (production) or in-memory (local dev)
     if (useRedis && redis) {
       await redis.set(`pushtoken:${userId}`, JSON.stringify(tokenData));
+      console.log('✅ [PUSH] Token stored in Redis for user:', userId);
     } else {
       pushTokenStore.set(userId, tokenData);
+      console.log('✅ [PUSH] Token stored in memory for user:', userId);
+      console.log('📊 [PUSH] Total tokens in store:', pushTokenStore.size);
     }
 
-    console.log('✅ [PUSH] Token registered for user:', userId, `(${tokenData.tokenType} token)`);
+    console.log('✅ [PUSH] Token registered successfully:', {
+      userId,
+      tokenType: tokenData.tokenType,
+      platform: tokenData.platform
+    });
     res.json({ success: true });
   } catch (error) {
     console.error('❌ [PUSH] Error:', error);
     res.status(500).json({ error: 'Failed to store push token' });
+  }
+});
+
+// Debug endpoint to check push token status
+app.get('/push-tokens/debug/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    let tokenData: any = null;
+    if (useRedis && redis) {
+      const data = await redis.get(`pushtoken:${userId}`);
+      tokenData = data ? JSON.parse(data) : null;
+    } else {
+      tokenData = pushTokenStore.get(userId) || null;
+    }
+
+    res.json({
+      userId,
+      hasToken: !!tokenData,
+      tokenData: tokenData ? {
+        platform: tokenData.platform,
+        tokenType: tokenData.tokenType,
+        tokenLength: tokenData.token?.length,
+        updatedAt: new Date(tokenData.updatedAt).toISOString()
+      } : null,
+      storage: useRedis ? 'redis' : 'in-memory',
+      allUserIds: useRedis ? 'N/A (Redis)' : Array.from(pushTokenStore.keys())
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to check token' });
   }
 });
 

@@ -67,7 +67,9 @@ EXPO_PUBLIC_CDP_PROJECT_ID=your_project_id_here
 # Local server (will update with ngrok URL in step 5)
 EXPO_PUBLIC_BASE_URL=http://localhost:3000
 
-# Use Expo Crypto for Expo Go
+# Crypto implementation selector
+# - Set to 'true' for Expo Go (npx expo start)
+# - Set to 'false' for development builds (npx expo run:ios)
 EXPO_PUBLIC_USE_EXPO_CRYPTO=true
 ```
 
@@ -98,13 +100,21 @@ npm run dev
 
 ```bash
 # Terminal 2: Start Expo
+
+# Option A: Expo Go (requires USE_EXPO_CRYPTO=true in .env)
 npx expo start
-# Scan QR code with Expo Go app or open iOS simulator
+# Scan QR code with Expo Go app or press 'i' for iOS simulator
+
+# Option B: Development build (set USE_EXPO_CRYPTO=false in .env)
+npx expo run:ios
+# Builds and installs native iOS app with full crypto support
 ```
 
 ### 5. Setup Webhooks with ngrok (Optional)
 
 **Note**: This step is **optional**. Webhooks enable push notifications for transaction updates. Without ngrok, the app works fully but you won't receive push notifications.
+
+**⚠️ iOS Simulator Limitation**: Push notifications do **not** work on iOS Simulator due to Apple's restrictions. To test push notifications, use a physical iOS device.
 
 If you want push notifications, open a **third terminal**:
 
@@ -251,7 +261,8 @@ On Base network, transfers of USDC, EURC, or BTC are **gasless** (no ETH needed 
 - Ensure you're using email address that hasn't been used before
 
 ### "Push notifications not working"
-- Should work automatically in Expo Go
+- **iOS Simulator**: Push notifications do not work on iOS Simulator. Use a physical device.
+- Should work automatically in Expo Go on physical devices
 - Verify ngrok tunnel is running
 - Check `.env` has correct ngrok URL
 - Restart Expo after updating `.env`
@@ -298,8 +309,8 @@ Check Expo logs:
 | Variable | Description |
 |----------|-------------|
 | `EXPO_PUBLIC_CDP_PROJECT_ID` | Your CDP project ID |
-| `EXPO_PUBLIC_BASE_URL` | Backend URL (ngrok URL) |
-| `EXPO_PUBLIC_USE_EXPO_CRYPTO` | `true` for Expo Go |
+| `EXPO_PUBLIC_BASE_URL` | Backend URL (ngrok URL or localhost) |
+| `EXPO_PUBLIC_USE_EXPO_CRYPTO` | `true` for Expo Go (`npx expo start`), `false` for dev builds (`npx expo run:ios`) |
 
 ### Required (Server `.env`)
 
