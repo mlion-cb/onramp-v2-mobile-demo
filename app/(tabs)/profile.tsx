@@ -84,7 +84,6 @@
  * @see hooks/useOnramp.ts for how region affects options
  */
 
-import { useOnramp } from "@/hooks/useOnramp";
 import {
   useCurrentUser,
   useEvmAddress,
@@ -93,19 +92,21 @@ import {
   useIsInitialized,
   useIsSignedIn,
   useLinkSms,
+  useSignInWithSms,
   useSignOut,
   useSolanaAddress,
 } from "@coinbase/cdp-hooks";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { BASE_URL } from "../../constants/BASE_URL";
 import { COLORS } from "../../constants/Colors";
 import { TEST_ACCOUNTS } from "../../constants/TestAccounts";
-import { clearManualAddress, clearTestSession, daysUntilExpiry, formatPhoneDisplay, getCountry, getManualWalletAddress, getSandboxMode, getSubdivision, getTestWalletSol, getVerifiedPhone, isPhoneFresh60d, isTestSessionActive, setCountry, setCurrentSolanaAddress, setCurrentWalletAddress, setManualWalletAddress, setSandboxMode, setSubdivision, setVerifiedPhone } from "../../utils/sharedState";
+import { debugSecureStoreSession } from "../../utils/debugSession";
+import { clearManualAddress, clearTestSession, daysUntilExpiry, forceUnverifyPhone, formatPhoneDisplay, getManualWalletAddress, getSandboxMode, getTestWalletSol, getVerifiedPhone, getVerifiedPhoneUserId, isPhoneFresh60d, isTestSessionActive, setCountry, setCurrentSolanaAddress, setCurrentWalletAddress, setManualWalletAddress, setSandboxMode, setSubdivision, setVerifiedPhone } from "../../utils/sharedState";
 
 const { CARD_BG, TEXT_PRIMARY, TEXT_SECONDARY, BLUE, BORDER, WHITE, VIOLET, ORANGE } = COLORS;
 
@@ -119,6 +120,7 @@ export default function WalletScreen() {
   const { currentUser } = useCurrentUser();
   const { signOut } = useSignOut();
   const { linkSms } = useLinkSms();
+  const { signInWithSms } = useSignInWithSms();
 
   const [alertState, setAlertState] = useState({
     visible: false,
@@ -126,6 +128,10 @@ export default function WalletScreen() {
     message: "",
     type: 'success' as 'success' | 'error' | 'info'
   });
+
+  const [showReverifyConfirm, setShowReverifyConfirm] = useState(false);
+  const [reverifyPhone, setReverifyPhone] = useState<string | null>(null);
+  const [debuggingSession, setDebuggingSession] = useState(false);
 
   // Override CDP data if test session active
   const explicitEOAAddress = testSession ? TEST_ACCOUNTS.wallets.eoaDummy : (currentUser?.evmAccounts?.[0] as string);
@@ -224,23 +230,35 @@ export default function WalletScreen() {
     }, [])
   );
 
-  // Clear stale verified phone data when user changes or CDP phone doesn't match
+  // Clear stale verified phone data when user changes
   useEffect(() => {
+    if (!currentUser?.userId) return;
+
     const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
     const storedVerifiedPhone = getVerifiedPhone();
+    const storedVerifiedPhoneUserId = getVerifiedPhoneUserId();
 
-    // If there's a stored verified phone but no CDP phone, clear it (user signed in with different account)
-    if (storedVerifiedPhone && !cdpPhone) {
-      console.log('🧹 [PROFILE] Clearing stale verified phone (no CDP phone)');
+    console.log('🔍 [PROFILE] Phone verification check:', {
+      currentUserId: currentUser?.userId,
+      storedUserId: storedVerifiedPhoneUserId,
+      storedPhone: storedVerifiedPhone,
+      cdpPhone
+    });
+
+    // Clear if verified phone belongs to a different user
+    if (storedVerifiedPhone && storedVerifiedPhoneUserId && storedVerifiedPhoneUserId !== currentUser.userId) {
+      console.log('🧹 [PROFILE] Clearing stale verified phone (different user)');
       setVerifiedPhone(null).then(() => {
         setVerifiedPhoneLocal(null);
         setPhoneFresh(false);
         setPhoneExpiry(-1);
       });
+      return;
     }
-    // If stored phone doesn't match CDP phone, clear it (switched accounts or unlinked phone)
-    else if (storedVerifiedPhone && cdpPhone && storedVerifiedPhone !== cdpPhone) {
-      console.log('🧹 [PROFILE] Clearing stale verified phone (mismatch with CDP)');
+
+    // Clear if phone mismatch (user unlinked phone or linked different phone)
+    if (storedVerifiedPhone && cdpPhone && storedVerifiedPhone !== cdpPhone) {
+      console.log('🧹 [PROFILE] Clearing stale verified phone (phone mismatch)');
       setVerifiedPhone(null).then(() => {
         setVerifiedPhoneLocal(null);
         setPhoneFresh(false);
@@ -298,19 +316,10 @@ export default function WalletScreen() {
       authMethods: currentUser?.authenticationMethods
     });
 
-    // If phone already linked to CDP, use sign-in flow for re-verification
+    // If phone already linked to CDP, show re-verify confirmation (requires sign out)
     if (cdpPhone) {
-      console.log('📱 [PROFILE] Phone already linked - using sign-in flow for re-verification');
-
-      // Navigate to phone-verify with signin mode (pre-populated)
-      // This will use signInWithSms instead of linkSms, which works for already-linked phones
-      router.push({
-        pathname: '/phone-verify',
-        params: {
-          initialPhone: cdpPhone,
-          mode: 'reverify' // Special mode for re-verification
-        }
-      });
+      setReverifyPhone(cdpPhone);
+      setShowReverifyConfirm(true);
     } else {
       console.log('📱 [PROFILE] No CDP phone, navigating to phone entry screen');
       // No phone linked yet, go to phone entry screen
@@ -320,6 +329,43 @@ export default function WalletScreen() {
       });
     }
   }, [router, verifiedPhone, currentUser]);
+
+  const handleReverifyConfirm = useCallback(async () => {
+    if (!reverifyPhone) return;
+
+    setShowReverifyConfirm(false);
+
+    try {
+      console.log('🔄 [PROFILE] Starting re-verification - signing out and navigating to phone-verify');
+
+      // Sign out first
+      await signOut();
+
+      // Wait a moment for sign out to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      console.log('✅ [PROFILE] Signed out, navigating to phone-verify with pre-filled number');
+
+      // Navigate to phone-verify with phone pre-filled and auto-send enabled
+      // Use replace to avoid auth gate seeing us on profile while signed out
+      router.replace({
+        pathname: '/phone-verify',
+        params: {
+          initialPhone: reverifyPhone,
+          mode: 'signin',
+          autoSend: 'true'
+        }
+      });
+    } catch (error: any) {
+      console.error('❌ [PROFILE] Re-verification error:', error);
+      setAlertState({
+        visible: true,
+        title: 'Error',
+        message: error.message || 'Failed to start re-verification. Please try again.',
+        type: 'error'
+      });
+    }
+  }, [reverifyPhone, signOut, router]);
 
   const openEmailLink = useCallback(() => {
     router.push('/email-verify?mode=link');
@@ -376,7 +422,7 @@ export default function WalletScreen() {
           console.error('❌ [PROFILE] No access token available');
           setBalancesError('Authentication required');
           setLoadingBalances(false);
-          return;
+    return;
         }
       }
 
@@ -467,7 +513,7 @@ export default function WalletScreen() {
           console.error('❌ [PROFILE] No access token available for testnet');
           setTestnetBalancesError('Authentication required');
           setLoadingTestnetBalances(false);
-          return;
+      return;
         }
       }
 
@@ -551,6 +597,28 @@ export default function WalletScreen() {
     }, [effectiveIsSignedIn, primaryAddress, solanaAddress, fetchBalances, fetchTestnetBalances])
   );
 
+  const handleDebugSession = useCallback(async () => {
+    setDebuggingSession(true);
+    try {
+      const debugInfo = await debugSecureStoreSession();
+      setAlertState({
+        visible: true,
+        title: 'Session Debug',
+        message: debugInfo,
+        type: 'info'
+      });
+    } catch (error: any) {
+      setAlertState({
+        visible: true,
+        title: 'Debug Error',
+        message: `Failed to debug session:\n${error.message}`,
+        type: 'error'
+      });
+    } finally {
+      setDebuggingSession(false);
+    }
+  }, []);
+
   const handleSignOut = useCallback(async () => {
     try {
       // Check if this is a test session
@@ -559,7 +627,7 @@ export default function WalletScreen() {
         await clearTestSession();
       } else {
         // Real CDP sign out
-        await signOut();
+      await signOut();
       }
     } catch (e) {
       console.warn('signOut error', e);
@@ -571,7 +639,10 @@ export default function WalletScreen() {
       // This allows same user to re-sign in without re-verifying within 60 days
       setCountry('US'); // Reset to default
       setSubdivision('CA'); // Reset to default
-      // Sandbox mode will reset to ON automatically on next app start
+
+      // CRITICAL: Reset sandbox mode to ON for safety (prevents accidental real transactions)
+      setSandboxMode(true);
+
       // Navigate to login screen
       router.replace('/auth/login');
     }
@@ -601,7 +672,7 @@ export default function WalletScreen() {
       setShowWalletChoice(true);
     } else if (evmWalletAddress) {
       setExportType('evm');
-      setShowExportConfirm(true);
+    setShowExportConfirm(true);
     } else if (solanaAddress) {
       setExportType('solana');
       setShowExportConfirm(true);
@@ -612,27 +683,27 @@ export default function WalletScreen() {
     // Check if this is a test account (TestFlight)
     if (isTestSessionActive()) {
       console.log('🧪 Test account - exporting mock seed phrase');
-      setExporting(true);
-      try {
+    setExporting(true);
+    try {
         // Copy mock seed phrase to clipboard
         await Clipboard.setStringAsync(TEST_ACCOUNTS.seedPhrase);
-        setAlertState({
-          visible: true,
+      setAlertState({
+        visible: true,
           title: "Mock Seed Phrase Copied (TestFlight)",
           message: `This is a mock seed phrase for TestFlight testing only:\n\n"${TEST_ACCOUNTS.seedPhrase}"\n\nNo real wallet exists. This is for demonstration purposes only.`,
-          type: "info",
-        });
-      } catch (e) {
-        setAlertState({
-          visible: true,
-          title: "Export failed",
+        type: "info",
+      });
+    } catch (e) {
+      setAlertState({
+        visible: true,
+        title: "Export failed",
           message: "Unable to copy mock seed phrase to clipboard.",
-          type: "error",
-        });
-      } finally {
-        setExporting(false);
-        setShowExportConfirm(false);
-      }
+        type: "error",
+      });
+    } finally {
+      setExporting(false);
+      setShowExportConfirm(false);
+    }
       return;
     }
 
@@ -641,8 +712,8 @@ export default function WalletScreen() {
     const targetAddress = isEvmExport ? evmWalletAddress : solanaAddress;
 
     if (!targetAddress) {
-      setAlertState({
-        visible: true,
+    setAlertState({
+      visible: true,
         title: "Export failed",
         message: `No ${isEvmExport ? 'EVM' : 'Solana'} address found for export.`,
         type: "error",
@@ -667,8 +738,8 @@ export default function WalletScreen() {
         visible: true,
         title: "Private key copied",
         message: `Your ${isEvmExport ? 'EVM' : 'Solana'} private key has been copied to the clipboard. Store it securely and clear your clipboard.`,
-        type: "info",
-      });
+      type: "info",
+    });
     } catch (e) {
       console.error('Export Error Details:', e);
 
@@ -780,11 +851,13 @@ export default function WalletScreen() {
                         if (!cdpPhone) return 'No phone linked';
 
                         const cdpPhoneFormatted = formatPhoneDisplay(cdpPhone);
+                        const isUSPhone = cdpPhone.startsWith('+1');
 
                         // Check if CDP phone matches verified phone and is fresh
                         const isVerified = verifiedPhone === cdpPhone && phoneFresh;
                         const isExpired = verifiedPhone === cdpPhone && !phoneFresh;
 
+                        // All phones: Show expiration status (same flow for US and non-US)
                         if (isVerified) return cdpPhoneFormatted;
                         if (isExpired) return `${cdpPhoneFormatted} (expired)`;
                         return `${cdpPhoneFormatted} (needs verification)`;
@@ -796,23 +869,34 @@ export default function WalletScreen() {
 
                       const isVerified = verifiedPhone === cdpPhone && phoneFresh;
                       const isExpired = verifiedPhone === cdpPhone && !phoneFresh;
+                      const isUSPhone = cdpPhone.startsWith('+1');
 
+                      // All phones: Same flow, but non-US shows disclaimer
                       if (isVerified) {
                         return (
                           <Text style={styles.subHint}>
-                            Verified for Apple Pay • expires in {d} day{d===1?'':'s'}
+                            {isUSPhone
+                              ? `Verified for Apple Pay • expires in ${d} day${d===1?'':'s'}`
+                              : `Verified • expires in ${d} day${d===1?'':'s'} • Not eligible for Apple Pay (non-US)`
+                            }
                           </Text>
                         );
                       } else if (isExpired) {
                         return (
                           <Text style={styles.subHint}>
-                            Verification expired • Re-verify below for Apple Pay
+                            {isUSPhone
+                              ? 'Verification expired • Re-verify below for Apple Pay'
+                              : 'Verification expired • Re-verify below (not eligible for Apple Pay)'
+                            }
                           </Text>
                         );
                       } else {
                         return (
                           <Text style={styles.subHint}>
-                            Linked to account • Verify below to use with Apple Pay
+                            {isUSPhone
+                              ? 'Linked to account • Verify below to use with Apple Pay'
+                              : 'Linked to account • Verify below (not eligible for Apple Pay)'
+                            }
                           </Text>
                         );
                       }
@@ -843,8 +927,10 @@ export default function WalletScreen() {
                       );
                     }
 
-                    // Has CDP phone but verified and fresh → No button needed
-                    if (verifiedPhone === cdpPhone && phoneFresh) {
+                    const isVerified = verifiedPhone === cdpPhone && phoneFresh;
+
+                    // All phones: Same flow - if verified and fresh, no button needed
+                    if (isVerified) {
                       return null;
                     }
 
@@ -855,6 +941,36 @@ export default function WalletScreen() {
                         <Text style={styles.buttonText}>
                           {isExpired ? 'Re-verify phone' : 'Verify phone'}
                         </Text>
+                      </Pressable>
+                    );
+                  })()}
+
+                  {/* Developer Tool: Force Unverify Phone */}
+                  {(() => {
+                    const cdpPhone = currentUser?.authenticationMethods?.sms?.phoneNumber;
+                    const isVerified = verifiedPhone === cdpPhone && phoneFresh;
+
+                    // Only show if phone is currently verified (for testing re-verification flow)
+                    if (!isVerified || testSession) return null;
+
+                    return (
+                      <Pressable
+                        style={[styles.button, { backgroundColor: ORANGE, marginTop: 0 }]}
+                        onPress={async () => {
+                          await forceUnverifyPhone();
+                          // Update local state immediately
+                          setVerifiedPhoneLocal(null);
+                          setPhoneFresh(false);
+                          setPhoneExpiry(-1);
+                          setAlertState({
+                            visible: true,
+                            title: "Phone Unverified",
+                            message: "Phone verification has been cleared. You can now test the re-verification flow.",
+                            type: "info"
+                          });
+                        }}
+                      >
+                        <Text style={styles.buttonText}>🔧 Force Unverify Phone (Dev)</Text>
                       </Pressable>
                     );
                   })()}
@@ -872,7 +988,7 @@ export default function WalletScreen() {
                           {smartAccountAddress}
                         </Text>
                       </View>
-                      <Pressable
+                  <Pressable
                         onPress={async () => {
                           await Clipboard.setStringAsync(smartAccountAddress || '');
                           setAlertState({
@@ -966,6 +1082,23 @@ export default function WalletScreen() {
                   <Pressable style={[styles.buttonSecondary]} onPress={handleSignOut}>
                     <Text style={styles.buttonTextSecondary}>Sign out</Text>
                   </Pressable>
+
+                  {/* Debug Session Button - for TestFlight debugging
+                  <Pressable
+                    style={[styles.button, { backgroundColor: ORANGE }]}
+                    onPress={handleDebugSession}
+                    disabled={debuggingSession}
+                  >
+                    {debuggingSession ? (
+                      <ActivityIndicator color={WHITE} size="small" />
+                    ) : (
+                      <>
+                        <Ionicons name="bug" size={16} color={WHITE} style={{ marginRight: 8 }} />
+                        <Text style={styles.buttonText}>Debug Session Storage</Text>
+                      </>
+                    )}
+                  </Pressable>
+                  */}
                 </View>
               )}
             </View>
@@ -1002,7 +1135,7 @@ export default function WalletScreen() {
                         <Text style={[styles.helper, { color: '#FF6B6B' }]}>{balancesError}</Text>
                         <Pressable style={[styles.button, { marginTop: 8 }]} onPress={fetchBalances}>
                           <Text style={styles.buttonText}>Retry</Text>
-                        </Pressable>
+                          </Pressable>
                       </View>
                     )}
 
@@ -1019,85 +1152,82 @@ export default function WalletScreen() {
 
                     {!loadingBalances && !balancesError && balances.length > 0 && (
                       <View style={{ marginTop: 16 }}>
-                        {balances.map((balance, index) => {
-                          const symbol = balance.token?.symbol || 'UNKNOWN';
-                          const amount = parseFloat(balance.amount?.amount || '0');
-                          const decimals = parseInt(balance.amount?.decimals || '0');
-                          const actualAmount = amount / Math.pow(10, decimals);
-                          const formattedAmount = actualAmount.toFixed(6);
-                          const usdValue = balance.usdValue;
-                          const network = balance.network;
+                        {/* Group balances by network */}
+                        {['Base', 'Ethereum', 'Solana'].map(networkName => {
+                          const networkBalances = balances.filter(b => b.network === networkName);
+                          if (networkBalances.length === 0) return null;
 
                           return (
-                            <View
-                              key={`${balance.token?.contractAddress || balance.token?.mintAddress}-${index}`}
-                              style={[
-                                styles.tokenRow,
-                                index < balances.length - 1 && { borderBottomWidth: 1, borderBottomColor: BORDER }
-                              ]}
-                            >
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.tokenSymbol}>{symbol}</Text>
-                                <Text style={styles.tokenNetwork}>{network}</Text>
+                            <View key={networkName} style={{ marginBottom: 20 }}>
+                              <View style={styles.networkHeader}>
+                                <Text style={styles.networkTitle}>{networkName}</Text>
                               </View>
+                              {networkBalances.map((balance, index) => {
+                                const symbol = balance.token?.symbol || 'UNKNOWN';
+                                const amount = parseFloat(balance.amount?.amount || '0');
+                                const decimals = parseInt(balance.amount?.decimals || '0');
+                                const actualAmount = amount / Math.pow(10, decimals);
+                                const formattedAmount = actualAmount.toFixed(6);
+                                const usdValue = balance.usdValue;
+                                const network = balance.network;
 
-                              <View style={{ alignItems: 'flex-end' }}>
-                                <Text style={styles.tokenAmount}>{formattedAmount}</Text>
-                                {usdValue ? (
-                                  <Text style={styles.tokenUsd}>${usdValue.toFixed(2)}</Text>
-                                ) : (
-                                  <Text style={styles.tokenUsd}>Price N/A</Text>
-                                )}
-                                {(() => {
-                                  // Check if this is a Solana SPL token (has mintAddress)
-                                  const isSolanaNetwork = network?.toLowerCase().includes('solana');
-                                  const isSPLToken = isSolanaNetwork && balance.token?.mintAddress;
-                                  const isDevnet = network?.toLowerCase().includes('devnet');
+                                return (
+                                  <View
+                                    key={`${balance.token?.contractAddress || balance.token?.mintAddress}-${index}`}
+                                    style={[
+                                      styles.tokenRow,
+                                      index < networkBalances.length - 1 && { borderBottomWidth: 1, borderBottomColor: BORDER }
+                                    ]}
+                                  >
+                                    <View style={{ flex: 1 }}>
+                                      <Text style={styles.tokenSymbol}>{symbol}</Text>
+                                      {balance.token?.name && (
+                                        <Text style={styles.tokenName}>{balance.token.name}</Text>
+                                      )}
+                                    </View>
 
-                                  // SPL tokens only supported on devnet
-                                  if (isSPLToken && !isDevnet) {
-                                    return (
-                                      <Text style={[styles.tokenUsd, { marginTop: 8, fontSize: 11, fontStyle: 'italic' }]}>
-                                        Transfer not supported on mainnet
-                                      </Text>
-                                    );
-                                  }
-
-                                  return (
-                                    <Pressable
-                                      style={[
-                                        styles.button,
-                                        { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12 },
-                                        isExpoGo && styles.buttonDisabled
-                                      ]}
-                                      onPress={() => {
-                                        if (isExpoGo) {
-                                          setAlertState({
-                                            visible: true,
-                                            title: "Transfer not available",
-                                            message: "Crypto transfers are not available in Expo Go due to missing crypto.subtle package. Please use TestFlight or a development build.",
-                                            type: "info",
-                                          });
-                                          return;
-                                        }
-                                        // Navigate to transfer page with token data
-                                        router.push({
-                                          pathname: '/transfer',
-                                          params: {
-                                            token: JSON.stringify(balance),
-                                            network: network.toLowerCase()
+                                    <View style={{ alignItems: 'flex-end' }}>
+                                      <Text style={styles.tokenAmount}>{formattedAmount}</Text>
+                                      {usdValue ? (
+                                        <Text style={styles.tokenUsd}>${usdValue.toFixed(2)}</Text>
+                                      ) : (
+                                        <Text style={styles.tokenUsd}>Price N/A</Text>
+                                      )}
+                                      <Pressable
+                                        style={[
+                                          styles.button,
+                                          { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12 },
+                                          isExpoGo && styles.buttonDisabled
+                                        ]}
+                                        onPress={() => {
+                                          if (isExpoGo) {
+                                            setAlertState({
+                                              visible: true,
+                                              title: "Transfer not available",
+                                              message: "Crypto transfers are not available in Expo Go due to missing crypto.subtle package. Please use TestFlight or a development build.",
+                                              type: "info",
+                                            });
+                                            return;
                                           }
-                                        });
-                                      }}
-                                      disabled={isExpoGo}
-                                    >
-                                      <Text style={[styles.buttonText, { fontSize: 12 }]}>
-                                        {isExpoGo ? "Transfer unavailable (Expo Go)" : "Transfer"}
-                                      </Text>
-                                    </Pressable>
-                                  );
-                                })()}
-                              </View>
+                                          // Navigate to transfer page with token data
+                                          router.push({
+                                            pathname: '/transfer',
+                                            params: {
+                                              token: JSON.stringify(balance),
+                                              network: network.toLowerCase()
+                                            }
+                                          });
+                                        }}
+                                        disabled={isExpoGo}
+                                      >
+                                        <Text style={[styles.buttonText, { fontSize: 12 }]}>
+                                          {isExpoGo ? "Transfer unavailable (Expo Go)" : "Transfer"}
+                                        </Text>
+                                      </Pressable>
+                                    </View>
+                                  </View>
+                                );
+                              })}
                             </View>
                           );
                         })}
@@ -1111,7 +1241,7 @@ export default function WalletScreen() {
             {/* Testnet Balances - show when wallet is connected */}
             {effectiveIsSignedIn && (primaryAddress || solanaAddress) && (
               <View style={styles.card}>
-                <Pressable
+                      <Pressable
                   onPress={() => setTestnetBalancesExpanded(!testnetBalancesExpanded)}
                   style={styles.row}
                 >
@@ -1175,9 +1305,9 @@ export default function WalletScreen() {
                               >
                                 <Ionicons name="water-outline" size={16} color={WHITE} style={{ marginRight: 8 }} />
                                 <Text style={styles.buttonText}>Get Ethereum Sepolia ETH</Text>
-                              </Pressable>
-                            </>
-                          )}
+                      </Pressable>
+                    </>
+                  )}
 
                           {solanaAddress && (
                             <Pressable
@@ -1190,12 +1320,12 @@ export default function WalletScreen() {
                               <Ionicons name="water-outline" size={16} color={WHITE} style={{ marginRight: 8 }} />
                               <Text style={styles.buttonText}>Get Solana Devnet SOL</Text>
                             </Pressable>
-                          )}
-                        </View>
+                  )}
+                </View>
 
                         <Pressable style={[styles.button, { marginTop: 12 }]} onPress={fetchTestnetBalances}>
                           <Text style={styles.buttonText}>Refresh Testnet Balances</Text>
-                        </Pressable>
+                  </Pressable>
                       </View>
                     )}
 
@@ -1212,7 +1342,7 @@ export default function WalletScreen() {
                               <View style={styles.networkHeader}>
                                 <Text style={styles.networkTitle}>{networkName}</Text>
                                 {/* Faucet button per network */}
-                                <Pressable
+                  <Pressable
                                   style={styles.faucetIconButton}
                                   onPress={() => {
                                     let faucetUrl;
@@ -1225,7 +1355,7 @@ export default function WalletScreen() {
                                   }}
                                 >
                                   <Ionicons name="water-outline" size={18} color={VIOLET} />
-                                </Pressable>
+                  </Pressable>
                               </View>
 
                               {/* Tokens for this network */}
@@ -1259,7 +1389,7 @@ export default function WalletScreen() {
                                       ) : (
                                         <Text style={styles.tokenUsd}>Testnet</Text>
                                       )}
-                                      <Pressable
+                  <Pressable
                                         style={[
                                           styles.button,
                                           { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12 },
@@ -1289,9 +1419,9 @@ export default function WalletScreen() {
                                         <Text style={[styles.buttonText, { fontSize: 12 }]}>
                                           {isExpoGo ? "Transfer unavailable (Expo Go)" : "Transfer"}
                                         </Text>
-                                      </Pressable>
-                                    </View>
-                                  </View>
+                  </Pressable>
+                </View>
+            </View>
                                 );
                               })}
                             </View>
@@ -1306,7 +1436,7 @@ export default function WalletScreen() {
 
             {/* Fallback sign out for edge cases */}
             {effectiveIsSignedIn && !signedButNoSA && !primaryAddress && (
-              <View style={styles.card}>
+            <View style={styles.card}>
                 <Text style={styles.rowLabel}>Session Management</Text>
                 <Pressable style={[styles.buttonSecondary]} onPress={handleSignOut}>
                   <Text style={styles.buttonTextSecondary}>Sign out</Text>
@@ -1320,7 +1450,7 @@ export default function WalletScreen() {
               <View style={styles.card}>
                 <Text style={styles.rowLabel}>🧪 Sandbox Testing</Text>
 
-                <View style={styles.subBox}>
+              <View style={styles.subBox}>
                   <Text style={styles.subHint}>Manual Wallet Address (Optional Override)</Text>
                   <View style={styles.inputContainer}>
                     <TextInput
@@ -1370,7 +1500,7 @@ export default function WalletScreen() {
                   <Text style={styles.modalTitle}>Choose Wallet Type</Text>
                   <Text style={styles.modalMessage}>
                     Which wallet would you like to export?
-                  </Text>
+                </Text>
 
                   <View style={styles.modalButtonsVertical}>
                     <Pressable
@@ -1382,9 +1512,9 @@ export default function WalletScreen() {
                       }}
                     >
                       <Text style={styles.buttonText}>Export EVM Wallet</Text>
-                    </Pressable>
+              </Pressable>
 
-                    <Pressable
+              <Pressable
                       style={[styles.button, styles.modalButton, { backgroundColor: BLUE }]}
                       onPress={() => {
                         setExportType('solana');
@@ -1400,8 +1530,8 @@ export default function WalletScreen() {
                       onPress={() => setShowWalletChoice(false)}
                     >
                       <Text style={[styles.buttonText, { color: TEXT_PRIMARY }]}>Cancel</Text>
-                    </Pressable>
-                  </View>
+              </Pressable>
+            </View>
                 </View>
               </View>
             </Modal>
@@ -1449,6 +1579,47 @@ export default function WalletScreen() {
               type={alertState.type}
               onConfirm={() => setAlertState({ ...alertState, visible: false })}
             />
+
+            {/* Re-verify phone confirmation */}
+            <Modal
+              visible={showReverifyConfirm}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setShowReverifyConfirm(false)}
+            >
+              <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                <Pressable
+                  style={StyleSheet.absoluteFillObject}
+                  onPress={() => setShowReverifyConfirm(false)}
+                />
+                <View style={styles.productionAlertCard}>
+                  <View style={styles.alertHandle} />
+                  <View style={styles.alertIconContainer}>
+                    <Ionicons name="shield-checkmark" size={48} color={ORANGE} />
+                  </View>
+                  <Text style={styles.alertTitle}>Re-verify Phone Required</Text>
+                  <Text style={styles.alertMessage}>
+                    To refresh your phone verification for Apple Pay, you need to sign out and sign back in with your phone number.
+                    {'\n\n'}
+                    Your wallet and data will remain safe. You'll receive an SMS code to verify and sign back in.
+                  </Text>
+                  <View style={styles.alertButtonRow}>
+                    <Pressable
+                      style={({ pressed }) => [styles.alertCancelButton, pressed && styles.buttonPressed]}
+                      onPress={() => setShowReverifyConfirm(false)}
+                    >
+                      <Text style={styles.alertCancelButtonText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [styles.alertConfirmButton, pressed && styles.buttonPressed]}
+                      onPress={handleReverifyConfirm}
+                    >
+                      <Text style={styles.alertConfirmButtonText}>Continue</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </Modal>
 
             {/* Production switch confirmation alert */}
             <Modal

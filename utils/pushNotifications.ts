@@ -31,10 +31,11 @@ Notifications.setNotificationHandler({
  */
 export async function registerForPushNotifications(): Promise<{ token: string; type: 'native' | 'expo' } | null> {
   try {
-    // Note: Push tokens work in simulator, but notifications won't be delivered
-    // This is fine for testing the webhook flow
+    // Skip push notification registration on simulator
+    // Push notifications only work on real devices
     if (!Constants.isDevice) {
-      console.log('ℹ️ [PUSH] Running in simulator - token will work but notifications won\'t show');
+      console.log('ℹ️ [PUSH] Skipping push notification registration on simulator (requires real device)');
+      return null;
     }
 
     // Request permissions
@@ -101,9 +102,14 @@ export async function registerForPushNotifications(): Promise<{ token: string; t
 /**
  * Send push token to server for webhook notifications
  */
-export async function sendPushTokenToServer(pushToken: string, userId: string, getAccessToken: () => Promise<string>, tokenType: 'native' | 'expo' = 'native'): Promise<void> {
+export async function sendPushTokenToServer(pushToken: string, userId: string, getAccessToken: () => Promise<string | null>, tokenType: 'native' | 'expo' = 'native'): Promise<void> {
   try {
     const accessToken = await getAccessToken();
+
+    if (!accessToken) {
+      console.warn('⚠️ [PUSH] No access token available, skipping push token registration');
+      return;
+    }
 
     const response = await fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens`, {
       method: 'POST',
