@@ -17,6 +17,7 @@ type CoinbaseAlertProps = {
   type?: AlertType;
   onCancel?: () => void;
   cancelText?: string;
+  hideButton?: boolean; // Hide the button (for non-dismissible alerts like pending transactions)
 };
 
 export function CoinbaseAlert({
@@ -27,7 +28,8 @@ export function CoinbaseAlert({
   confirmText = "Got it",
   type = 'success',
   onCancel,
-  cancelText = "Cancel"
+  cancelText = "Cancel",
+  hideButton = false
 }: CoinbaseAlertProps) {
   const getIcon = () => {
     switch (type) {
@@ -86,29 +88,34 @@ export function CoinbaseAlert({
               <Text style={styles.title}>{title}</Text>
               <Text style={styles.message}>{message}</Text>
 
-              {/* Show two buttons if onCancel is provided, otherwise single button */}
-              {onCancel ? (
-                <View style={styles.buttonRow}>
-                  <Pressable
-                    style={({ pressed }) => [styles.buttonSecondary, pressed && styles.buttonPressed]}
-                    onPress={onCancel}
-                  >
-                    <Text style={styles.buttonTextSecondary}>{cancelText}</Text>
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [styles.buttonInRow, pressed && styles.buttonPressed]}
-                    onPress={onConfirm}
-                  >
-                    <Text style={styles.buttonText}>{confirmText}</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <Pressable
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                  onPress={onConfirm}
-                >
-                  <Text style={styles.buttonText}>{confirmText}</Text>
-                </Pressable>
+              {/* Show buttons unless hideButton is true */}
+              {!hideButton && (
+                <>
+                  {/* Show two buttons if onCancel is provided, otherwise single button */}
+                  {onCancel ? (
+                    <View style={styles.buttonRow}>
+                      <Pressable
+                        style={({ pressed }) => [styles.buttonSecondary, pressed && styles.buttonPressed]}
+                        onPress={onCancel}
+                      >
+                        <Text style={styles.buttonTextSecondary}>{cancelText}</Text>
+                      </Pressable>
+                      <Pressable
+                        style={({ pressed }) => [styles.buttonInRow, pressed && styles.buttonPressed]}
+                        onPress={onConfirm}
+                      >
+                        <Text style={styles.buttonText}>{confirmText}</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Pressable
+                      style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+                      onPress={onConfirm}
+                    >
+                      <Text style={styles.buttonText}>{confirmText}</Text>
+                    </Pressable>
+                  )}
+                </>
               )}
             </Animated.View>
       </View>

@@ -8,12 +8,12 @@
  * TestFlight accounts bypass this check automatically.
  */
 
-import { useIsSignedIn, useIsInitialized } from '@coinbase/cdp-hooks';
-import { useRouter, useSegments, useRootNavigationState } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
-import { isTestSessionActive } from '@/utils/sharedState';
 import { COLORS } from '@/constants/Colors';
+import { isTestSessionActive } from '@/utils/sharedState';
+import { useIsInitialized, useIsSignedIn } from '@coinbase/cdp-hooks';
+import { useRootNavigationState, useSegments } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 const { DARK_BG, BLUE } = COLORS;
 
@@ -146,7 +146,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           </View>
           <View style={styles.debugRow}>
             <View style={[styles.dot, hasCheckedAuth ? styles.dotGreen : styles.dotRed]} />
-            <Text style={styles.debugText}>Credentials Loaded (2s wait)</Text>
+            <Text style={styles.debugText}>Credentials Loaded</Text>
           </View>
           <View style={styles.debugRow}>
             <View style={[styles.dot, testSession ? styles.dotGreen : styles.dotRed]} />

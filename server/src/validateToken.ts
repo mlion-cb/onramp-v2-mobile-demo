@@ -4,7 +4,7 @@ import type { NextFunction, Request, Response } from 'express';
 // TestFlight account constants (matches /constants/TestAccounts.ts)
 const TESTFLIGHT_EMAIL = 'reviewer@coinbase-demo.app';
 const TESTFLIGHT_PHONE = '+12345678901';
-const TESTFLIGHT_USER_ID = 'f5ad4b85-368d-4ab5-a1b6-4f63fb1aab85';
+const TESTFLIGHT_USER_ID = '286ef934-f3b8-4e94-b61f-1f1a088ac95e';
 
 // Cache validated tokens to reduce API calls
 const tokenCache = new Map<string, { userId: string, expiresAt: number }>();

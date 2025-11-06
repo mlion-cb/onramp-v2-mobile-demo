@@ -151,8 +151,14 @@ export function useOnramp() {
       }
 
       // Apple Pay Guest Checkout requires BOTH email and phone
-      const userEmail = currentUser?.authenticationMethods.email?.email || null;
-      const cdpPhone = currentUser?.authenticationMethods.sms?.phoneNumber || null;
+      // For test sessions, use test account credentials
+      const isTestSession = isTestSessionActive();
+      const userEmail = isTestSession
+        ? TEST_ACCOUNTS.email
+        : (currentUser?.authenticationMethods.email?.email || null);
+      const cdpPhone = isTestSession
+        ? TEST_ACCOUNTS.phone
+        : (currentUser?.authenticationMethods.sms?.phoneNumber || null);
 
       let phone = getVerifiedPhone();
       let phoneAt = getVerifiedPhoneAt();
