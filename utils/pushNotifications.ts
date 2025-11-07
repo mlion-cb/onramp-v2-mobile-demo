@@ -42,13 +42,40 @@ export async function registerForPushNotifications(): Promise<{ token: string; t
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
+    console.log('🔍 [PUSH] Current permission status:', existingStatus);
+
+    // Send permission status to server for debugging
+    fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: 'registerForPushNotifications-permissions',
+        existingStatus,
+        isDevice: Constants.isDevice,
+        timestamp: new Date().toISOString()
+      })
+    }).catch(() => {});
+
     if (existingStatus !== 'granted') {
+      console.log('📱 [PUSH] Requesting permissions...');
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
+      console.log('📱 [PUSH] Permission request result:', status);
+
+      // Send result to server
+      fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'registerForPushNotifications-requested',
+          newStatus: status,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(() => {});
     }
 
     if (finalStatus !== 'granted') {
-      console.log('⚠️ [PUSH] Permission not granted for push notifications');
+      console.log('⚠️ [PUSH] Permission not granted for push notifications. Status:', finalStatus);
       return null;
     }
 

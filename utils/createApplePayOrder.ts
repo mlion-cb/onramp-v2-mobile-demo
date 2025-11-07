@@ -21,7 +21,7 @@ export async function createApplePayOrder(payload: any) {
       body: JSON.stringify({
         url: "https://api.cdp.coinbase.com/platform/v2/onramp/orders",
         method: "POST",
-        body: finalPayload
+        body: payload
       })
     });
 

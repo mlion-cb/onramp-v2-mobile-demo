@@ -70,11 +70,11 @@ import { fetchBuyConfig } from "@/utils/fetchBuyConfig";
 import { useCurrentUser } from "@coinbase/cdp-hooks";
 import { useCallback, useMemo, useState } from "react";
 import { OnrampFormData } from "../components/onramp/OnrampForm";
+import { TEST_ACCOUNTS } from "../constants/TestAccounts";
 import { createApplePayOrder } from "../utils/createApplePayOrder";
 import { fetchBuyOptions } from "../utils/fetchBuyOptions";
 import { fetchBuyQuote } from "../utils/fetchBuyQuote";
 import { getCountry, getSandboxMode, getSubdivision, getVerifiedPhone, getVerifiedPhoneAt, isPhoneFresh60d, isTestSessionActive, setCurrentPartnerUserRef, setSubdivision } from "../utils/sharedState";
-import { TEST_ACCOUNTS } from "../constants/TestAccounts";
 
 
 export type PaymentMethodOption = { display: string; value: string };
@@ -127,11 +127,23 @@ export function useOnramp() {
     try {
       setIsProcessingPayment(true); // Start loading
 
+      // Check if this is a test session (used throughout the function)
+      const isTestSession = isTestSessionActive();
+      const currentSandboxMode = getSandboxMode();
+
+      console.log('🔍 [APPLE PAY] Sandbox detection:', {
+        isTestSession,
+        getSandboxMode: currentSandboxMode,
+        shouldUseSandbox: currentSandboxMode || isTestSession
+      });
+
       // Generate unique user reference for transaction tracking
-      // Apple Pay: Use userId with sandbox prefix for sandbox environment
-      const sandboxPrefix = getSandboxMode() ? "sandbox-" : "";
+      // Apple Pay: Use userId with sandbox prefix for sandbox environment OR test accounts
+      const sandboxPrefix = (currentSandboxMode || isTestSession) ? "sandbox-" : "";
       const userId = currentUser?.userId || 'unknown-user';
       const partnerUserRef = `${sandboxPrefix}${userId}`;
+
+      console.log('🔍 [APPLE PAY] partnerUserRef:', partnerUserRef);
       setCurrentPartnerUserRef(partnerUserRef);
 
       // IMPORTANT: Register push token before transaction (ensures webhook can send notification)
@@ -152,7 +164,6 @@ export function useOnramp() {
 
       // Apple Pay Guest Checkout requires BOTH email and phone
       // For test sessions, use test account credentials
-      const isTestSession = isTestSessionActive();
       const userEmail = isTestSession
         ? TEST_ACCOUNTS.email
         : (currentUser?.authenticationMethods.email?.email || null);
@@ -164,7 +175,6 @@ export function useOnramp() {
       let phoneAt = getVerifiedPhoneAt();
 
       // DEBUG: Log sandbox mode state
-      const currentSandboxMode = getSandboxMode();
       console.log('🔍 [DEBUG] Sandbox mode check:', {
         sandboxMode: currentSandboxMode,
         willSkipValidation: currentSandboxMode === true
@@ -387,7 +397,10 @@ export function useOnramp() {
       });
 
       let url = res?.session?.onrampUrl;
-      if (getSandboxMode() && url) {
+      const isTestSession = isTestSessionActive();
+
+      // Replace URL for sandbox mode OR test accounts
+      if ((getSandboxMode() || isTestSession) && url) {
         url = url.replace('pay.coinbase.com', 'pay-sandbox.coinbase.com');
       }
 
