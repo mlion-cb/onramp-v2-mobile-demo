@@ -25,10 +25,14 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
   const { currentUser } = useCurrentUser();
   const hasRegisteredPush = useRef(false);
 
-  console.log('🔍 [AUTH INITIALIZER] Component rendered, currentUser:', {
+  // Log every render to diagnose timing
+  console.log('🔍 [AUTH INITIALIZER] Render:', {
     hasUser: !!currentUser,
     userId: currentUser?.userId,
-    hasRegistered: hasRegisteredPush.current
+    hasEmail: !!currentUser?.authenticationMethods?.email,
+    hasPhone: !!currentUser?.authenticationMethods?.sms,
+    hasRegistered: hasRegisteredPush.current,
+    timestamp: new Date().toISOString()
   });
 
   useEffect(() => {

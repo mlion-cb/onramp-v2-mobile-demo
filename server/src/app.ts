@@ -128,18 +128,39 @@ app.post("/server/api", async (req, res) => {
     let authToken = null;
 
     const isOnrampRequest = targetUrl.includes('/onramp/');
-    const finalBody = isOnrampRequest ? { ...targetBody, clientIp } : targetBody;
-    
-    console.log('finalBody', finalBody);
+
+    // Detect TestFlight accounts and automatically apply sandbox mode
+    const isTestFlight = (req as any).userData?.testAccount === true;
+    let finalBody = isOnrampRequest ? { ...targetBody, clientIp } : targetBody;
+    let finalUrl = targetUrl;
+
+    if (isTestFlight) {
+      console.log('🧪 [SERVER] TestFlight account detected - forcing sandbox mode');
+
+      // For session endpoints, add ?sandbox=true
+      if (targetUrl.includes('/onramp/sessions')) {
+        const separator = targetUrl.includes('?') ? '&' : '?';
+        finalUrl = `${targetUrl}${separator}sandbox=true`;
+      }
+
+      // For order endpoints, override partnerUserRef to sandbox
+      if (targetUrl.includes('/onramp/orders') && finalBody?.partnerUserRef) {
+        finalBody = { ...finalBody, partnerUserRef: 'sandbox' };
+      }
+    }
+
+    console.log('finalBody', finalBody, 'finalUrl', finalUrl);
     
     // Auto-generate JWT for Coinbase API calls only
-    if (urlObj.hostname === "api.developer.coinbase.com" || urlObj.hostname === "api.cdp.coinbase.com") {
+    // Use finalUrl for JWT generation to include sandbox parameter in signature
+    const finalUrlObj = new URL(finalUrl);
+    if (finalUrlObj.hostname === "api.developer.coinbase.com" || finalUrlObj.hostname === "api.cdp.coinbase.com") {
       authToken = await generateJwt({
         apiKeyId: process.env.CDP_API_KEY_ID!,
         apiKeySecret: process.env.CDP_API_KEY_SECRET!,
         requestMethod: method || 'POST',
-        requestHost: urlObj.hostname,
-        requestPath: urlObj.pathname,
+        requestHost: finalUrlObj.hostname,
+        requestPath: finalUrlObj.pathname + finalUrlObj.search, // Include query params in JWT signature
         expiresIn: 120
       });
     }
@@ -152,7 +173,7 @@ app.post("/server/api", async (req, res) => {
     };
 
     // Forward request with authentication
-    const response = await fetch(targetUrl, {
+    const response = await fetch(finalUrl, {
       method: method || 'POST',
       headers: headers,
       ...(method === 'POST' && finalBody && { body: JSON.stringify(finalBody) })

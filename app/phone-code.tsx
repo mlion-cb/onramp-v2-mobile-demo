@@ -99,13 +99,35 @@ export default function PhoneCodeScreen() {
           await setTestSession(TEST_ACCOUNTS.wallets.evm, TEST_ACCOUNTS.wallets.solana);
           setCurrentWalletAddress(TEST_ACCOUNTS.wallets.evm);
           setCurrentSolanaAddress(TEST_ACCOUNTS.wallets.solana);
-        } else {
-          // Mock phone linking
-          console.log('🧪 Storing test phone for linking');
-          await setVerifiedPhone(phone, testUser.userId);
-        }
+          await setVerifiedPhone(phone, TEST_ACCOUNTS.userId);
+          router.replace('/(tabs)');
+        } else if (mode === 'reverify') {
+          // Mock phone re-verification for TestFlight
+          console.log('🧪 Re-verifying test phone');
+          await setVerifiedPhone(phone, TEST_ACCOUNTS.userId);
 
-        router.dismissAll();
+          setAlert({
+            visible: true,
+            title: 'Phone Re-verified ✅',
+            message: 'Your test phone has been re-verified and is ready for Apple Pay checkout.',
+            type: 'success'
+          });
+
+          setTimeout(() => router.dismissAll(), 1500);
+        } else {
+          // Mock phone linking for TestFlight
+          console.log('🧪 Storing test phone for linking');
+          await setVerifiedPhone(phone, TEST_ACCOUNTS.userId);
+
+          setAlert({
+            visible: true,
+            title: 'Phone Verified',
+            message: 'Your test phone has been linked to your account.',
+            type: 'success'
+          });
+
+          setTimeout(() => router.dismissAll(), 1500);
+        }
         return;
       }
 
