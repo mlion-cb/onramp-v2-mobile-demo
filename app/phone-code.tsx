@@ -160,6 +160,18 @@ export default function PhoneCodeScreen() {
         console.log('✅ Phone sign-in successful, wallet ready, phone verified', { userId});
 
         // Register push notifications after successful sign-in
+        // Send ping FIRST to confirm we reached this code (visible in Vercel logs)
+        fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: 'phone-code-signin',
+            hasUserId: !!userId,
+            userId: userId,
+            timestamp: new Date().toISOString()
+          })
+        }).catch(() => {});
+
         const { registerForPushNotifications, sendPushTokenToServer } = await import('@/utils/pushNotifications');
         const { getAccessTokenGlobal } = await import('@/utils/getAccessTokenGlobal');
 
@@ -168,6 +180,8 @@ export default function PhoneCodeScreen() {
           if (result && userId) {
             console.log('📱 [PHONE-CODE] Registering push token after sign-in:', userId);
             await sendPushTokenToServer(result.token, userId, getAccessTokenGlobal, result.type);
+          } else {
+            console.log('⚠️ [PHONE-CODE] No push token result:', { hasResult: !!result, hasUserId: !!userId });
           }
         } catch (pushError) {
           console.error('⚠️ [PHONE-CODE] Push registration failed (non-blocking):', pushError);
