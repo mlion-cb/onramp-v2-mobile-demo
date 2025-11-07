@@ -149,7 +149,12 @@ app.post("/server/api", async (req, res) => {
       }
     }
 
-    console.log('finalBody', finalBody, 'finalUrl', finalUrl);
+    console.log('📋 [SERVER] Request details:', {
+      method: method || 'POST',
+      finalUrl,
+      hasBody: !!finalBody,
+      bodyKeys: finalBody ? Object.keys(finalBody) : []
+    });
     
     // Auto-generate JWT for Coinbase API calls only
     // Use finalUrl for JWT generation to include sandbox parameter in signature
@@ -179,10 +184,41 @@ app.post("/server/api", async (req, res) => {
       ...(method === 'POST' && finalBody && { body: JSON.stringify(finalBody) })
     });
 
-    const data = await response.json();
-      
+    // Try to parse as JSON, but handle text responses gracefully
+    let data;
+    const contentType = response.headers.get('content-type');
+
+    try {
+      if (contentType?.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // Non-JSON response (likely error), get as text
+        const textResponse = await response.text();
+        console.log('📤 Proxied request (non-JSON)', {
+          url: finalUrl,
+          method: method || 'POST',
+          status: response.status,
+          ok: response.ok,
+          contentType,
+          response: textResponse
+        });
+
+        // Return text error as JSON
+        return res.status(response.status).json({
+          error: textResponse || 'Upstream API error',
+          status: response.status
+        });
+      }
+    } catch (parseError) {
+      console.error('Failed to parse response:', parseError);
+      return res.status(response.status).json({
+        error: 'Failed to parse upstream response',
+        status: response.status
+      });
+    }
+
     console.log('📤 Proxied request', {
-      url: targetUrl,
+      url: finalUrl,
       method: method || 'POST',
       status: response.status,
       ok: response.ok,
