@@ -57,7 +57,31 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
 
       console.log('📱 [APP] Registering push notifications for user:', partnerUserRef);
 
+      // Send ping before registerForPushNotifications to confirm we reached this point
+      fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'AuthInitializer-before-register',
+          userId: partnerUserRef,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(() => {});
+
       registerForPushNotifications().then(async (result) => {
+        // Send ping with result
+        fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: 'AuthInitializer-after-register',
+            userId: partnerUserRef,
+            hasResult: !!result,
+            resultType: result?.type,
+            timestamp: new Date().toISOString()
+          })
+        }).catch(() => {});
+
         if (result) {
           console.log('✅ [APP] Push token obtained, sending to server:', partnerUserRef, `(${result.type})`);
           await sendPushTokenToServer(result.token, partnerUserRef, getAccessToken, result.type);
@@ -67,6 +91,17 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
         }
       }).catch((error) => {
         console.error('❌ [APP] Failed to register push notifications:', error);
+        // Send ping with error
+        fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: 'AuthInitializer-error',
+            userId: partnerUserRef,
+            error: error?.message || 'Unknown error',
+            timestamp: new Date().toISOString()
+          })
+        }).catch(() => {});
       });
     } else {
       console.log('⚠️ [APP] No currentUser.userId, skipping push notification setup');

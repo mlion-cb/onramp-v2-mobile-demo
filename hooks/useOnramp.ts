@@ -387,7 +387,10 @@ export function useOnramp() {
       });
 
       let url = res?.session?.onrampUrl;
-      if (getSandboxMode() && url) {
+      const isTestSession = isTestSessionActive();
+
+      // Replace URL for sandbox mode OR test accounts
+      if ((getSandboxMode() || isTestSession) && url) {
         url = url.replace('pay.coinbase.com', 'pay-sandbox.coinbase.com');
       }
 

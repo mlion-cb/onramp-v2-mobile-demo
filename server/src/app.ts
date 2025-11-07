@@ -137,15 +137,11 @@ app.post("/server/api", async (req, res) => {
     if (isTestFlight) {
       console.log('🧪 [SERVER] TestFlight account detected - forcing sandbox mode');
 
-      // For session endpoints, add ?sandbox=true
-      if (targetUrl.includes('/onramp/sessions')) {
-        const separator = targetUrl.includes('?') ? '&' : '?';
-        finalUrl = `${targetUrl}${separator}sandbox=true`;
-      }
-
-      // For order endpoints, override partnerUserRef to sandbox
+      // For Apple Pay order endpoints, override partnerUserRef to sandbox
+      // This ensures test accounts don't create real orders
       if (targetUrl.includes('/onramp/orders') && finalBody?.partnerUserRef) {
         finalBody = { ...finalBody, partnerUserRef: 'sandbox' };
+        console.log('🧪 [SERVER] Overriding partnerUserRef to sandbox for test account');
       }
     }
 

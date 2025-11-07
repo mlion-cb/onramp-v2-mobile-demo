@@ -157,11 +157,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <Text style={styles.debugText}>CDP Signed In</Text>
           </View>
         </View>
-        <Text style={styles.debugHint}>
-          If "CDP Signed In" doesn't turn green after 2s,{'\n'}
-          SecureStore may not be working.{'\n'}
-          Try rebuilding the app with clean pods.
-        </Text>
       </View>
     );
   }

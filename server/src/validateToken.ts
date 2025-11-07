@@ -88,6 +88,9 @@ export async function validateAccessToken(
     const userEmail = userData.authenticationMethods[0]?.email || 'unknown';
     console.log('✅ [AUTH] Token validated (fresh) for user:', userEmail);
 
+    // Check if this is a TestFlight test account by email
+    const isTestFlightEmail = userEmail === TESTFLIGHT_EMAIL || userEmail === 'devtest@coinbase-demo.app';
+
     // Cache the result
     tokenCache.set(token as string, {
       userId: userData.userId,
@@ -96,7 +99,14 @@ export async function validateAccessToken(
 
     // Add user info to request
     req.userId = userData.userId;
-    req.userData = userData;
+    req.userData = {
+      ...userData,
+      testAccount: isTestFlightEmail // Mark as test account if email matches
+    };
+
+    if (isTestFlightEmail) {
+      console.log('🧪 [AUTH] TestFlight email detected:', userEmail);
+    }
 
     next();
   } catch (error) {
