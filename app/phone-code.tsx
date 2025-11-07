@@ -159,6 +159,20 @@ export default function PhoneCodeScreen() {
         await setVerifiedPhone(phone, userId);
         console.log('✅ Phone sign-in successful, wallet ready, phone verified', { userId});
 
+        // Register push notifications after successful sign-in
+        const { registerForPushNotifications, sendPushTokenToServer } = await import('@/utils/pushNotifications');
+        const { getAccessTokenGlobal } = await import('@/utils/getAccessTokenGlobal');
+
+        try {
+          const result = await registerForPushNotifications();
+          if (result && userId) {
+            console.log('📱 [PHONE-CODE] Registering push token after sign-in:', userId);
+            await sendPushTokenToServer(result.token, userId, getAccessTokenGlobal, result.type);
+          }
+        } catch (pushError) {
+          console.error('⚠️ [PHONE-CODE] Push registration failed (non-blocking):', pushError);
+        }
+
         // Navigate to home page after successful sign-in
         router.replace('/(tabs)');
       } else if (mode === 'reverify') {

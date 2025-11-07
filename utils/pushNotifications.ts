@@ -104,12 +104,48 @@ export async function registerForPushNotifications(): Promise<{ token: string; t
  */
 export async function sendPushTokenToServer(pushToken: string, userId: string, getAccessToken: () => Promise<string | null>, tokenType: 'native' | 'expo' = 'native'): Promise<void> {
   try {
+    console.log('📤 [PUSH] Attempting to send push token to server:', {
+      userId,
+      tokenLength: pushToken?.length,
+      tokenType,
+      platform: Platform.OS,
+      baseUrl: process.env.EXPO_PUBLIC_BASE_URL
+    });
+
+    // Send a ping to server so we can see this was called (visible in Vercel logs)
+    fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        tokenLength: pushToken?.length,
+        timestamp: new Date().toISOString(),
+        platform: Platform.OS
+      })
+    }).catch(() => {}); // Fire and forget
+
     const accessToken = await getAccessToken();
 
     if (!accessToken) {
-      console.warn('⚠️ [PUSH] No access token available, skipping push token registration');
+      console.error('❌ [PUSH] CRITICAL: No access token available - cannot register push token!');
+      console.error('❌ [PUSH] This means getAccessToken() returned null/undefined');
+      console.error('❌ [PUSH] Check if AuthInitializer properly initialized getAccessToken');
+
+      // Send failure ping to server
+      fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          error: 'NO_ACCESS_TOKEN',
+          timestamp: new Date().toISOString()
+        })
+      }).catch(() => {});
+
       return;
     }
+
+    console.log('✅ [PUSH] Access token obtained, making API call to /push-tokens');
 
     const response = await fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens`, {
       method: 'POST',
@@ -125,13 +161,26 @@ export async function sendPushTokenToServer(pushToken: string, userId: string, g
       }),
     });
 
+    console.log('📥 [PUSH] Response received:', {
+      status: response.status,
+      ok: response.ok,
+      statusText: response.statusText
+    });
+
     if (!response.ok) {
-      throw new Error(`Failed to send push token: ${response.status}`);
+      const errorText = await response.text().catch(() => 'Could not read error');
+      console.error('❌ [PUSH] Server returned error:', errorText);
+      throw new Error(`Failed to send push token: ${response.status} - ${errorText}`);
     }
 
-    console.log('✅ [PUSH] Push token sent to server');
+    console.log('✅ [PUSH] Push token successfully sent to server!');
   } catch (error) {
     console.error('❌ [PUSH] Error sending push token to server:', error);
+    console.error('❌ [PUSH] Error details:', {
+      message: (error as any)?.message,
+      stack: (error as any)?.stack
+    });
+    throw error; // Re-throw so caller knows it failed
   }
 }
 

@@ -42,7 +42,7 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
   }, [getAccessToken]);
 
   // Register for push notifications when user logs in
-  // With retry mechanism for timing issues in CDP hooks 0.0.57
+  // Enhanced retry mechanism with polling for CDP hooks 0.0.58 timing issues
   useEffect(() => {
     console.log('🔍 [PUSH] useEffect triggered, currentUser.userId:', currentUser?.userId, 'hasRegistered:', hasRegisteredPush.current);
 
@@ -51,30 +51,46 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (currentUser?.userId) {
-      // Use userId as partnerUserRef (matches transaction format)
-      const partnerUserRef = currentUser.userId;
+    // Polling approach: Keep checking for userId every 500ms for up to 10 seconds
+    const maxAttempts = 20; // 20 attempts * 500ms = 10 seconds
+    let attempts = 0;
 
-      console.log('📱 [APP] Registering push notifications for user:', partnerUserRef);
-      hasRegisteredPush.current = true;
+    const pollForUserId = async () => {
+      attempts++;
+      console.log(`🔄 [PUSH] Polling attempt ${attempts}/${maxAttempts}, userId:`, currentUser?.userId);
 
-      registerForPushNotifications().then(async (result) => {
-        if (result) {
-          console.log('✅ [APP] Push token obtained, sending to server:', partnerUserRef, `(${result.type})`);
-          await sendPushTokenToServer(result.token, partnerUserRef, getAccessToken, result.type);
-          console.log('✅ [APP] Push token successfully sent to server');
-        } else {
-          console.log('ℹ️ [APP] No push token (likely simulator or permission denied)');
-          hasRegisteredPush.current = false; // Allow retry if we couldn't get token
+      if (currentUser?.userId) {
+        // Use userId as partnerUserRef (matches transaction format)
+        const partnerUserRef = currentUser.userId;
+
+        console.log('📱 [APP] Registering push notifications for user:', partnerUserRef);
+        hasRegisteredPush.current = true;
+
+        try {
+          const result = await registerForPushNotifications();
+          if (result) {
+            console.log('✅ [APP] Push token obtained, sending to server:', partnerUserRef, `(${result.type})`);
+            await sendPushTokenToServer(result.token, partnerUserRef, getAccessToken, result.type);
+            console.log('✅ [APP] Push token successfully sent to server');
+          } else {
+            console.log('ℹ️ [APP] No push token (likely simulator or permission denied)');
+            hasRegisteredPush.current = false; // Allow retry if we couldn't get token
+          }
+        } catch (error) {
+          console.error('❌ [APP] Failed to register push notifications:', error);
+          hasRegisteredPush.current = false; // Allow retry on error
         }
-      }).catch((error) => {
-        console.error('❌ [APP] Failed to register push notifications:', error);
-        hasRegisteredPush.current = false; // Allow retry on error
-      });
-    } else {
-      console.log('⚠️ [APP] No currentUser.userId, will retry when available');
-    }
-  }, [currentUser?.userId, currentUser, getAccessToken]); // Added currentUser to deps to catch object changes
+      } else if (attempts < maxAttempts) {
+        // Keep polling
+        setTimeout(pollForUserId, 500);
+      } else {
+        console.warn('⚠️ [APP] Gave up waiting for currentUser.userId after 10 seconds');
+      }
+    };
+
+    // Start polling
+    pollForUserId();
+  }, [currentUser, getAccessToken]); // Simplified deps - rely on polling instead
 
   return <>{children}</>;
 }
