@@ -77,8 +77,8 @@ app.get("/health", (_req, res) => {
 // 🔒 GLOBAL AUTHENTICATION MIDDLEWARE
 // All routes except /health and /webhooks require valid CDP access token
 app.use((req, res, next) => {
-  // Skip authentication for health check and webhooks only
-  if (req.path === '/health' || req.path.startsWith('/webhooks')) {
+  // Skip authentication for health check, webhooks, and debug endpoints
+  if (req.path === '/health' || req.path.startsWith('/webhooks') || req.path === '/push-tokens/ping') {
     return next();
   }
 
