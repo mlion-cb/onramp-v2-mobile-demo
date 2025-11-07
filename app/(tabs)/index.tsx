@@ -97,7 +97,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { ApplePayWidget, OnrampForm, useOnramp } from "../../components";
 import { CoinbaseAlert } from "../../components/ui/CoinbaseAlerts";
 import { COLORS } from "../../constants/Colors";
-import { clearPhoneVerifyWasCanceled, getCountry, getCurrentNetwork, getCurrentWalletAddress, getPendingForm, getPhoneVerifyWasCanceled, getSandboxMode, getSubdivision, getTestWalletEvm, getTestWalletSol, getVerifiedPhone, isPhoneFresh60d, isTestSessionActive, setCurrentSolanaAddress, setCurrentWalletAddress, setPendingForm } from "../../utils/sharedState";
+import { clearPhoneVerifyWasCanceled, getCountry, getCurrentNetwork, getCurrentPartnerUserRef, getCurrentWalletAddress, getPendingForm, getPhoneVerifyWasCanceled, getSandboxMode, getSubdivision, getTestWalletEvm, getTestWalletSol, getVerifiedPhone, isPhoneFresh60d, isTestSessionActive, setCurrentSolanaAddress, setCurrentWalletAddress, setPendingForm } from "../../utils/sharedState";
 import { TEST_ACCOUNTS } from "../../constants/TestAccounts";
 
 
@@ -787,6 +787,7 @@ export default function Index() {
             closeApplePay(); // Stop loading when closed
           }}
           setIsProcessingPayment={setIsProcessingPayment}
+          isSandbox={getCurrentPartnerUserRef()?.startsWith('sandbox-') || false}
           onAlert={(title, message, type) => {
             // Enhance alert message with transaction details
             let enhancedMessage = message;
