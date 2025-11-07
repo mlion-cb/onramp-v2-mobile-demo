@@ -1,6 +1,6 @@
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import Constants from 'expo-constants';
 
 /**
  * Push Notification Utilities
@@ -42,40 +42,13 @@ export async function registerForPushNotifications(): Promise<{ token: string; t
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
-    console.log('🔍 [PUSH] Current permission status:', existingStatus);
-
-    // Send permission status to server for debugging
-    fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: 'registerForPushNotifications-permissions',
-        existingStatus,
-        isDevice: Constants.isDevice,
-        timestamp: new Date().toISOString()
-      })
-    }).catch(() => {});
-
     if (existingStatus !== 'granted') {
-      console.log('📱 [PUSH] Requesting permissions...');
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
-      console.log('📱 [PUSH] Permission request result:', status);
-
-      // Send result to server
-      fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: 'registerForPushNotifications-requested',
-          newStatus: status,
-          timestamp: new Date().toISOString()
-        })
-      }).catch(() => {});
     }
 
     if (finalStatus !== 'granted') {
-      console.log('⚠️ [PUSH] Permission not granted for push notifications. Status:', finalStatus);
+      console.log('⚠️ [PUSH] Permission not granted for push notifications');
       return null;
     }
 
@@ -131,48 +104,12 @@ export async function registerForPushNotifications(): Promise<{ token: string; t
  */
 export async function sendPushTokenToServer(pushToken: string, userId: string, getAccessToken: () => Promise<string | null>, tokenType: 'native' | 'expo' = 'native'): Promise<void> {
   try {
-    console.log('📤 [PUSH] Attempting to send push token to server:', {
-      userId,
-      tokenLength: pushToken?.length,
-      tokenType,
-      platform: Platform.OS,
-      baseUrl: process.env.EXPO_PUBLIC_BASE_URL
-    });
-
-    // Send a ping to server so we can see this was called (visible in Vercel logs)
-    fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        tokenLength: pushToken?.length,
-        timestamp: new Date().toISOString(),
-        platform: Platform.OS
-      })
-    }).catch(() => {}); // Fire and forget
-
     const accessToken = await getAccessToken();
 
     if (!accessToken) {
-      console.error('❌ [PUSH] CRITICAL: No access token available - cannot register push token!');
-      console.error('❌ [PUSH] This means getAccessToken() returned null/undefined');
-      console.error('❌ [PUSH] Check if AuthInitializer properly initialized getAccessToken');
-
-      // Send failure ping to server
-      fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          error: 'NO_ACCESS_TOKEN',
-          timestamp: new Date().toISOString()
-        })
-      }).catch(() => {});
-
+      console.warn('⚠️ [PUSH] No access token available, skipping push token registration');
       return;
     }
-
-    console.log('✅ [PUSH] Access token obtained, making API call to /push-tokens');
 
     const response = await fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens`, {
       method: 'POST',
@@ -188,26 +125,13 @@ export async function sendPushTokenToServer(pushToken: string, userId: string, g
       }),
     });
 
-    console.log('📥 [PUSH] Response received:', {
-      status: response.status,
-      ok: response.ok,
-      statusText: response.statusText
-    });
-
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Could not read error');
-      console.error('❌ [PUSH] Server returned error:', errorText);
-      throw new Error(`Failed to send push token: ${response.status} - ${errorText}`);
+      throw new Error(`Failed to send push token: ${response.status}`);
     }
 
-    console.log('✅ [PUSH] Push token successfully sent to server!');
+    console.log('✅ [PUSH] Push token sent to server');
   } catch (error) {
     console.error('❌ [PUSH] Error sending push token to server:', error);
-    console.error('❌ [PUSH] Error details:', {
-      message: (error as any)?.message,
-      stack: (error as any)?.stack
-    });
-    throw error; // Re-throw so caller knows it failed
   }
 }
 
