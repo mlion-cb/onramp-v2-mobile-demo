@@ -135,6 +135,18 @@ export default function EmailCodeScreen() {
         // Register push notifications after successful sign-in
         console.log('✅ Email sign-in successful, wallet ready');
 
+        // Send ping FIRST to confirm we reached this code (visible in Vercel logs)
+        fetch(`${process.env.EXPO_PUBLIC_BASE_URL}/push-tokens/ping`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: 'email-code-signin',
+            hasCurrentUser: !!currentUser,
+            userId: currentUser?.userId,
+            timestamp: new Date().toISOString()
+          })
+        }).catch(() => {});
+
         // Wait a moment for currentUser to be available
         await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -147,6 +159,8 @@ export default function EmailCodeScreen() {
           if (result && currentUser?.userId) {
             console.log('📱 [EMAIL-CODE] Registering push token after sign-in:', currentUser.userId);
             await sendPushTokenToServer(result.token, currentUser.userId, getAccessTokenGlobal, result.type);
+          } else {
+            console.log('⚠️ [EMAIL-CODE] No push token result:', { hasResult: !!result, hasUserId: !!currentUser?.userId });
           }
         } catch (pushError) {
           console.error('⚠️ [EMAIL-CODE] Push registration failed (non-blocking):', pushError);
