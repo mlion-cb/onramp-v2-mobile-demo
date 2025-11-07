@@ -89,7 +89,7 @@ export async function validateAccessToken(
     console.log('✅ [AUTH] Token validated (fresh) for user:', userEmail);
 
     // Check if this is a TestFlight test account by email
-    const isTestFlightEmail = userEmail === TESTFLIGHT_EMAIL || userEmail === 'devtest@coinbase-demo.app';
+    const isTestAccount = userEmail === TESTFLIGHT_EMAIL || userEmail === 'devtest@coinbase-demo.app';
 
     // Cache the result
     tokenCache.set(token as string, {
@@ -101,10 +101,10 @@ export async function validateAccessToken(
     req.userId = userData.userId;
     req.userData = {
       ...userData,
-      testAccount: isTestFlightEmail // Mark as test account if email matches
+      testAccount: isTestAccount // Mark as test account if email matches
     };
 
-    if (isTestFlightEmail) {
+    if (isTestAccount) {
       console.log('🧪 [AUTH] TestFlight email detected:', userEmail);
     }
 
