@@ -132,7 +132,26 @@ export default function EmailCodeScreen() {
           await new Promise(resolve => setTimeout(resolve, 200)); // Check every 200ms
         }
 
+        // Register push notifications after successful sign-in
         console.log('✅ Email sign-in successful, wallet ready');
+
+        // Wait a moment for currentUser to be available
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Register push token now that user is signed in
+        const { registerForPushNotifications, sendPushTokenToServer } = await import('@/utils/pushNotifications');
+        const { getAccessTokenGlobal } = await import('@/utils/getAccessTokenGlobal');
+
+        try {
+          const result = await registerForPushNotifications();
+          if (result && currentUser?.userId) {
+            console.log('📱 [EMAIL-CODE] Registering push token after sign-in:', currentUser.userId);
+            await sendPushTokenToServer(result.token, currentUser.userId, getAccessTokenGlobal, result.type);
+          }
+        } catch (pushError) {
+          console.error('⚠️ [EMAIL-CODE] Push registration failed (non-blocking):', pushError);
+        }
+
         router.dismissAll();
       } else {
         // Link email to existing account

@@ -157,7 +157,8 @@ app.post("/server/api", async (req, res) => {
     });
     
     // Auto-generate JWT for Coinbase API calls only
-    // Use finalUrl for JWT generation to include sandbox parameter in signature
+    // Use finalUrl for JWT generation, but DON'T include query params in JWT signature
+    // Coinbase API expects JWT to only sign the pathname, not query string
     const finalUrlObj = new URL(finalUrl);
     if (finalUrlObj.hostname === "api.developer.coinbase.com" || finalUrlObj.hostname === "api.cdp.coinbase.com") {
       authToken = await generateJwt({
@@ -165,7 +166,7 @@ app.post("/server/api", async (req, res) => {
         apiKeySecret: process.env.CDP_API_KEY_SECRET!,
         requestMethod: method || 'POST',
         requestHost: finalUrlObj.hostname,
-        requestPath: finalUrlObj.pathname + finalUrlObj.search, // Include query params in JWT signature
+        requestPath: finalUrlObj.pathname, // DO NOT include .search (query params) - Coinbase rejects it
         expiresIn: 120
       });
     }
@@ -582,6 +583,18 @@ app.get('/balances/solana', async (req, res) => {
 
 // In-memory storage for local development
 const pushTokenStore = new Map<string, { token: string; platform: string; tokenType?: string; updatedAt: number }>();
+
+/**
+ * Debug endpoint: Log when push token registration is attempted
+ * No auth required - just for debugging TestFlight
+ */
+app.post('/push-tokens/ping', async (req, res) => {
+  console.log('🔔 [PUSH DEBUG] Registration attempt detected from client:', {
+    ...req.body,
+    timestamp: new Date().toISOString()
+  });
+  res.json({ received: true });
+});
 
 app.post('/push-tokens', async (req, res) => {
   try {
