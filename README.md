@@ -30,7 +30,6 @@ A React Native + Expo mobile app demonstrating Coinbase's Onramp v2 API with CDP
 - Node.js v20+
 - iOS device or simulator
 - [Coinbase CDP account](https://portal.cdp.coinbase.com/)
-- (Optional) Twilio account - for phone verification (Apple Pay only)
 - (Optional) [ngrok account](https://ngrok.com/) (free tier works) - for Webhook
 
 ### 1. Installation

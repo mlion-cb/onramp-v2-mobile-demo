@@ -270,7 +270,23 @@ export default function PhoneVerifyScreen() {
   const handleBack = () => {
     clearPendingForm();
     markPhoneVerifyCanceled();
-    router.back();
+
+    // If in re-verify mode and user is not signed in (they signed out),
+    // navigate to home instead of back (prevents getting stuck in navigation stack)
+    if (mode === 'reverify' && !isSignedIn) {
+      console.log('🔙 [PHONE-VERIFY] Re-verify canceled after sign out - returning to home');
+      router.replace('/(tabs)');
+      return;
+    }
+
+    // Check if we can actually go back (there's a previous screen)
+    // If not, navigate to home instead
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      console.log('🔙 [PHONE-VERIFY] No previous screen - navigating to home');
+      router.replace('/(tabs)');
+    }
   };
 
   return (

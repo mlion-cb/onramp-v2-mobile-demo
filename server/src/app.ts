@@ -138,13 +138,6 @@ app.post("/server/api", async (req, res) => {
     if (isTestFlight) {
       console.log('🧪 [SERVER] TestFlight account detected');
     }
-
-    console.log('📋 [SERVER] Request details:', {
-      method: method || 'POST',
-      finalUrl,
-      hasBody: !!finalBody,
-      bodyKeys: finalBody ? Object.keys(finalBody) : []
-    });
     
     // Auto-generate JWT for Coinbase API calls only
     // Use finalUrl for JWT generation, but DON'T include query params in JWT signature
@@ -160,6 +153,16 @@ app.post("/server/api", async (req, res) => {
         expiresIn: 120
       });
     }
+
+    console.log('📋 [SERVER] Request details:', {
+      method: method || 'POST',
+      targetUrl,
+      finalUrl,
+      hasQueryParams: finalUrl.includes('?'),
+      queryString: finalUrlObj.search,
+      hasBody: !!finalBody,
+      bodyKeys: finalBody ? Object.keys(finalBody) : []
+    });
 
     // Build headers
     const headers = {
@@ -213,7 +216,13 @@ app.post("/server/api", async (req, res) => {
       method: method || 'POST',
       status: response.status,
       ok: response.ok,
-      dataPreview: data ? JSON.stringify(data).slice(0, 700) : 'No data'
+      dataPreview: data ? JSON.stringify(data).slice(0, 700) : 'No data',
+      // Debug pagination for transaction history
+      ...(finalUrl.includes('/transactions') && {
+        transactionsCount: data?.transactions?.length,
+        hasNextPageKey: !!data?.nextPageKey,
+        nextPageKey: data?.nextPageKey
+      })
     });
 
     // Return the upstream response (preserve status code)
