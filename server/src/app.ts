@@ -6,13 +6,13 @@ import { resolveClientIp } from './ip.js';
 import { validateAccessToken } from './validateToken.js';
 import { verifyLegacySignature, verifyWebhookSignature } from './verifyWebhookSignature.js';
 
-// Redis storage setup - use Redis for production, in-memory for local dev
-let redis: any = null;
-const useRedis = !!process.env.REDIS_URL;
-if (useRedis) {
+// Database storage setup - use external DB for production, in-memory for local dev
+let database: any = null;
+const useDatabase = !!process.env.DATABASE_URL;
+if (useDatabase) {
   const { createClient } = await import('redis');
-  redis = await createClient({ url: process.env.REDIS_URL! }).connect();
-  console.log('✅ Using Redis for push token storage (production)');
+  database = await createClient({ url: process.env.DATABASE_URL! }).connect();
+  console.log('✅ Using external database for push token storage (production)');
 } else {
   console.log('ℹ️ Using in-memory storage for push tokens (local dev)');
 }
@@ -630,10 +630,10 @@ app.post('/push-tokens', async (req, res) => {
       updatedAt: Date.now(),
     };
 
-    // Store in Redis (production) or in-memory (local dev)
-    if (useRedis && redis) {
-      await redis.set(`pushtoken:${userId}`, JSON.stringify(tokenData));
-      console.log('✅ [PUSH] Token stored in Redis for user:', userId);
+    // Store in database (production) or in-memory (local dev)
+    if (useDatabase && database) {
+      await database.set(`pushtoken:${userId}`, JSON.stringify(tokenData));
+      console.log('✅ [PUSH] Token stored in database for user:', userId);
     } else {
       pushTokenStore.set(userId, tokenData);
       console.log('✅ [PUSH] Token stored in memory for user:', userId);
@@ -658,8 +658,8 @@ app.get('/push-tokens/debug/:userId', async (req, res) => {
     const { userId } = req.params;
 
     let tokenData: any = null;
-    if (useRedis && redis) {
-      const data = await redis.get(`pushtoken:${userId}`);
+    if (useDatabase && database) {
+      const data = await database.get(`pushtoken:${userId}`);
       tokenData = data ? JSON.parse(data) : null;
     } else {
       tokenData = pushTokenStore.get(userId) || null;
@@ -674,8 +674,8 @@ app.get('/push-tokens/debug/:userId', async (req, res) => {
         tokenLength: tokenData.token?.length,
         updatedAt: new Date(tokenData.updatedAt).toISOString()
       } : null,
-      storage: useRedis ? 'redis' : 'in-memory',
-      allUserIds: useRedis ? 'N/A (Redis)' : Array.from(pushTokenStore.keys())
+      storage: useDatabase ? 'database' : 'in-memory',
+      allUserIds: useDatabase ? 'N/A (external database)' : Array.from(pushTokenStore.keys())
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to check token' });
@@ -798,10 +798,10 @@ app.post('/webhooks/onramp', async (req, res) => {
             partnerUserRef
           };
 
-          // Retrieve push token from Redis (production) or in-memory (local dev)
+          // Retrieve push token from database (production) or in-memory (local dev)
           let userTokenData: { token: string; platform: string; tokenType?: string; updatedAt: number } | null;
-          if (useRedis && redis) {
-            const data = await redis.get(`pushtoken:${partnerUserRef}`);
+          if (useDatabase && database) {
+            const data = await database.get(`pushtoken:${partnerUserRef}`);
             userTokenData = data ? JSON.parse(data) : null;
           } else {
             userTokenData = pushTokenStore.get(partnerUserRef) || null;
@@ -948,10 +948,10 @@ app.post('/webhooks/onramp', async (req, res) => {
             partnerUserRef: failedPartnerUserRef
           };
 
-          // Retrieve push token from Redis (production) or in-memory (local dev)
+          // Retrieve push token from database (production) or in-memory (local dev)
           let failedUserTokenData: { token: string; platform: string; tokenType?: string; updatedAt: number } | null;
-          if (useRedis && redis) {
-            const data = await redis.get(`pushtoken:${failedPartnerUserRef}`);
+          if (useDatabase && database) {
+            const data = await database.get(`pushtoken:${failedPartnerUserRef}`);
             failedUserTokenData = data ? JSON.parse(data) : null;
           } else {
             failedUserTokenData = pushTokenStore.get(failedPartnerUserRef) || null;
