@@ -2,9 +2,9 @@ import { CDPHooksProvider, Config } from "@coinbase/cdp-hooks";
 import { Stack } from "expo-router";
 import { COLORS } from "../constants/Colors";
 
-import { hydrateTestSession, hydrateVerifiedPhone, hydrateSandboxMode, setCurrentSolanaAddress, setCurrentWalletAddress, setSandboxMode, getTestWalletEvm, getTestWalletSol, isTestSessionActive } from "@/utils/sharedState";
-import { AuthInitializer } from "@/components/AuthInitializer";
 import { AuthGate } from "@/components/AuthGate";
+import { AuthInitializer } from "@/components/AuthInitializer";
+import { getTestWalletEvm, getTestWalletSol, hydrateSandboxMode, hydrateTestSession, hydrateVerifiedPhone, isTestSessionActive, setCurrentSolanaAddress, setCurrentWalletAddress } from "@/utils/sharedState";
 import { useEffect } from "react";
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';

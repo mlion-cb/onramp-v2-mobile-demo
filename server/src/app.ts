@@ -461,14 +461,20 @@ app.get('/balances/solana', async (req, res) => {
       return res.status(400).json({ error: 'Invalid Solana address format' });
     }
 
-    const validNetworks = ['solana', 'solana-devnet'];
-    if (!validNetworks.includes(network as string)) {
-      return res.status(400).json({ error: `Invalid network. Supported: ${validNetworks.join(', ')}` });
+    // Validate and sanitize network input - use allowlist to prevent SSRF
+    const validNetworks: Record<string, string> = {
+      'solana': 'solana',
+      'solana-devnet': 'solana-devnet'
+    };
+    const sanitizedNetwork = validNetworks[network as string];
+    if (!sanitizedNetwork) {
+      return res.status(400).json({ error: `Invalid network. Supported: ${Object.keys(validNetworks).join(', ')}` });
     }
 
-    console.log(`💰 [BALANCES] Fetching Solana balances - Address: ${address}, Network: ${network}`);
+    console.log(`💰 [BALANCES] Fetching Solana balances - Address: ${address}, Network: ${sanitizedNetwork}`);
 
-    const balancesPath = `/platform/v2/solana/token-balances/${network}/${address}`;
+    // Use sanitized values in URL construction to prevent SSRF
+    const balancesPath = `/platform/v2/solana/token-balances/${sanitizedNetwork}/${address}`;
     const balancesUrl = `https://api.cdp.coinbase.com${balancesPath}`;
 
     console.log(`🔗 [BALANCES] Full URL: ${balancesUrl}`);
