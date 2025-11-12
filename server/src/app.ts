@@ -8,10 +8,12 @@ import { verifyLegacySignature, verifyWebhookSignature } from './verifyWebhookSi
 
 // Database storage setup - use external DB for production, in-memory for local dev
 let database: any = null;
-const useDatabase = !!process.env.DATABASE_URL;
+// Backwards compatibility: fallback to REDIS_URL if DATABASE_URL not set
+const databaseUrl = process.env.DATABASE_URL || process.env.REDIS_URL;
+const useDatabase = !!databaseUrl;
 if (useDatabase) {
   const { createClient } = await import('redis');
-  database = await createClient({ url: process.env.DATABASE_URL! }).connect();
+  database = await createClient({ url: databaseUrl! }).connect();
   console.log('✅ Using external database for push token storage (production)');
 } else {
   console.log('ℹ️ Using in-memory storage for push tokens (local dev)');
