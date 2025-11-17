@@ -151,56 +151,6 @@ export default function WalletScreen() {
   // For export: Use EOA first, then evmAddress hook, then smart account
   const evmWalletAddress = explicitEOAAddress || evmAddress || smartAccountAddress;
 
-  // Add debugging + track user changes
-  useEffect(() => {
-    console.log('🔄 [PROFILE] currentUser changed:', {
-      userId: currentUser?.userId,
-      hasUser: !!currentUser,
-      isSignedIn,
-      testSession
-    });
-
-    if (currentUser) {
-      console.log('=== DETAILED WALLET INFORMATION ===');
-
-      // EOA Information
-      if (currentUser.evmAccounts && currentUser.evmAccounts.length > 0) {
-        console.log('--- EOA ADDRESSES ---');
-        currentUser.evmAccounts.forEach((account, index) => {
-          console.log(`EOA Address ${index + 1}:`, account);
-        });
-      } else {
-        console.log('EOA Addresses: None found');
-      }
-
-      // Smart Account Information
-      if (currentUser.evmSmartAccounts && currentUser.evmSmartAccounts.length > 0) {
-        console.log('--- SMART ACCOUNT ADDRESSES ---');
-        currentUser.evmSmartAccounts.forEach((account, index) => {
-          console.log(`Smart Account ${index + 1}:`, account);
-        });
-      } else {
-        console.log('Smart Accounts: None found');
-      }
-
-      // Address Resolution
-      console.log('--- ADDRESS RESOLUTION ---');
-      console.log('Explicit EOA:', explicitEOAAddress);
-      console.log('Smart Account:', smartAccountAddress);
-      console.log('useEvmAddress() hook:', evmAddress);
-      console.log('Final evmWalletAddress:', evmWalletAddress);
-      console.log('Solana Address:', solanaAddress);
-
-      // Authentication Methods
-      console.log('--- AUTHENTICATION METHODS ---');
-      console.log('Full authenticationMethods:', JSON.stringify(currentUser.authenticationMethods, null, 2));
-      console.log('Email:', currentUser.authenticationMethods?.email?.email);
-      console.log('Phone (sms - CORRECT FIELD):', currentUser.authenticationMethods?.sms?.phoneNumber);
-      console.log('Verified Phone (AsyncStorage):', verifiedPhone);
-      console.log('Phone Fresh:', phoneFresh);
-      console.log('=== END DETAILED WALLET INFO ===');
-    }
-  }, [currentUser, evmAddress, solanaAddress, explicitEOAAddress, smartAccountAddress, evmWalletAddress]);
 
   const [showExportConfirm, setShowExportConfirm] = useState(false);
   const [exportType, setExportType] = useState<'evm' | 'solana'>('evm');
@@ -313,19 +263,11 @@ export default function WalletScreen() {
       ? TEST_ACCOUNTS.phone
       : currentUser?.authenticationMethods?.sms?.phoneNumber;
 
-    console.log('📱 [PROFILE] openPhoneVerify called:', {
-      cdpPhone,
-      testSession,
-      hasCurrentUser: !!currentUser,
-      authMethods: currentUser?.authenticationMethods
-    });
-
     // If phone already linked to CDP, show re-verify confirmation (requires sign out)
     if (cdpPhone) {
       setReverifyPhone(cdpPhone);
       setShowReverifyConfirm(true);
     } else {
-      console.log('📱 [PROFILE] No CDP phone, navigating to phone entry screen');
       // No phone linked yet, go to phone entry screen
       router.push({
         pathname: '/phone-verify',
@@ -340,8 +282,6 @@ export default function WalletScreen() {
     setShowReverifyConfirm(false);
 
     try {
-      console.log('🔄 [PROFILE] Starting re-verification - signing out and navigating to phone-verify');
-
       // Sign out first (skip for test sessions)
       if (!testSession) {
         await signOut();
@@ -350,8 +290,6 @@ export default function WalletScreen() {
       } else {
         console.log('🧪 [PROFILE] Test session - skipping sign out');
       }
-
-      console.log('✅ [PROFILE] Navigating to phone-verify with pre-filled number');
 
       // Navigate to phone-verify with phone pre-filled and auto-send enabled
       // Use replace to avoid auth gate seeing us on profile while signed out
@@ -381,7 +319,6 @@ export default function WalletScreen() {
   // Clear UI state when user signs out
   useEffect(() => {
     if (!effectiveIsSignedIn) {
-      console.log('🧹 [PROFILE] User signed out - clearing UI state');
       setBalances([]);
       setBalancesError(null);
       setTestnetBalances([]);
@@ -394,10 +331,6 @@ export default function WalletScreen() {
   // Update wallet addresses when they change
   useEffect(() => {
     if (effectiveIsSignedIn) {
-      console.log('💼 [PROFILE] Updating wallet addresses:', {
-        primaryAddress,
-        solanaAddress
-      });
       setCurrentWalletAddress(primaryAddress ?? null);
       setCurrentSolanaAddress(solanaAddress ?? null);
     }
@@ -922,14 +855,6 @@ export default function WalletScreen() {
                     const cdpPhone = testSession
                       ? TEST_ACCOUNTS.phone
                       : currentUser?.authenticationMethods?.sms?.phoneNumber;
-
-                    console.log('📱 [PHONE BUTTON] Debug:', {
-                      cdpPhone,
-                      verifiedPhone,
-                      phoneFresh,
-                      testSession,
-                      match: verifiedPhone === cdpPhone
-                    });
 
                     // For test sessions, always show verify button if not verified
                     if (testSession) {

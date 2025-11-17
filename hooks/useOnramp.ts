@@ -174,22 +174,8 @@ export function useOnramp() {
       let phone = getVerifiedPhone();
       let phoneAt = getVerifiedPhoneAt();
 
-      // DEBUG: Log sandbox mode state
-      console.log('🔍 [DEBUG] Sandbox mode check:', {
-        sandboxMode: currentSandboxMode,
-        willSkipValidation: currentSandboxMode === true
-      });
-
       // Check for missing auth methods (non-sandbox only)
       if (!getSandboxMode()) {
-        console.log('🔒 [APPLE PAY] Production mode - validating phone/email:', {
-          userEmail,
-          cdpPhone,
-          verifiedPhone: phone,
-          phoneAt,
-          isPhoneFresh: isPhoneFresh60d()
-        });
-
         // Note: Non-US phones can now go through the verification flow for experience
         // The actual Apple Pay order will fail at Coinbase API level for non-US phones
         // This allows international users to experience the flow with disclaimers
@@ -242,14 +228,6 @@ export function useOnramp() {
       const isSandbox = getSandboxMode();
 
       let destinationAddress = formData.address;
-      console.log('🎯 [ONRAMP] Address debug:', {
-        formDataAddress: formData.address,
-        network: networkName,
-        isEvmNetwork,
-        isSandbox,
-        currentUserSolana: currentUser?.solanaAccounts?.[0],
-        currentUserEvm: currentUser?.evmSmartAccounts?.[0]
-      });
 
       if (!isSandbox && isEvmNetwork) {
         // TestFlight reviewers use hardcoded address as their "smart account"
@@ -283,8 +261,6 @@ export function useOnramp() {
         isQuote: false
       });
 
-      // Handle successful response (maybe navigate to next screen, show success, etc.)
-      console.log('Success:', result);
 
       // Extract hosted URL and show WebView
       if (result.hostedUrl) {
@@ -381,8 +357,6 @@ export function useOnramp() {
         destinationAddress = solanaAddress;
         console.log('🔒 [ONRAMP] Using Solana Account for Solana widget transaction:', solanaAddress);
       }
-
-      console.log('✅ [WIDGET SESSION] Final destination address:', destinationAddress);
 
       // Auth handled by authenticatedFetch
       const res = await createOnrampSession({

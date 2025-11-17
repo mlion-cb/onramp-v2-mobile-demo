@@ -190,16 +190,6 @@ app.post("/server/api", async (req, res) => {
       });
     }
 
-    console.log('📋 [SERVER] Request details:', {
-      method: method || 'POST',
-      targetUrl,
-      finalUrl,
-      hasQueryParams: finalUrl.includes('?'),
-      queryString: finalUrlObj.search,
-      hasBody: !!finalBody,
-      bodyKeys: finalBody ? Object.keys(finalBody) : []
-    });
-
     // Build headers
     const headers = {
       ...(method === 'POST' && { "Content-Type": "application/json" }),
@@ -224,14 +214,6 @@ app.post("/server/api", async (req, res) => {
       } else {
         // Non-JSON response (likely error), get as text
         const textResponse = await response.text();
-        console.log('📤 Proxied request (non-JSON)', {
-          url: finalUrl,
-          method: method || 'POST',
-          status: response.status,
-          ok: response.ok,
-          contentType,
-          response: textResponse
-        });
 
         // Return text error as JSON
         return res.status(response.status).json({
@@ -246,20 +228,6 @@ app.post("/server/api", async (req, res) => {
         status: response.status
       });
     }
-
-    console.log('📤 Proxied request', {
-      url: finalUrl,
-      method: method || 'POST',
-      status: response.status,
-      ok: response.ok,
-      dataPreview: data ? JSON.stringify(data).slice(0, 700) : 'No data',
-      // Debug pagination for transaction history
-      ...(finalUrl.includes('/transactions') && {
-        transactionsCount: data?.transactions?.length,
-        hasNextPageKey: !!data?.nextPageKey,
-        nextPageKey: data?.nextPageKey
-      })
-    });
 
     // Return the upstream response (preserve status code)
     res.status(response.status).json(data);
@@ -344,7 +312,6 @@ app.get('/balances/evm', async (req, res) => {
       const balancesData = await balancesResponse.json();
       const balances = balancesData.data || [];
 
-      console.log(`✅ [BALANCES] Ethereum Sepolia RAW response:`, JSON.stringify(balancesData, null, 2));
       console.log(`✅ [BALANCES] Fetched ${balances.length} Ethereum Sepolia balances`);
 
       // Transform v1 response to match v2 format
@@ -372,8 +339,6 @@ app.get('/balances/evm', async (req, res) => {
     // For other networks (base, ethereum, base-sepolia), use v2 API
     const balancesPath = `/platform/v2/evm/token-balances/${network}/${address}`;
     const balancesUrl = `https://api.cdp.coinbase.com${balancesPath}`;
-
-    console.log(`🔗 [BALANCES] Full URL: ${balancesUrl}`);
 
     const authToken = await generateJwt({
       apiKeyId: process.env.CDP_API_KEY_ID!,
@@ -426,8 +391,6 @@ app.get('/balances/evm', async (req, res) => {
           if (symbol && symbol !== 'UNKNOWN') {
             try {
               const priceUrl = `https://api.coinbase.com/v2/prices/${symbol}-USD/spot`;
-              console.log(`💵 [PRICE] Fetching USD price for ${symbol}: ${priceUrl}`);
-
               const priceResponse = await fetch(priceUrl);
 
               if (priceResponse.ok) {
@@ -438,8 +401,6 @@ app.get('/balances/evm', async (req, res) => {
                 const decimals = parseInt(balance.amount?.decimals || '0');
                 const actualAmount = tokenAmount / Math.pow(10, decimals);
                 usdValue = actualAmount * usdPrice;
-
-                console.log(`✅ [PRICE] ${symbol} = $${usdPrice} | Balance: ${actualAmount.toFixed(6)} ${symbol} = $${usdValue.toFixed(2)}`);
               } else {
                 console.warn(`⚠️ [PRICE] Price API returned ${priceResponse.status} for ${symbol}`);
               }
@@ -564,8 +525,6 @@ app.get('/balances/solana', async (req, res) => {
           if (symbol && symbol !== 'UNKNOWN') {
             try {
               const priceUrl = `https://api.coinbase.com/v2/prices/${symbol}-USD/spot`;
-              console.log(`💵 [PRICE] Fetching USD price for ${symbol}: ${priceUrl}`);
-
               const priceResponse = await fetch(priceUrl);
 
               if (priceResponse.ok) {
@@ -576,8 +535,6 @@ app.get('/balances/solana', async (req, res) => {
                 const decimals = parseInt(balance.amount?.decimals || '0');
                 const actualAmount = tokenAmount / Math.pow(10, decimals);
                 usdValue = actualAmount * usdPrice;
-
-                console.log(`✅ [PRICE] ${symbol} = $${usdPrice} | Balance: ${actualAmount.toFixed(6)} ${symbol} = $${usdValue.toFixed(2)}`);
               } else {
                 console.warn(`⚠️ [PRICE] Price API returned ${priceResponse.status} for ${symbol}`);
               }

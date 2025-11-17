@@ -265,18 +265,6 @@ const usSubs = useMemo(() => {
   // For production EVM networks, must have Smart Account
   const isFormValid = isAmountValid && !!network && !!asset && hasValidAddress && (!needsSmartAccount || hasSmartAccount);
 
-  // Debug logging for form validation
-  useEffect(() => {
-    console.log('🔍 Form Validation:', {
-      sandbox: localSandboxEnabled,
-      address: address?.slice(0, 10) + '...',
-      hasValidAddress,
-      isAmountValid,
-      network,
-      asset,
-      isFormValid
-    });
-  }, [localSandboxEnabled, address, hasValidAddress, isAmountValid, network, asset, isFormValid]);
   /**
    * Dynamic filtering: changing asset updates available networks, and vice versa
    * 
@@ -289,16 +277,12 @@ const usSubs = useMemo(() => {
 
   const availableNetworks = useMemo(() => {
     if (!getAvailableNetworks) return ["ethereum", "base"]; // Fallback (shouldn't happen)
-    const networks = getAvailableNetworks(asset);
-    console.log('📊 [DEBUG] availableNetworks:', networks?.length, 'networks');
-    return networks;
+    return getAvailableNetworks(asset);
   }, [asset, getAvailableNetworks]);
 
   const availableAssets = useMemo(() => {
     if (!getAvailableAssets) return ["USDC", "ETH"]; // Fallback (shouldn't happen)
-    const assets = getAvailableAssets(network);
-    console.log('📊 [DEBUG] availableAssets:', assets?.length, 'assets');
-    return assets;
+    return getAvailableAssets(network);
   }, [network, getAvailableAssets]);
 
   const methods = useMemo(() => {

@@ -230,12 +230,6 @@ export default function Index() {
     }
 
     // Get addresses from CDP hooks
-    console.log('🔍 [DEBUG] currentUser.evmSmartAccounts:', currentUser?.evmSmartAccounts);
-    console.log('🔍 [DEBUG] currentUser.evmAccounts:', currentUser?.evmAccounts);
-    console.log('🔍 [DEBUG] evmAddress from hook:', evmAddress);
-    console.log('🔍 [DEBUG] currentUser.solanaAccounts:', currentUser?.solanaAccounts);
-    console.log('🔍 [DEBUG] solanaAddress from hook:', solanaAddress);
-
     const evmSmartAccount = currentUser?.evmSmartAccounts?.[0] as string;
     const evmEOA = currentUser?.evmAccounts?.[0] as string || evmAddress;
     const solAccount = currentUser?.solanaAccounts?.[0] as string || solanaAddress;
@@ -380,12 +374,6 @@ export default function Index() {
   // 1) Resume after returning to this tab
   useFocusEffect(
     useCallback(() => {
-      console.log('🔄 [PENDING FORM] useFocusEffect triggered', {
-        hasPendingForm: !!pendingForm,
-        effectiveIsSignedIn,
-        paymentMethod: pendingForm?.paymentMethod
-      });
-
       if (!pendingForm) return;
 
       const handlePendingForm = async () => {
@@ -405,28 +393,13 @@ export default function Index() {
 
           // Apple Pay path - wait for user to be signed in before proceeding
           if (!effectiveIsSignedIn) {
-            console.log('⏳ [PENDING FORM] Waiting for user to sign in...', {
-              effectiveIsSignedIn,
-              isSignedIn,
-              testSession,
-              hasCurrentUser: !!currentUser
-            });
             return; // Wait for next render when user is signed in
           }
-
-          console.log('✅ [PENDING FORM] User is signed in, checking phone verification...');
 
           // Apple Pay path still requires fresh phone
           const isSandbox = getSandboxMode();
           const phoneFresh = isPhoneFresh60d();
           const verifiedPhone = getVerifiedPhone();
-
-          console.log('📱 [PENDING FORM] Phone check:', {
-            isSandbox,
-            phoneFresh,
-            verifiedPhone,
-            canProceed: isSandbox || (phoneFresh && verifiedPhone)
-          });
 
           if (isSandbox || (phoneFresh && verifiedPhone)) {
             const phone = verifiedPhone;
@@ -435,13 +408,6 @@ export default function Index() {
             // This is the same conversion that happens in handleSubmit but was missing here
             const networkApiName = getNetworkNameFromDisplayName(pendingForm.network);
             const assetApiName = getAssetSymbolFromName(pendingForm.asset);
-
-            console.log('🔄 [PENDING FORM] Converting names:', {
-              networkDisplay: pendingForm.network,
-              networkApi: networkApiName,
-              assetDisplay: pendingForm.asset,
-              assetApi: assetApiName
-            });
 
             // Determine the correct address based on network type for pending form
             let targetAddress = pendingForm.address;
@@ -469,13 +435,6 @@ export default function Index() {
               phoneNumber: phone,
               address: targetAddress
             };
-
-            console.log('✅ [PENDING FORM] Submitting with converted data:', updatedFormData);
-            console.log('🔍 [PENDING FORM] Sandbox value being submitted:', {
-              pendingFormSandbox: pendingForm.sandbox,
-              updatedFormDataSandbox: updatedFormData.sandbox,
-              sharedStateSandbox: getSandboxMode()
-            });
 
             // Store transaction details for alert messages
             setCurrentTransaction({
@@ -508,13 +467,6 @@ export default function Index() {
     // CRITICAL: Convert display names to API format (e.g., "Solana" → "solana", "USD Coin" → "USDC")
     const networkApiName = getNetworkNameFromDisplayName(formData.network);
     const assetApiName = getAssetSymbolFromName(formData.asset);
-
-    console.log('🔄 [SUBMIT] Converting names:', {
-      networkDisplay: formData.network,
-      networkApi: networkApiName,
-      assetDisplay: formData.asset,
-      assetApi: assetApiName
-    });
 
     // Determine the correct address based on network type (moved outside try-catch)
     const isSandbox = getSandboxMode();
