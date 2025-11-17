@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import { z } from 'zod';
 
 import { generateJwt } from '@coinbase/cdp-sdk/auth';
@@ -55,6 +56,39 @@ const PORT = Number(process.env.PORT || 3000);
 
 // On Vercel, trust proxy to read x-forwarded-for
 app.set('trust proxy', true);
+
+// CORS Configuration - Prevent random websites from calling your API
+// Note: This does NOT affect:
+// - Mobile apps (React Native) - they don't send Origin header
+// - Webhooks (Coinbase servers) - server-to-server calls bypass CORS
+// - Postman/curl - non-browser clients bypass CORS
+const allowedOrigins = [
+  'http://localhost:8081',   // Expo dev server
+  'http://localhost:19000',  // Expo dev server (alternative)
+  'http://localhost:19006',  // Expo web
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, server-to-server like webhooks)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    // Allow if origin is in allowlist
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Block all other origins (random websites)
+    console.warn('⚠️ [CORS] Blocked request from unauthorized origin:', origin);
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // For webhook signature verification, we need raw body
 // Use express.raw() for webhook routes before JSON parsing
