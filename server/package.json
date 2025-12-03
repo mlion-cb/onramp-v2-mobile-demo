@@ -13,7 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@coinbase/cdp-sdk": "^1.38.6",
+    "@coinbase/cdp-sdk": "^1.36.0",
     "@parse/node-apn": "^6.5.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
