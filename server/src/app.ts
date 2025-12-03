@@ -60,6 +60,8 @@ app.set('trust proxy', true);
 
 // Rate limiter for webhook endpoint (DoS protection)
 // Limits expensive operations (DB lookups, external API calls)
+// Note: Rate limiting applies to ALL requests. Signature verification happens
+// inside the route handler AFTER rate limiting to prevent bypass attacks.
 const webhookRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute window
   max: 100, // Limit each IP to 100 requests per minute
@@ -70,19 +72,6 @@ const webhookRateLimiter = rateLimit({
   keyGenerator: (req) => {
     // For webhooks from Coinbase, use x-forwarded-for if available
     return req.ip || req.headers['x-forwarded-for'] as string || 'unknown';
-  },
-  // Skip rate limiting for successful signature verification (optional)
-  skip: (req) => {
-    // Only rate limit if signature verification would fail
-    // This allows legitimate Coinbase webhooks through
-    const webhookSecret = process.env.WEBHOOK_SECRET;
-    if (!webhookSecret) return false; // Don't skip if no secret configured
-
-    const hook0Signature = req.headers['x-hook0-signature'];
-    const coinbaseSignature = req.headers['x-coinbase-signature'];
-
-    // If no signature headers, don't skip (will be rate limited)
-    return !!(hook0Signature || coinbaseSignature);
   }
 });
 
