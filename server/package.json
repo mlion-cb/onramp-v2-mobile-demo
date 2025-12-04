@@ -33,6 +33,9 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   },
+  "overrides": {
+    "jose": "6.0.13"
+  },
   "ts-node": {
     "esm": true
   }
