@@ -34,7 +34,8 @@
     "typescript": "^5.9.2"
   },
   "overrides": {
-    "jose": "6.0.13"
+    "jose": "6.0.13",
+    "viem": "2.34.0"
   },
   "ts-node": {
     "esm": true
