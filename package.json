@@ -72,7 +72,8 @@
     "baseline-browser-mapping": "2.8.11",
     "update-browserslist-db": "1.1.3",
     "sf-symbols-typescript": "2.1.0",
-    "electron-to-chromium": "1.5.230"
+    "electron-to-chromium": "1.5.230",
+    "@expo/schema-utils": "0.1.7"
   },
   "private": true
 }
