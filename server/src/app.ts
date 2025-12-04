@@ -742,6 +742,7 @@ app.post('/webhooks/onramp', webhookRateLimiter, async (req, res) => {
 
     const eventType = webhookData.eventType || webhookData.event;
     console.log('🔔 [WEBHOOK] Received:', eventType);
+    console.log('📦 [WEBHOOK] Full body:', JSON.stringify(webhookData, null, 2));
 
     // Verify webhook signature (security check)
     const webhookSecret = process.env.WEBHOOK_SECRET;
